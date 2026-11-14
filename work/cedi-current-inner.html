@@ -6757,7 +6757,7 @@ function addPurchaseFormatButton(label, destination){
  button.type='button';
  button.className='menu-item cursor-interaction';
  button.textContent=label;
- purchasesMenu.after(button);
+ purchasesMenu.before(button);
  button.onclick=async()=>{
   button.disabled=true;
   try{
