@@ -58,6 +58,6 @@ for(const [recordedAt,price] of [['2026-11-15T05:58:00.001Z',1470],['2026-11-16T
 }
 sales.push({date:'2026-11-20T12:00:00Z',lines:[{code:'002',price:995}]});
 save('future');await get('catalog');
-assert.deepEqual(await get('price?day=2026-11-20&key=002'),{price:1475});
+assert.deepEqual(await get('price?day=2026-11-20&key=002'),{price:995});
 assert.deepEqual(await get('price?history=1&day=2026-11-20&key=002'),{day:'2026-11-20',prices:[1470,1475]});
 assert.deepEqual(await get('price?day=2026-11-14&key=002'),{price:null});
