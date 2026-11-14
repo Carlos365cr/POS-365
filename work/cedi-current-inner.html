@@ -6817,7 +6817,9 @@ filterOrders.oninput=renderOrders;
 orderDialog.querySelector('button').onclick=()=>orderDialog.close();
 function displayProcessSequence(){
  const order=main.querySelector('[name=compraProceso][value=orden]').checked;
- main.querySelector('[data-purchase-document-title]').textContent=order?'Orden de compra':'Compra';
+ const documentTitle=main.querySelector('[data-purchase-document-title]');
+ documentTitle.textContent=order?'Orden de compra':'Compra';
+ documentTitle.style.color=order?'#78233e':'';
  process.textContent=order?'Guardar':'Procesar';
  main.querySelector('[data-purchase-cancel]').textContent=order?'No guardar':'No procesar';
  const field=get('compraConsecutivo');
