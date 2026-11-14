@@ -81,12 +81,14 @@ async function prepareLegacyCatalog(primary,cache) {
   await cache.batch([
     cache.prepare('CREATE TABLE IF NOT EXISTS lookup_head(id INTEGER PRIMARY KEY, revision TEXT, generation TEXT, parts INTEGER)'),
     cache.prepare('CREATE TABLE IF NOT EXISTS lookup_catalog(generation TEXT, part INTEGER, payload TEXT, PRIMARY KEY(generation,part))'),
+    cache.prepare('CREATE TABLE IF NOT EXISTS lookup_sold_price(generation TEXT,day TEXT,article TEXT,supplier TEXT,price REAL,PRIMARY KEY(generation,day,article,supplier,price))'),
     cache.prepare('CREATE TABLE IF NOT EXISTS lookup_price(generation TEXT, day TEXT, article TEXT, time REAL, price REAL, PRIMARY KEY(generation,day,article))')
   ]);
   const current=await primary.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();
   if(!current)throw Error('Falta la base principal');
   const previous=await cache.prepare('SELECT revision,generation,parts FROM lookup_head WHERE id=1').first();
-  if(previous?.revision===current.revision)return previous;
+  const indexRevision='history-v1:'+current.revision;
+  if(previous?.revision===indexRevision)return previous;
   let offset=0;
   const stream=new ReadableStream({async pull(controller){
     if(offset>=current.parts){controller.close();return;}
@@ -107,7 +109,7 @@ async function prepareLegacyCatalog(primary,cache) {
     if(writes.length)await cache.batch(writes.splice(0));
   }
   async function clean(id){
-    await cache.batch(['lookup_catalog','lookup_price'].map(table=>cache.prepare('DELETE FROM '+table+' WHERE generation=? AND generation NOT IN (SELECT generation FROM lookup_head)').bind(id)));
+    await cache.batch(['lookup_catalog','lookup_price','lookup_sold_price'].map(table=>cache.prepare('DELETE FROM '+table+' WHERE generation=? AND generation NOT IN (SELECT generation FROM lookup_head)').bind(id)));
   }
   try{
     let parts=0;
@@ -116,7 +118,7 @@ async function prepareLegacyCatalog(primary,cache) {
       writes.push(cache.prepare('INSERT INTO lookup_catalog VALUES(?,?,?)').bind(generation,parts++,btoa(String.fromCharCode(...block))));
       if(writes.length===8)await flush();
     }
-    const latest=new Map();
+    const latest=new Map(),sold=new Set();
     for(const sale of sales){
       const time=Date.parse(sale.date);
       if(!Number.isFinite(time)||['annulled','cancelled','void'].includes(sale.status))continue;
@@ -124,32 +126,38 @@ async function prepareLegacyCatalog(primary,cache) {
       for(const line of sale.lines||[]){
         const article=line.barcode||line.code;
         if(!article||!Number.isFinite(line.price)||line.price<0)continue;
+        if(Number.isSafeInteger(line.price)&&line.price%5===0)sold.add(JSON.stringify([day,article,line.supplier||'',line.price]));
         const key=JSON.stringify([day,article]),old=latest.get(key);
         if(!old||old[2]<=time)latest.set(key,[day,article,time,line.price]);
       }
     }
-    let rows=[],size=0;
-    function enqueuePrices(){
-      writes.push(cache.prepare("INSERT INTO lookup_price SELECT ?,value->>0,value->>1,value->>2,value->>3 FROM json_each(?)").bind(generation,'['+rows.join(',')+']'));
-      rows=[];size=0;
+    async function writePrices(table,items,encode){
+      let rows=[],size=0;
+      function enqueue(){
+        writes.push(cache.prepare('INSERT INTO '+table+' SELECT ?,value->>0,value->>1,value->>2,value->>3 FROM json_each(?)').bind(generation,'['+rows.join(',')+']'));
+        rows=[];size=0;
+      }
+      for(const item of items){
+        const encoded=encode(item);
+        rows.push(encoded);size+=encoded.length;
+        if(size>=16000)enqueue();
+        if(writes.length>=8)await flush();
+      }
+      if(rows.length)enqueue();
     }
-    for(const row of latest.values()){
-      const encoded=JSON.stringify(row);rows.push(encoded);size+=encoded.length;
-      if(size>=16000)enqueuePrices();
-      if(writes.length>=8)await flush();
-    }
-    if(rows.length)enqueuePrices();
+    await writePrices('lookup_price',latest.values(),JSON.stringify);
+    await writePrices('lookup_sold_price',sold,value=>value);
     await flush();
     const head=await primary.prepare('SELECT revision FROM cedi_head WHERE id=1').first();
     if(head?.revision!==current.revision)throw Error('Cambió el catálogo');
-    const changed=await cache.prepare('INSERT INTO lookup_head VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,generation=excluded.generation,parts=excluded.parts WHERE lookup_head.generation IS ?').bind(current.revision,generation,parts,previous?.generation??null).run();
+    const changed=await cache.prepare('INSERT INTO lookup_head VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,generation=excluded.generation,parts=excluded.parts WHERE lookup_head.generation IS ?').bind(indexRevision,generation,parts,previous?.generation??null).run();
     if(!changed.meta.changes){
       const winner=await cache.prepare('SELECT revision,generation,parts FROM lookup_head WHERE id=1').first();
-      if(winner?.revision!==current.revision)throw Error('Cambió el catálogo');
+      if(winner?.revision!==indexRevision)throw Error('Cambió el catálogo');
       await clean(generation);return winner;
     }
     if(previous)await clean(previous.generation);
-    return {revision:current.revision,generation,parts};
+    return {revision:indexRevision,generation,parts};
   }catch(error){await clean(generation);throw error;}
 }
 
@@ -203,6 +211,11 @@ export default { async fetch(request, env) {
     if(request.method==='GET'&&url.pathname==='/api/price'){
       const keys=url.searchParams.getAll('key'),day=url.searchParams.get('day');
       if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!keys.length||keys.length>3)return json({},400);
+      if(url.searchParams.get('history')==='1'){
+        const suppliers=url.searchParams.getAll('supplier');
+        const {results}=await db.prepare("SELECT DISTINCT p.price FROM lookup_sold_price p WHERE generation=(SELECT generation FROM lookup_head WHERE id=1) AND day=? AND article IN (SELECT value FROM json_each(?)) AND (supplier='' OR supplier IN (SELECT value FROM json_each(?))) ORDER BY price").bind(day,JSON.stringify(keys),JSON.stringify(suppliers)).all();
+        return json({prices:results.map(row=>row.price)});
+      }
       const row=await db.prepare('SELECT (SELECT price FROM lookup_price WHERE generation=h.generation AND day=? AND article IN (SELECT value FROM json_each(?)) ORDER BY time DESC LIMIT 1) AS price FROM lookup_head h WHERE id=1').bind(day,JSON.stringify(keys)).first();
       return row?json(row):json({},503);
     }

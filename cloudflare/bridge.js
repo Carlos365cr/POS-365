@@ -55,14 +55,18 @@ window.addEventListener('message',async event=>{
   const {day,keys,id}=event.data;
   const query=new URLSearchParams({day});
   for(const key of keys)query.append('key',key);
+  if(event.data.history){
+    query.set('history','1');
+    for(const supplier of event.data.suppliers||[])query.append('supplier',supplier);
+  }
   const path=storePrefix+'/price?'+query;
   if(!pendingPrices.has(path)){
     pendingPrices.set(path,fetch(path).then(async response=>{
       if(!response.ok)throw Error();
-      return (await response.json()).price;
+      return await response.json();
     }).finally(()=>pendingPrices.delete(path)));
   }
-  try{const price=await pendingPrices.get(path);frame.contentWindow.postMessage({type:'cedi-legacy-price-result',id,price},'*');}
+  try{const result=await pendingPrices.get(path);frame.contentWindow.postMessage({type:'cedi-legacy-price-result',id,...result},'*');}
   catch{frame.contentWindow.postMessage({type:'cedi-legacy-price-result',id,error:true},'*');}
 });
 async function sendSaveStep(body){
