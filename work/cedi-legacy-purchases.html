@@ -2329,7 +2329,7 @@ let cashOutContacts=[];
 let cashOutEntries=[];
 let trialPurchases=[];
 let refreshPurchaseLedger=()=>{};
-let legacyPricesByDay=new Map();
+const pendingLegacyPrices=new Map();
 let trialCompletedSales=[];
 try{const saved=JSON.parse(localStorage.getItem('cedi-pos-trial-sales-v1') || '[]');if(Array.isArray(saved)){trialCompletedSales=saved;}}catch(error){}
 const trialSalesStorage={getItem(){return JSON.stringify(trialCompletedSales);},setItem(key,value){trialCompletedSales=JSON.parse(value);persistTrialSnapshot();}};
@@ -2850,7 +2850,7 @@ if(label==='Código'||label==='Ítem')continue;
 input.value=['Desc. 1 (%)','Desc. 2 (%)'].includes(label)?'0':'';
 input.setCustomValidity('');delete input.dataset.purchaseRaw;delete input.dataset.purchaseDisplay;
 }
-for(const key of ['articleKey','xmlProductId','resolvedCode','productBarcode','excelPriceProvided','quantitySource','vatRate','modificationVat','purchaseCostPending','purchaseGainTarget'])delete row.dataset[key];
+for(const key of ['priceRequest','priceLookupError','articleKey','xmlProductId','resolvedCode','productBarcode','excelPriceProvided','quantitySource','vatRate','modificationVat','purchaseCostPending','purchaseGainTarget'])delete row.dataset[key];
 row.querySelector('[aria-label="% Gan. actual"]').textContent='—';
 updatePurchaseCostColor(row);updatePurchaseChargeTotal();
 }
@@ -3012,30 +3012,40 @@ const providerCode=String(product.details?.general?.find(field=>field[0]==='refe
 return providerCode===code && (!supplier || [supplier.id,supplier.code,supplier.name].includes(purchaseSupplierValue(product)));
 });
 }
-function indexLegacySalePrices(history){
- const days=new Map();
- for(const sale of history){
-  const time=Date.parse(sale.date),day=perishableDay(sale.date);
-  if(!day||!Number.isFinite(time))continue;
-  if(!days.has(day))days.set(day,new Map());
-  const prices=days.get(day);
-  for(const line of sale.lines){
-   const key=line.barcode||line.code;
-   if(!key||!Number.isFinite(line.price)||line.price<0)continue;
-   if(!prices.has(key)||prices.get(key).time<=time)prices.set(key,{time,price:line.price});
-  }
- }
- return days;
-}
+window.addEventListener('message',event=>{
+ if(event.source!==window.parent||event.data?.type!=='cedi-legacy-price-result')return;
+ const {id,error,price}=event.data;
+ pendingLegacyPrices.get(id)?.(error,price);
+});
 function applyLegacySalePrice(row,product){
  const day=purchasesMain.querySelector('[name=compraRecibido]').value;
- const prices=legacyPricesByDay.get(day);
- const keys=product?[articleRecordKey(product),product.barcode,product.code]:[];
- const match=keys.map(key=>prices?.get(key)).filter(Boolean).sort((a,b)=>b.time-a.time)[0];
- formatPurchaseNumber(row.querySelector('[aria-label="Precio 1"]'),match?.price??'');
+ const field=row.querySelector('[aria-label="Precio 1"]');
+ const keys=product?[...new Set([articleRecordKey(product),product.barcode,product.code].filter(Boolean))]:[];
+ delete row.dataset.priceRequest;delete row.dataset.priceLookupError;
+ formatPurchaseNumber(field,'');
+ if(!day||!keys.length)return;
+ const id=crypto.randomUUID();
+ row.dataset.priceRequest=id;
+ const finish=(error,price)=>{
+  clearTimeout(timeout);pendingLegacyPrices.delete(id);
+  if(row.dataset.priceRequest!==id||!row.isConnected)return;
+  delete row.dataset.priceRequest;
+  if(row.dataset.excelPriceProvided==='true'||row.dataset.xmlIndex!==undefined)return;
+  if(error){
+   row.dataset.priceLookupError='true';
+   purchasesMain.querySelector('[data-purchase-status]').textContent='No se pudo consultar el precio de venta. Volvé a ingresar el código.';
+   return;
+  }
+  delete row.dataset.priceLookupError;
+  formatPurchaseNumber(field,price??'');refreshPurchaseGain(row);
+ };
+ const timeout=setTimeout(()=>finish(true),30000);
+ pendingLegacyPrices.set(id,finish);
+ window.parent.postMessage({type:'cedi-legacy-price',day,keys,id},'*');
 }
 purchasesMain.querySelector('[name=compraRecibido]').addEventListener('change',()=>{
  for(const row of purchasesMain.querySelectorAll('.purchase-table tbody tr')){
+  if(row.dataset.excelPriceProvided==='true'||row.dataset.xmlIndex!==undefined)continue;
   applyLegacySalePrice(row,findArticleByKey(row.dataset.articleKey||row.dataset.productBarcode));
   refreshPurchaseGain(row);
  }
@@ -6940,6 +6950,8 @@ noProcess.onclick=()=>{if(purchaseModification){discardPurchaseDraft(false);stat
 process.onclick=async()=>{
 if(processing){return;}processing=true;process.disabled=true;
 try{
+if(main.querySelector('.purchase-table tr[data-price-request]:not([data-excel-price-provided="true"])'))throw Error('Esperá un momento mientras se consulta Precio 1.');
+if(main.querySelector('.purchase-table tr[data-price-lookup-error]:not([data-excel-price-provided="true"])'))throw Error('Volvé a ingresar el código para consultar Precio 1.');
 const orderMode=main.querySelector('[name=compraProceso][value=orden]').checked;
 if(!orderMode&&!main.querySelector('[name=compraProceso][value=compra]').checked)throw new Error('Requisición está pendiente.');
 if(orderMode&&purchaseModification)throw new Error('Volvé a Inclusión para guardar una orden.');
@@ -7155,7 +7167,7 @@ const body=purchasesMain.querySelector('.purchase-table tbody');body.replaceChil
 for(const saved of draft.rows){
 const row=addPurchaseRow();if(saved.excelPriceProvided){row.dataset.excelPriceProvided='true';}if(Number.isInteger(saved.xmlIndex)&&currentPurchaseXml){row.dataset.xmlIndex=String(saved.xmlIndex);}
 const put=()=>{for(const [label,value] of saved.values){const input=Array.from(row.querySelectorAll('input:not([readonly])')).find(input=>input.getAttribute('aria-label')===(label==='Costo'?'Precio lista s/IVA':label));if(input){if(input.type==='number')formatPurchaseNumber(input,value);else input.value=value;}}};
-put();row.dataset.quantitySource=saved.source;fillPurchaseProduct(row,false,findArticleByKey(saved.productKey||saved.productBarcode)||null);put();if(row.dataset.xmlIndex!==undefined){row.dataset.xmlInitialized='true';row.dataset.xmlBoxFactor=String(currentPurchaseXml.billingUnit==='box'?xmlPurchaseBoxSize(pendingProduct(currentPurchaseXml.mapping[row.dataset.xmlIndex])):1);}syncPurchaseQuantities(row,saved.source);updatePurchaseSubtotal(row);
+put();row.dataset.quantitySource=saved.source;fillPurchaseProduct(row,false,findArticleByKey(saved.productKey||saved.productBarcode)||null);delete row.dataset.priceRequest;put();if(row.dataset.xmlIndex!==undefined){row.dataset.xmlInitialized='true';row.dataset.xmlBoxFactor=String(currentPurchaseXml.billingUnit==='box'?xmlPurchaseBoxSize(pendingProduct(currentPurchaseXml.mapping[row.dataset.xmlIndex])):1);}syncPurchaseQuantities(row,saved.source);updatePurchaseSubtotal(row);
 }
 ensurePurchaseBlankRow();renumberPurchaseRows();refreshPurchaseSystemDate();updatePurchaseChargeTotal();
 }
@@ -7769,7 +7781,7 @@ else{input.checked=checked===true;}
 });if(target===form)updateArticleCodeLimit();if(target===costsForm)for(const input of costInputs)formatPurchaseNumber(input);
 }
 function restoreTrialSnapshot(snapshot){
-if(snapshot.legacyPriceHistory)legacyPricesByDay=indexLegacySalePrices(snapshot.legacyPriceHistory);
+
 if(snapshot?.version!==1 || !Array.isArray(snapshot.general)){return;}
 if(savedTrialSnapshot && (savedTrialSnapshot.updatedAt || 0)>=(snapshot.updatedAt || 0)){return;}
 perishablesState={vegetal:[...(snapshot.perishablesState?.vegetal||[])],animal:[...(snapshot.perishablesState?.animal||[])],inventory:structuredClone(snapshot.perishablesState?.inventory||{vegetal:{},animal:{}})};

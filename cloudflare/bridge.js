@@ -1,14 +1,15 @@
 let queue=Promise.resolve(),revision,latest=0,blocked=false,confirmedParts=[];
 const frame=document.getElementById('codex-visualization');
-async function readStore(prefix){
+async function readStore(prefix,catalog=false){
   for(let attempt=0;attempt<3;attempt++){
-    const response=await fetch(prefix+'/state',{cache:'no-store'});
-    if(!response.ok)throw Error('Se requiere iniciar sesión para abrir POS 365.');
+    const response=await fetch(prefix+(catalog?'/catalog':'/state'),{cache:'no-store'});
+    if(catalog&&response.status===503&&attempt<2)continue;
+    if(!response.ok)throw Error(response.status===401?'Se requiere iniciar sesión para abrir POS 365.':'No se pudo cargar el catálogo o la base de datos. Volvé a intentarlo.');
     const head=await response.json(),parts=[];
     for(let start=0;start<head.parts;start+=24){
       const starts=[start,start+8,start+16].filter(offset=>offset<head.parts);
       const pages=await Promise.all(starts.map(async offset=>{
-        const response=await fetch(prefix+'/parts?revision='+encodeURIComponent(head.revision)+'&start='+offset,{cache:'no-store'});
+        const response=await fetch(prefix+(catalog?'/catalog-parts?generation='+encodeURIComponent(head.generation):'/parts?revision='+encodeURIComponent(head.revision))+'&start='+offset,{cache:'no-store'});
         if(!response.ok)throw Error('No se pudo leer la base compartida.');
         const page=await response.json();
         if(!Array.isArray(page)||page.length!==Math.min(8,head.parts-offset)||
@@ -33,17 +34,30 @@ async function loadShared(){
   revision=store.revision;
   confirmedParts=store.parts;
   if(storePrefix==='/api')return {cediShared:true,cediTrialGzip:store.parts.join('')};
-  const catalog=await decodeStore((await readStore('/api')).parts);
+  const catalog=await decodeStore((await readStore(storePrefix,true)).parts);
   const saved=store.parts.length?await decodeStore(store.parts):{};
   const snapshot={...catalog,purchases:saved.purchases??[],purchaseOrders:saved.purchaseOrders??[],
     purchaseDraft:{header:[],rows:[],xmlDocument:null},legacyPurchaseDraft:saved.legacyPurchaseDraft??null,
-    legacyPriceHistory:(catalog.sales||[]).filter(sale=>!['annulled','cancelled','void'].includes(sale.status)).map(sale=>({
-      date:sale.date,lines:(sale.lines||[]).map(({barcode,code,price})=>({barcode,code,price}))
-    })),
     sales:[],cashOutContacts:[],cashOutEntries:[],cxpState:null,xmlInboxState:saved.xmlInboxState??undefined,
     updatedAt:Math.max(saved.updatedAt||0,catalog.updatedAt||0)};
   return {cediShared:true,cediTrial:snapshot};
 }
+const pendingPrices=new Map();
+window.addEventListener('message',async event=>{
+  if(storePrefix==='/api'||event.source!==frame.contentWindow||event.data?.type!=='cedi-legacy-price')return;
+  const {day,keys,id}=event.data;
+  const query=new URLSearchParams({day});
+  for(const key of keys)query.append('key',key);
+  const path=storePrefix+'/price?'+query;
+  if(!pendingPrices.has(path)){
+    pendingPrices.set(path,fetch(path).then(async response=>{
+      if(!response.ok)throw Error();
+      return (await response.json()).price;
+    }).finally(()=>pendingPrices.delete(path)));
+  }
+  try{const price=await pendingPrices.get(path);frame.contentWindow.postMessage({type:'cedi-legacy-price-result',id,price},'*');}
+  catch{frame.contentWindow.postMessage({type:'cedi-legacy-price-result',id,error:true},'*');}
+});
 function stop(message){
   blocked=true;
   frame.inert=true;

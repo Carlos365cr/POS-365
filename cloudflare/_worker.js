@@ -74,6 +74,85 @@ function saveError(error){
       const reason=/too large|too big|limit|quota/.test(kind)?'La base alcanzó un límite al guardar.':/busy|locked/.test(kind)?'La base estaba ocupada.':'El servicio de base de datos no pudo completar la escritura.';
       return json({error:reason+' Consultá Compras registradas antes de reintentar.'},503);
 }
+// Derived read model. The primary snapshot remains authoritative. A generation
+// becomes visible only after every catalog part and price row has been written.
+const priceDayFormat=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'});
+async function prepareLegacyCatalog(primary,cache) {
+  await cache.batch([
+    cache.prepare('CREATE TABLE IF NOT EXISTS lookup_head(id INTEGER PRIMARY KEY, revision TEXT, generation TEXT, parts INTEGER)'),
+    cache.prepare('CREATE TABLE IF NOT EXISTS lookup_catalog(generation TEXT, part INTEGER, payload TEXT, PRIMARY KEY(generation,part))'),
+    cache.prepare('CREATE TABLE IF NOT EXISTS lookup_price(generation TEXT, day TEXT, article TEXT, time REAL, price REAL, PRIMARY KEY(generation,day,article))')
+  ]);
+  const current=await primary.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();
+  if(!current)throw Error('Falta la base principal');
+  const previous=await cache.prepare('SELECT revision,generation,parts FROM lookup_head WHERE id=1').first();
+  if(previous?.revision===current.revision)return previous;
+  let offset=0;
+  const stream=new ReadableStream({async pull(controller){
+    if(offset>=current.parts){controller.close();return;}
+    const {results}=await primary.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? ORDER BY part LIMIT 8').bind(current.revision,offset).all();
+    if(!results.length)throw Error('Cambió el catálogo');
+    for(const row of results){
+      if(row.part!==offset++)throw Error('Catálogo incompleto');
+      controller.enqueue(Uint8Array.from(atob(row.payload),c=>c.charCodeAt(0)));
+    }
+  }});
+  const snapshot=await new Response(stream.pipeThrough(new DecompressionStream('gzip'))).json();
+  const generation=crypto.randomUUID();
+  const sales=snapshot.sales||[];
+  for(const field of ['sales','purchases','purchaseOrders','purchaseDraft','legacyPurchaseDraft','cashOutContacts','cashOutEntries','cxpState','xmlInboxState'])delete snapshot[field];
+  const compressed=await new Response(new Blob([JSON.stringify(snapshot)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+  const writes=[];
+  async function flush(){
+    if(writes.length)await cache.batch(writes.splice(0));
+  }
+  async function clean(id){
+    await cache.batch(['lookup_catalog','lookup_price'].map(table=>cache.prepare('DELETE FROM '+table+' WHERE generation=? AND generation NOT IN (SELECT generation FROM lookup_head)').bind(id)));
+  }
+  try{
+    let parts=0;
+    for(let start=0;start<compressed.byteLength;start+=48000){
+      const block=new Uint8Array(compressed,start,Math.min(48000,compressed.byteLength-start));
+      writes.push(cache.prepare('INSERT INTO lookup_catalog VALUES(?,?,?)').bind(generation,parts++,btoa(String.fromCharCode(...block))));
+      if(writes.length===8)await flush();
+    }
+    const latest=new Map();
+    for(const sale of sales){
+      const time=Date.parse(sale.date);
+      if(!Number.isFinite(time)||['annulled','cancelled','void'].includes(sale.status))continue;
+      const day=/^\d{4}-\d{2}-\d{2}$/.test(sale.date)?sale.date:priceDayFormat.format(time);
+      for(const line of sale.lines||[]){
+        const article=line.barcode||line.code;
+        if(!article||!Number.isFinite(line.price)||line.price<0)continue;
+        const key=JSON.stringify([day,article]),old=latest.get(key);
+        if(!old||old[2]<=time)latest.set(key,[day,article,time,line.price]);
+      }
+    }
+    let rows=[],size=0;
+    function enqueuePrices(){
+      writes.push(cache.prepare("INSERT INTO lookup_price SELECT ?,value->>0,value->>1,value->>2,value->>3 FROM json_each(?)").bind(generation,'['+rows.join(',')+']'));
+      rows=[];size=0;
+    }
+    for(const row of latest.values()){
+      const encoded=JSON.stringify(row);rows.push(encoded);size+=encoded.length;
+      if(size>=16000)enqueuePrices();
+      if(writes.length>=8)await flush();
+    }
+    if(rows.length)enqueuePrices();
+    await flush();
+    const head=await primary.prepare('SELECT revision FROM cedi_head WHERE id=1').first();
+    if(head?.revision!==current.revision)throw Error('Cambió el catálogo');
+    const changed=await cache.prepare('INSERT INTO lookup_head VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,generation=excluded.generation,parts=excluded.parts WHERE lookup_head.generation IS ?').bind(current.revision,generation,parts,previous?.generation??null).run();
+    if(!changed.meta.changes){
+      const winner=await cache.prepare('SELECT revision,generation,parts FROM lookup_head WHERE id=1').first();
+      if(winner?.revision!==current.revision)throw Error('Cambió el catálogo');
+      await clean(generation);return winner;
+    }
+    if(previous)await clean(previous.generation);
+    return {revision:current.revision,generation,parts};
+  }catch(error){await clean(generation);throw error;}
+}
+
 export default { async fetch(request, env) {
   const url=new URL(request.url);
   if(url.pathname==='/assets/pos-365-logo.png' && request.method==='GET')return env.ASSETS.fetch(request);
@@ -111,6 +190,22 @@ export default { async fetch(request, env) {
     if(!db)return json({error:'Falta conectar la base independiente de Compras formato viejo.'},503);
     if(db===env.DB)return json({error:'La base de formato viejo debe ser independiente.'},503);
     url.pathname=url.pathname.replace('/api/legacy-purchases/','/api/');
+    if(request.method==='GET'&&url.pathname==='/api/catalog'){
+      try{return json(await prepareLegacyCatalog(env.DB,db));}
+      catch{return json({error:'Volvé a cargar para actualizar el catálogo.'},503);}
+    }
+    if(request.method==='GET'&&url.pathname==='/api/catalog-parts'){
+      const start=Number(url.searchParams.get('start'));
+      if(!Number.isSafeInteger(start)||start<0)return json({},400);
+      const {results}=await db.prepare('SELECT part,payload FROM lookup_catalog WHERE generation=? AND part>=? ORDER BY part LIMIT 8').bind(url.searchParams.get('generation'),start).all();
+      return json(results);
+    }
+    if(request.method==='GET'&&url.pathname==='/api/price'){
+      const keys=url.searchParams.getAll('key'),day=url.searchParams.get('day');
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!keys.length||keys.length>3)return json({},400);
+      const row=await db.prepare('SELECT (SELECT price FROM lookup_price WHERE generation=h.generation AND day=? AND article IN (SELECT value FROM json_each(?)) ORDER BY time DESC LIMIT 1) AS price FROM lookup_head h WHERE id=1').bind(day,JSON.stringify(keys)).first();
+      return row?json(row):json({},503);
+    }
     if(url.pathname==='/api/state'&&request.method==='GET'){
       await db.batch([
         db.prepare('CREATE TABLE IF NOT EXISTS cedi_head(id INTEGER PRIMARY KEY, revision TEXT NOT NULL, parts INTEGER NOT NULL, author TEXT NOT NULL)'),
