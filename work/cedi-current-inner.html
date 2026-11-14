@@ -2333,7 +2333,6 @@ let trialPurchases=[];
 let refreshPurchaseLedger=()=>{};
 let trialCompletedSales=[];
 try{const saved=JSON.parse(localStorage.getItem('cedi-pos-trial-sales-v1') || '[]');if(Array.isArray(saved)){trialCompletedSales=saved;}}catch(error){}
-const trialSalesStorage={getItem(){return JSON.stringify(trialCompletedSales);},setItem(key,value){trialCompletedSales=JSON.parse(value);persistTrialSnapshot();}};
 let selectedTrialBarcode=null,selectedPendingArticleId=null;
 const articleFieldDefaults=new WeakMap();
 let refreshPosSale=()=>{};
@@ -3201,7 +3200,7 @@ posMenu.textContent='Facturación POS';
 menu.querySelector('span').after(posMenu);
 const posMain=document.createElement('main');
 posMain.hidden=true;
-posMain.innerHTML='<div class="pos-heading"><h2>Facturación POS</h2><small>Supermercados · Vista de prueba</small></div><nav class="tabs" aria-label="Pantallas del POS" style="margin-top:10px"><button type="button" class="active" data-pos-tab="invoice" aria-pressed="true">Facturación</button><button type="button" data-pos-tab="payment" aria-pressed="false">Paga con</button></nav><section data-pos-panel="invoice"><div class="pos-header"><div><div class="grid"><label class="wide">Bodega<select name="posBodega"><option>Bodega principal</option></select></label><label>Fecha<input type="date" name="posFecha"></label><label>Factura No.<span class="pos-inline"><select aria-label="Serie de factura"><option>1</option></select><input aria-label="Número de factura" readonly value="Pendiente"><button type="button" disabled aria-label="Buscar factura"><i data-lucide="search" aria-hidden="true"></i></button></span></label></div><fieldset><legend>Forma de pago</legend><div class="checks"><label class="check"><input type="radio" name="posCondicion" value="contado" checked>Contado</label><label class="check"><input type="radio" name="posCondicion" value="credito">Crédito</label></div></fieldset></div><div><label class="check"><input type="checkbox" name="posFrecuente">Cliente frecuente</label><div class="grid" style="margin-top:8px"><label>Tipo de identificación<select><option>Física</option><option>Jurídica</option><option>DIMEX</option><option>NITE</option></select></label><label>Identificación<input name="posIdentificacion"></label><label class="wide">Cliente<input name="posCliente" value="Cliente de contado"></label></div><button type="button" disabled style="margin-top:8px">Cliente factura electrónica</button></div></div><div class="pos-table-wrap"><table class="pos-table"><colgroup><col style="width:10%"><col style="width:17%"><col style="width:37%"><col style="width:17%"><col style="width:19%"></colgroup><thead><tr><th scope="col">Cant.</th><th scope="col">Código</th><th scope="col">Descripción</th><th scope="col" class="number">Precio</th><th scope="col" class="number">Total</th></tr></thead><tbody></tbody></table></div><form id="cedi-pos-entry"><label>Código<input name="codigo" autocomplete="off" placeholder="Escanear o digitar"></label><label>Cantidad<input name="cantidad" type="number" value="1" min="0.000001" step="any" required></label></form><div class="pos-total"><strong>Total <output data-pos-total>₡0,00</output></strong></div><div class="pos-actions"><div><button type="button" data-pos-remove>Borrar línea</button><button type="button" data-pos-clear>Borrar todo</button><button type="button" disabled>Cliente</button></div><div><button type="button" class="primary" data-pos-pay>Pagar</button></div></div><div class="pos-state"><label class="check"><input type="radio" name="posOperacion" value="inclusion" checked>Inclusión</label><label class="check"><input type="radio" name="posOperacion" value="consulta">Consulta</label><label class="check"><input type="radio" name="posOperacion" value="nota">Nota de crédito o débito</label></div><p data-pos-message aria-live="polite"></p></section><section data-pos-panel="payment" hidden><h3 style="margin-top:16px">Paga con</h3><div class="pos-total"><span>Total</span><strong data-pos-pay-total>₡0,00</strong></div><p>Detalle de cobro pendiente de definir.</p></section>';
+posMain.innerHTML='<div class="pos-heading"><h2>Facturación POS</h2><small>Supermercados · Vista de prueba</small></div><nav class="tabs" aria-label="Pantallas del POS" style="margin-top:10px"><button type="button" class="active" data-pos-tab="invoice" aria-pressed="true">Facturación</button><button type="button" data-pos-tab="payment" aria-pressed="false">Paga con</button></nav><section data-pos-panel="invoice"><div class="pos-header"><div><div class="grid"><label class="wide">Bodega<select name="posBodega"><option>Bodega principal</option></select></label><label>Fecha<input type="date" name="posFecha"></label><label>Número de factura interna<input name="posFacturaInterna" aria-label="Número de factura interna" readonly></label></div><fieldset><legend>Forma de pago</legend><div class="checks"><label class="check"><input type="radio" name="posCondicion" value="contado" checked>Contado</label><label class="check"><input type="radio" name="posCondicion" value="credito">Crédito</label></div></fieldset></div><div><label class="check"><input type="checkbox" name="posFrecuente">Cliente frecuente</label><div class="grid" style="margin-top:8px"><label>Tipo de identificación<select><option>Física</option><option>Jurídica</option><option>DIMEX</option><option>NITE</option></select></label><label>Identificación<input name="posIdentificacion"></label><label class="wide">Cliente<input name="posCliente" value="Cliente de contado"></label></div><button type="button" disabled style="margin-top:8px">Cliente factura electrónica</button></div></div><div class="pos-table-wrap"><table class="pos-table"><colgroup><col style="width:10%"><col style="width:17%"><col style="width:37%"><col style="width:17%"><col style="width:19%"></colgroup><thead><tr><th scope="col">Cant.</th><th scope="col">Código</th><th scope="col">Descripción</th><th scope="col" class="number">Precio</th><th scope="col" class="number">Total</th></tr></thead><tbody></tbody></table></div><form id="cedi-pos-entry"><label>Código<input name="codigo" autocomplete="off" placeholder="Escanear o digitar"></label><label>Cantidad<input name="cantidad" type="number" value="1" min="0.000001" step="any" required></label></form><div class="pos-total"><strong>Total <output data-pos-total>₡0,00</output></strong></div><div class="pos-actions"><div><button type="button" data-pos-remove>Borrar línea</button><button type="button" data-pos-clear>Borrar todo</button><button type="button" disabled>Cliente</button></div><div><button type="button" class="primary" data-pos-pay>Pagar</button></div></div><div class="pos-state"><label class="check"><input type="radio" name="posOperacion" value="inclusion" checked>Inclusión</label><label class="check"><input type="radio" name="posOperacion" value="consulta">Consulta</label><label class="check"><input type="radio" name="posOperacion" value="nota">Nota de crédito o débito</label></div><p data-pos-message aria-live="polite"></p></section><section data-pos-panel="payment" hidden><h3 style="margin-top:16px">Paga con</h3><div class="pos-total"><span>Total</span><strong data-pos-pay-total>₡0,00</strong></div><p>Detalle de cobro pendiente de definir.</p></section>';
 root.append(posMain);
 posMain.querySelector('[name="posBodega"]').closest('label').remove();
 const posWindow=document.createElement('dialog');
@@ -7773,6 +7772,7 @@ recalculatePrices();
 validateCompanyHeader(snapshot.companyHeader);companyHeaderState=snapshot.companyHeader?JSON.parse(JSON.stringify(snapshot.companyHeader)):emptyCompanyHeader();refreshCompanyHeaderForm();restorePrintDesignState(snapshot.printDesigns);printDesignService?.refreshHeader?.();refreshInventoryDashboard();
 savedTrialSnapshot=snapshot;
 trialCompletedSales=Array.isArray(snapshot.sales)?JSON.parse(JSON.stringify(snapshot.sales)):[];
+refreshPosInvoiceNumber();
 trialPurchases=Array.isArray(snapshot.purchases)?JSON.parse(JSON.stringify(snapshot.purchases)):[];refreshPurchaseLedger();
 savedCxpState=snapshot.cxpState?JSON.parse(JSON.stringify(snapshot.cxpState)):null;
 xmlPendingArticles=Array.isArray(snapshot.xmlPendingArticles)?JSON.parse(JSON.stringify(snapshot.xmlPendingArticles)):[];
@@ -7796,6 +7796,7 @@ function initializePos(){
 const saleDate=posMain.querySelector('[name="posFecha"]');
 saleDate.required=true;
 saleDate.value=costaRicaDay();
+refreshPosInvoiceNumber();
 const entry=posMain.querySelector('#cedi-pos-entry');
 const paymentPanel=posMain.querySelector('[data-pos-panel="payment"]');
 paymentPanel.innerHTML=`<div class="pos-payment-layout"><section class="pos-payment-methods" aria-label="Medios de pago"><h3>Medios de pago</h3>
@@ -8201,24 +8202,39 @@ paymentMethodDialog.querySelector('[data-error]').textContent='';
 paymentMethodDialog.showModal();
 paymentMethodDialog.querySelector('[data-method="1"]').focus();
 }
-function completeTrialPayment(method){
-if(!paymentMethodDialog.open || tenderCents===null){return;}
+let savingPosInvoice=false;
+async function completeTrialPayment(method){
+if(savingPosInvoice||!paymentMethodDialog.open || tenderCents===null){return;}
 const names={'1':'Efectivo','2':'Tarjeta','3':'SINPE Móvil'};
 if(!names[method]){return;}
 if(lines.length===0 || tenderCents<paymentTotalCents){paymentMethodDialog.querySelector('[data-error]').textContent='El total cambió. Regresá y revisá el monto.';return;}
 const discounted=distributePosSaleDiscount(saleRows,saleDiscountCents);
 if(!saleDate.value||!saleDate.checkValidity()){paymentMethodDialog.querySelector('[data-error]').textContent='Revisá la fecha de la factura.';return;}
 const recordedAt=new Date();
-const receipt={customer:getPosContactSnapshot(),id:globalThis.crypto?.randomUUID?.() || String(Date.now()),date:posDocumentTimestamp(saleDate.value,recordedAt),recordedAt:recordedAt.toISOString(),method:names[method],saleDiscountCents,exactTotalCents:saleExactTotalCents,roundingCents:paymentTotalCents-saleExactTotalCents,totalCents:paymentTotalCents,receivedCents:method==='1'?tenderCents:paymentTotalCents,changeCents:method==='1'?tenderCents-paymentTotalCents:0,lines:saleRows.map((line,index)=>({barcode:line.productId,cost:line.recordedCost??null,supplier:line.recordedSupplier||'',code:line.code,name:line.name,quantity:line.quantity,price:line.price,vatRate:line.vatRate,includesVAT:line.includesVAT,...discounted.amounts[index]}))};
-try{storePosTrialSale(trialSalesStorage,receipt);}
-catch(error){paymentMethodDialog.querySelector('[data-error]').textContent='No se pudo guardar la venta de prueba. Los artículos se conservan para volver a intentar.';return;}
+const invoiceNumber=nextPosInvoiceNumber(trialCompletedSales);
+if(!invoiceNumber){paymentMethodDialog.querySelector('[data-error]').textContent='La serie de facturas internas está agotada.';return;}
+const receipt={invoiceNumber,customer:getPosContactSnapshot(),id:globalThis.crypto?.randomUUID?.() || String(Date.now()),date:posDocumentTimestamp(saleDate.value,recordedAt),recordedAt:recordedAt.toISOString(),method:names[method],saleDiscountCents,exactTotalCents:saleExactTotalCents,roundingCents:paymentTotalCents-saleExactTotalCents,totalCents:paymentTotalCents,receivedCents:method==='1'?tenderCents:paymentTotalCents,changeCents:method==='1'?tenderCents-paymentTotalCents:0,lines:saleRows.map((line,index)=>({barcode:line.productId,cost:line.recordedCost??null,supplier:line.recordedSupplier||'',code:line.code,name:line.name,quantity:line.quantity,price:line.price,vatRate:line.vatRate,includesVAT:line.includesVAT,...discounted.amounts[index]}))};
+savingPosInvoice=true;
+const buttons=paymentMethodDialog.querySelectorAll('button');
+buttons.forEach(button=>button.disabled=true);
+trialCompletedSales.push(receipt);
+try{
+ await persistPurchaseConfirmed();
+}catch(error){
+ trialCompletedSales=trialCompletedSales.filter(sale=>sale.id!==receipt.id);
+ paymentMethodDialog.querySelector('[data-error]').textContent='No se confirmó la factura '+invoiceNumber+'. '+error.message;
+ return;
+}finally{
+ savingPosInvoice=false;buttons.forEach(button=>button.disabled=false);
+}
+refreshPosInvoiceNumber();
 tenderCents=null;
 paymentMethodDialog.close();
 lines.length=0;selectedLine=-1;saleDiscountCents=0;resetPosContact();
 entry.elements.codigo.value='';entry.elements.cantidad.value='1';
 paymentPanel.querySelectorAll('input').forEach(input=>{if(input.name==='pagoTipoCambio' || input.readOnly){return;}if(input.type==='checkbox'){input.checked=false;}else{input.value=input.type==='number' || input===paidInput?'0':'';}});
 render();showPosPanel('invoice');
-paymentDoneDialog.querySelector('[data-receipt]').textContent=receipt.method+' · Total: '+format(receipt.totalCents/100)+(method==='1'?' · Recibido: '+format(receipt.receivedCents/100)+' · Vuelto: '+format(receipt.changeCents/100):'');
+paymentDoneDialog.querySelector('[data-receipt]').textContent=receipt.invoiceNumber+' · '+receipt.method+' · Total: '+format(receipt.totalCents/100)+(method==='1'?' · Recibido: '+format(receipt.receivedCents/100)+' · Vuelto: '+format(receipt.changeCents/100):'');
 paymentDoneDialog.showModal();paymentDoneDialog.querySelector('button').focus();
 }
 paidInput.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();if(!event.repeat){openPaymentMethod();}}});
@@ -8226,6 +8242,7 @@ paymentPanel.querySelector('[data-pos-save]').onclick=openPaymentMethod;
 paymentMethodDialog.querySelector('[data-cancel]').onclick=()=>paymentMethodDialog.close();
 paymentMethodDialog.querySelectorAll('[data-method]').forEach(button=>{button.onclick=()=>completeTrialPayment(button.dataset.method);});
 paymentMethodDialog.addEventListener('keydown',event=>{
+if(savingPosInvoice){event.preventDefault();return;}
 if(event.key==='+' || event.code==='NumpadAdd'){event.preventDefault();event.stopPropagation();if(!event.repeat){paymentMethodDialog.close();}return;}
 if(event.key==='Escape'){event.preventDefault();event.stopPropagation();return;}
 if(['1','2','3'].includes(event.key)){event.preventDefault();event.stopPropagation();if(!event.repeat){completeTrialPayment(event.key);}}
@@ -8487,12 +8504,16 @@ if(text===''){return 0;}
 if(!/^\d+(?:[.,]\d{0,2})?$/.test(text)){return NaN;}
 return Number(text.replace(',','.'));
 }
-function storePosTrialSale(storage,receipt){
-const key='cedi-pos-trial-sales-v1';
-const sales=JSON.parse(storage.getItem(key) || '[]');
-if(!Array.isArray(sales)){throw new Error('Invalid trial sales');}
-if(sales.some(sale=>sale.id===receipt.id)){return;}
-storage.setItem(key,JSON.stringify([...sales,receipt]));
+function nextPosInvoiceNumber(sales){
+ let last=0;
+ for(const sale of sales){
+  const match=/^POS-(\d{10})$/.exec(sale.invoiceNumber||'');
+  if(match)last=Math.max(last,Number(match[1]));
+ }
+ return last<9999999999?'POS-'+String(last+1).padStart(10,'0'):null;
+}
+function refreshPosInvoiceNumber(){
+ posMain.querySelector('[name="posFacturaInterna"]').value=nextPosInvoiceNumber(trialCompletedSales)||'Serie agotada';
 }
 function calculatePosPayment(totalCents,amounts,dollars,exchangeRate){
 const values=amounts.map(value=>Number(value || 0));
