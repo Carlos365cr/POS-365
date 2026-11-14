@@ -6391,9 +6391,21 @@ function loadPurchaseForModification(record){
  purchasesMain.querySelector('[data-purchase-status]').textContent='Modificando compra '+record.sequence+'. Presioná Procesar para guardar los cambios.';
 }
 
-function installEmptyModule(name,className){
+function installEmptyModule(name,className,sections=[]){
  const button=document.createElement('button');button.type='button';button.className='menu-item cursor-interaction';button.textContent=name;menu.append(button);
  const main=document.createElement('main');main.hidden=true;main.className=className;const title=document.createElement('h2');title.textContent=name;main.append(title);root.append(main);
+ if(sections.length){
+  const tabs=document.createElement('div');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label',name);tabs.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:16px 0';
+  main.append(tabs);
+  const entries=sections.map((label,index)=>{
+   const tab=document.createElement('button');tab.type='button';tab.textContent=label;tab.id=className+'-tab-'+index;tab.setAttribute('role','tab');
+   const panel=document.createElement('section');panel.id=className+'-panel-'+index;panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',tab.id);tab.setAttribute('aria-controls',panel.id);
+   tabs.append(tab);main.append(panel);return {tab,panel};
+  });
+  const select=index=>entries.forEach((entry,i)=>{entry.tab.setAttribute('aria-selected',String(i===index));entry.tab.classList.toggle('primary',i===index);entry.tab.tabIndex=i===index?0:-1;entry.panel.hidden=i!==index;});
+  entries.forEach((entry,index)=>{entry.tab.onclick=()=>select(index);entry.tab.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?entries.length-1:(index+(event.key==='ArrowRight'?1:-1)+entries.length)%entries.length;select(next);entries[next].tab.focus();};});select(0);
+ }
+
  for(const item of menu.querySelectorAll('.menu-item')){if(item===button)continue;const previous=item.onclick;item.onclick=function(...args){main.hidden=true;button.classList.remove('selected');button.removeAttribute('aria-current');return previous?.apply(this,args);};}
  button.onclick=()=>{showConfiguration(false);Array.from(root.children).filter(view=>view.tagName==='MAIN').forEach(view=>view.hidden=view!==main);for(const item of menu.querySelectorAll('.menu-item')){item.classList.remove('selected');item.removeAttribute('aria-current');}main.hidden=false;button.classList.add('selected');button.setAttribute('aria-current','page');};
 }
@@ -6560,7 +6572,7 @@ dialog.querySelector('[data-result-close]').onclick=()=>dialog.close();
 history.onclick=()=>show('Compras de prueba registradas','Los registros están incluidos en Respaldo. No son comprobantes fiscales.',trialPurchases.at(-1));
 installPurchaseConsultation();
 installEmptyModule('FMG','fmg-view');
-installEmptyModule('Análisis perecederos','perishables-view');
+installEmptyModule('Análisis perecederos','perishables-view',['Origen vegetal','Origen animal']);
 const annulDialog=document.createElement('dialog');annulDialog.className='cabys-dialog';
 annulDialog.innerHTML='<header><h3>¿Desea anular la compra?</h3></header><p data-annul-summary></p><p data-annul-error role="alert"></p><footer><button type="button" data-annul-yes>Sí</button><button type="button" data-annul-no>No</button></footer>';
 root.append(annulDialog);
