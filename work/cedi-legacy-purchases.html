@@ -3020,7 +3020,7 @@ window.addEventListener('message',event=>{
 });
 function legacyExamplePrices(product,day){
  if(product?.legacyExample!==true)return null;
- if(day<'2026-11-15'||day>'2026-11-24')return [];
+ if(day<'2026-11-14'||day>'2026-11-24')return [];
  const offset=Number(day.slice(-2))-15;
  const first=product.legacyExampleBase+offset*10;
  return [first,first+5];
@@ -3029,7 +3029,7 @@ function installLegacyPriceHistory(){
  const dialog=document.createElement('dialog');
  dialog.className='cabys-dialog';dialog.style.width='min(790px,92vw)';
  dialog.setAttribute('aria-label','Precios vendidos');
- dialog.innerHTML='<h3>Precios vendidos</h3><form style="display:flex;flex-wrap:wrap;align-items:end;gap:8px"><label>Fecha de recibido<input required type="date" name="day"></label><label>Artículo<input required type="search" name="query" placeholder="Nombre o código"></label><button type="submit">Buscar</button></form><p role="status"></p><div style="max-height:44vh;overflow:auto"><table><thead><tr><th>Código de barras</th><th>Código proveedor</th><th>Nombre del producto</th><th>Precio vendido (₡)</th><th></th></tr></thead><tbody></tbody></table></div><footer><button type="button">Regresar</button></footer>';
+ dialog.innerHTML='<h3>Precios vendidos</h3><form style="display:flex;flex-wrap:wrap;align-items:end;gap:8px"><label>Fecha de recibido<input required type="date" name="day"></label><label>Artículo<input type="search" name="query" placeholder="Nombre o código"></label><button type="submit">Buscar</button></form><p role="status"></p><div style="max-height:44vh;overflow:auto"><table><thead><tr><th>Código de barras</th><th>Código proveedor</th><th>Nombre del producto</th><th>Precio vendido (₡)</th><th></th></tr></thead><tbody></tbody></table></div><footer><button type="button">Regresar</button></footer>';
  purchasesMain.append(dialog);
  const picker=document.createElement('dialog');
  picker.className='cabys-dialog';picker.style.width='min(690px,90vw)';
@@ -3048,15 +3048,26 @@ function installLegacyPriceHistory(){
  function search(){
   const token=++version,term=normalizeCabysText(form.elements.query.value),day=form.elements.day.value;
   body.replaceChildren();status.textContent='';
-  if(!term||!day){status.textContent='Ingresá la fecha y el artículo.';return;}
+  if(!day){status.textContent='Ingresá la fecha de recibido.';return;}
   const all=allArticleRecords();
   const supplierId=purchasesMain.querySelector('[name=compraProveedor]').value;
   const supplier=(captureContactsState()?.records||[]).find(c=>c.id===supplierId);
   const scoped=supplier?all.filter(p=>[supplier.id,supplier.code,supplier.name,supplier.cedula].filter(Boolean).includes(purchaseSupplierValue(p))):all;
   const exact=scoped.filter(p=>articleCodeValues(p).some(code=>normalizeCabysText(code)===term));
-  let matches=exact.length?exact:scoped.filter(p=>term.split(/\s+/).every(word=>normalizeCabysText([p.name,...articleCodeValues(p)].join(' ')).includes(word)));
+  let matches=!term?scoped.filter(p=>p.legacyExample):exact.length?exact:scoped.filter(p=>term.split(/\s+/).every(word=>normalizeCabysText([p.name,...articleCodeValues(p)].join(' ')).includes(word)));
   if(!matches.length&&term===normalizeCabysText(initialCode)&&scoped.includes(initialProduct))matches=[initialProduct];
   if(!matches.length){status.textContent='Sin artículos para esta búsqueda.';return;}
+  function addPrice(product,price){
+   addResult(body,[product.barcode,providerCode(product),product.name,price.toLocaleString('es-CR')],()=>{
+    if(!field?.isConnected||token!==version)return;
+    field.value=String(price);field.dispatchEvent(new Event('input',{bubbles:true}));dialog.close();
+   });
+  }
+  if(matches.every(p=>p.legacyExample)&&(!term||!exact.length||matches.length===1)){
+   for(const product of matches)for(const price of legacyExamplePrices(product,day))addPrice(product,price);
+   status.textContent=body.rows.length?'Precios de ejemplo.':'Sin precios de ejemplo en esa fecha. Elegí del 14 al 24 de noviembre de 2026.';
+   return;
+  }
   function load(product){
    status.textContent='Consultando precios…';
    const id=crypto.randomUUID();
@@ -3066,13 +3077,8 @@ function installLegacyPriceHistory(){
     clearTimeout(timeout);pendingLegacyPrices.delete(id);
     if(token!==version||!dialog.open)return;
     if(error||!Array.isArray(prices)){status.textContent='No se pudo consultar. Volvé a pulsar Buscar.';return;}
-    status.textContent=product.legacyExample?'Precios de ejemplo · Del 15 al 24 de noviembre de 2026.':prices.length?'':'Sin precios vendidos terminados en 0 o 5 para esa fecha.';
-    for(const price of prices){
-     addResult(body,[product.barcode,providerCode(product),product.name,price.toLocaleString('es-CR')],()=>{
-      if(!field?.isConnected||token!==version)return;
-      field.value=String(price);field.dispatchEvent(new Event('input',{bubbles:true}));dialog.close();
-     });
-    }
+    status.textContent=prices.length?(product.legacyExample?'Precios de ejemplo.':''):'Sin precios vendidos terminados en 0 o 5 para esa fecha.';
+    for(const price of prices)addPrice(product,price);
    };
    const timeout=setTimeout(()=>finish(true),30000);
    const simulated=legacyExamplePrices(product,day);
@@ -3082,7 +3088,7 @@ function installLegacyPriceHistory(){
    const suppliers=[purchaseSupplierValue(product),purchaseSupplierLabel(product),owner?.id,owner?.code,owner?.name,owner?.cedula].filter(Boolean);
    window.parent.postMessage({type:'cedi-legacy-price',history:true,id,day,keys,suppliers},'*');
   }
-  if(supplier&&matches.length===1){load(matches[0]);return;}
+  if(matches.length===1){load(matches[0]);return;}
   const choices=picker.querySelector('tbody');choices.replaceChildren();
   for(const product of matches){
    addResult(choices,[product.name,purchaseSupplierLabel(product),providerCode(product),product.barcode],()=>{picker.close();load(product);});
@@ -3099,7 +3105,7 @@ function installLegacyPriceHistory(){
   field=row.querySelector('[aria-label="Precio 1"]');
   initialProduct=findArticleByKey(row.dataset.articleKey||row.dataset.productBarcode);
   initialCode=row.querySelector('[aria-label="Código"]').value.trim();
-  form.elements.day.value=purchasesMain.querySelector('[name=compraRecibido]').value;
+  form.elements.day.value=purchasesMain.querySelector('[name=compraRecibido]').value||costaRicaDay();
   form.elements.query.value=initialCode;
   dialog.showModal();search();
  }
