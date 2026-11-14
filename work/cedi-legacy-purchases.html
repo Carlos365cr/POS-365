@@ -3037,7 +3037,7 @@ function installLegacyPriceHistory(){
  picker.innerHTML='<h3>¿Cuál artículo querés consultar?</h3><div style="max-height:50vh;overflow:auto"><table><thead><tr><th>Producto</th><th>Proveedor</th><th>Código proveedor</th><th>Código de barras</th><th></th></tr></thead><tbody></tbody></table></div><footer><button type="button">Regresar</button></footer>';
  purchasesMain.append(picker);
  const form=dialog.querySelector('form'),status=dialog.querySelector('[role=status]'),body=dialog.querySelector('tbody');
- let field=null,version=0,initialProduct=null,initialCode='';
+ let field=null,version=0,chosenProduct=null,chosenTerm='';
  function providerCode(product){return product.details?.general?.find(item=>item[0]==='referencia')?.[1]||'';}
  function addResult(table,values,choose){
   const row=table.insertRow();
@@ -3045,18 +3045,17 @@ function installLegacyPriceHistory(){
   const button=document.createElement('button');
   button.type='button';button.textContent='Seleccionar';button.onclick=choose;row.insertCell().append(button);
  }
- function search(){
+ function search(supplier=null){
   const token=++version,term=normalizeCabysText(form.elements.query.value),day=form.elements.day.value;
   body.replaceChildren();status.textContent='';
   if(!day){status.textContent='Ingresá la fecha de recibido.';return;}
   const displayedDay=day.split('-').reverse().join('/');
   const all=allArticleRecords();
-  const supplierId=purchasesMain.querySelector('[name=compraProveedor]').value;
-  const supplier=(captureContactsState()?.records||[]).find(c=>c.id===supplierId);
   const scoped=supplier?all.filter(p=>[supplier.id,supplier.code,supplier.name,supplier.cedula].filter(Boolean).includes(purchaseSupplierValue(p))):all;
   const exact=scoped.filter(p=>articleCodeValues(p).some(code=>normalizeCabysText(code)===term));
   let matches=!term?scoped.filter(p=>p.legacyExample):exact.length?exact:scoped.filter(p=>term.split(/\s+/).every(word=>normalizeCabysText([p.name,...articleCodeValues(p)].join(' ')).includes(word)));
-  if(!matches.length&&term===normalizeCabysText(initialCode)&&scoped.includes(initialProduct))matches=[initialProduct];
+  if(term!==chosenTerm)chosenProduct=null;
+  if(chosenProduct&&scoped.includes(chosenProduct))matches=[chosenProduct];
   if(!matches.length){status.textContent='Sin artículos para esta búsqueda.';return;}
   function addPrice(product,price){
    addResult(body,[product.barcode,providerCode(product),product.name,price.toLocaleString('es-CR')],()=>{
@@ -3070,6 +3069,7 @@ function installLegacyPriceHistory(){
    return;
   }
   function load(product){
+   chosenProduct=product;chosenTerm=term;
    status.textContent='Consultando precios…';
    const id=crypto.randomUUID();
    const keys=[...new Set([articleRecordKey(product),product.barcode,product.code].filter(Boolean))].filter(key=>!all.some(p=>p!==product&&[articleRecordKey(p),p.barcode,p.code].includes(key)));
@@ -3085,7 +3085,7 @@ function installLegacyPriceHistory(){
    const simulated=legacyExamplePrices(product,day);
    if(simulated){finish(false,null,simulated,day);return;}
    pendingLegacyPrices.set(id,finish);
-   const owner=supplier||(captureContactsState()?.records||[]).find(c=>[c.id,c.name,c.code,c.cedula].includes(purchaseSupplierValue(product)));
+   const owner=supplier||(captureContactsState()?.records||[]).find(c=>[c.id,c.name,c.code,c.cedula].filter(Boolean).includes(purchaseSupplierValue(product)));
    const suppliers=[purchaseSupplierValue(product),purchaseSupplierLabel(product),owner?.id,owner?.code,owner?.name,owner?.cedula].filter(Boolean);
    window.parent.postMessage({type:'cedi-legacy-price',history:true,id,day,keys,suppliers},'*');
   }
@@ -3104,11 +3104,14 @@ function installLegacyPriceHistory(){
  function openForRow(row){
   if(!row||dialog.open)return;
   field=row.querySelector('[aria-label="Precio 1"]');
-  initialProduct=findArticleByKey(row.dataset.articleKey||row.dataset.productBarcode);
-  initialCode=row.querySelector('[aria-label="Código"]').value.trim();
+  chosenProduct=findArticleByKey(row.dataset.articleKey||row.dataset.productBarcode);
+  const initialCode=row.querySelector('[aria-label="Código"]').value.trim();
   form.elements.day.value=purchasesMain.querySelector('[name=compraRecibido]').value;
   form.elements.query.value=initialCode;
-  dialog.showModal();search();
+  chosenTerm=normalizeCabysText(initialCode);
+  const supplierId=purchasesMain.querySelector('[name=compraProveedor]').value;
+  const supplier=(captureContactsState()?.records||[]).find(c=>c.id===supplierId);
+  dialog.showModal();search(supplier);
  }
  purchasesMain.querySelector('[data-purchase-old-prices]').onclick=()=>openForRow(selectedPurchaseRow||purchasesMain.querySelector('.purchase-table tbody tr'));
  purchasesMain.addEventListener('keydown',event=>{

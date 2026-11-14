@@ -54,3 +54,20 @@ assert.equal(body.rows.length,0);
 buscar('002','2026-11-17');
 ctx.pendingLegacyPrices.get(requests[3].id)(false,null,[1200],'2026-11-14');
 assert.equal(body.rows.length,0);
+dialog.close();
+const supplier=catalog.contactsState.records[0];
+main.querySelector('[name=compraProveedor]').value=supplier.id;
+row.querySelector('[aria-label="Código"]').value='FV-01';
+main.querySelector('[data-purchase-old-prices]').onclick();
+assert.equal(form.elements.query.value,'FV-01');
+assert.equal(form.elements.day.value,'2026-11-14');
+for(const [term,day,price] of [['002','2026-11-13',550],['Artículo 002','2026-11-12',570]]){
+ buscar(term,day);
+ const request=requests.at(-1);
+ assert.equal(request.day,day);assert.ok(request.keys.includes('0002'));
+ assert.ok(!request.suppliers.includes(supplier.id));
+ ctx.pendingLegacyPrices.get(request.id)(false,null,[price],day);
+ assert.equal(body.rows.length,1);assert.equal(body.rows[0].cells[3].textContent,String(price));
+}
+assert.equal(main.querySelector('[name=compraRecibido]').value,'2026-11-14');
+assert.equal(row.querySelector('[aria-label="Código"]').value,'FV-01');
