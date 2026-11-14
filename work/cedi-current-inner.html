@@ -6391,6 +6391,12 @@ function loadPurchaseForModification(record){
  purchasesMain.querySelector('[data-purchase-status]').textContent='Modificando compra '+record.sequence+'. Presioná Procesar para guardar los cambios.';
 }
 
+function installEmptyModule(name,className){
+ const button=document.createElement('button');button.type='button';button.className='menu-item cursor-interaction';button.textContent=name;menu.append(button);
+ const main=document.createElement('main');main.hidden=true;main.className=className;const title=document.createElement('h2');title.textContent=name;main.append(title);root.append(main);
+ for(const item of menu.querySelectorAll('.menu-item')){if(item===button)continue;const previous=item.onclick;item.onclick=function(...args){main.hidden=true;button.classList.remove('selected');button.removeAttribute('aria-current');return previous?.apply(this,args);};}
+ button.onclick=()=>{showConfiguration(false);Array.from(root.children).filter(view=>view.tagName==='MAIN').forEach(view=>view.hidden=view!==main);for(const item of menu.querySelectorAll('.menu-item')){item.classList.remove('selected');item.removeAttribute('aria-current');}main.hidden=false;button.classList.add('selected');button.setAttribute('aria-current','page');};
+}
 function installPurchaseConsultation(){
  const operations=purchasesMain.querySelectorAll('[name="compraOperacion"]');
  const consultation=operations[1],modification=operations[2],exclusion=operations[3];consultation.disabled=false;modification.disabled=false;exclusion.disabled=false;
@@ -6553,6 +6559,8 @@ selector.onchange=()=>showRecord(trialPurchases.find(p=>p.id===selector.value));
 dialog.querySelector('[data-result-close]').onclick=()=>dialog.close();
 history.onclick=()=>show('Compras de prueba registradas','Los registros están incluidos en Respaldo. No son comprobantes fiscales.',trialPurchases.at(-1));
 installPurchaseConsultation();
+installEmptyModule('FMG','fmg-view');
+installEmptyModule('Análisis perecederos','perishables-view');
 const annulDialog=document.createElement('dialog');annulDialog.className='cabys-dialog';
 annulDialog.innerHTML='<header><h3>¿Desea anular la compra?</h3></header><p data-annul-summary></p><p data-annul-error role="alert"></p><footer><button type="button" data-annul-yes>Sí</button><button type="button" data-annul-no>No</button></footer>';
 root.append(annulDialog);
@@ -6674,7 +6682,7 @@ for(const [key,updated] of replacementUpdates){
  const oldLine=editing?.record.lines.find(line=>(line.xmlProductId||line.barcode)===key);
  const costs=structuredClone(product.details?.costs||[]),prices=structuredClone(product.details?.prices||[]);
  if(oldLine){const field=costs.find(field=>field[0]==='crc_reposicion');if(field)field[1]=oldLine.currentCost==null?'':String(oldLine.currentCost);const price=prices.find(field=>field[0]==='lista0_precio');if(price)price[1]=oldLine.currentPrice==null?'':Number(oldLine.currentPrice).toFixed(2);}
- record.articleEffects.push({key,before:{price:oldLine?oldLine.currentPrice:product.price??null,costs:oldLine?costs.filter(field=>field[0]!=='crc_reposicion_con_iva'):costs,prices,purchaseCost:oldLine?null:product.purchaseCost||null,purchasePrice:oldLine?null:product.purchasePrice||null}});
+ record.articleEffects.push({key,before:{price:oldLine&&oldLine.currentPrice!==undefined?oldLine.currentPrice:product.price??null,costs:oldLine?costs.filter(field=>field[0]!=='crc_reposicion_con_iva'):costs,prices,purchaseCost:oldLine?null:product.purchaseCost||null,purchasePrice:oldLine?null:product.purchasePrice||null}});
 }
 applyPurchaseReplacementUpdates(replacementUpdates);
 const recordIndex=editing?trialPurchases.findIndex(p=>p.id===editing.record.id):trialPurchases.length;
