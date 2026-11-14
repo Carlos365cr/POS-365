@@ -29,6 +29,35 @@ async function decodeStore(parts){
   const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
   return new Response(stream).json();
 }
+function addLegacyExamples(snapshot,saved){
+  const samples=[
+    ['Arroz blanco 1 kg','2316100000100',1470],['Frijol negro 900 g','0170102000400',1690],
+    ['Lentejas secas 500 g','0170400000000',950],['Harina de avena 400 g','2312000000200',1120],
+    ['Café en grano 250 g','2391102010100',2650],['Café molido 250 g','2391102010200',2430],
+    ['Harina de trigo 1 kg','2311000000100',890],['Pan tostado 200 g','2341000000100',1040],
+    ['Galletas de vainilla 180 g','2342001000200',765],['Tortillas de trigo 300 g','2349001010200',1250]
+  ];
+  const state=snapshot.contactsState??{version:1,draft:[],draftAttachments:[],mode:'inclusion',tab:'general'};
+  const supplier='legacy-example-supplier';
+  const contacts=state.records||[];
+  if(contacts.some(c=>c.id===supplier&&!c.legacyExample))return;
+  snapshot.contactsState={...state,records:contacts.slice()};
+  if(!contacts.some(c=>c.id===supplier))snapshot.contactsState.records.push({id:supplier,code:'FV-DEMO',name:'Proveedor de ejemplo',cedula:'',supplier:true,client:false,active:true,status:'saved',fields:[],attachments:[],location:{},legacyExample:true});
+  const products=[...(snapshot.products||[])];
+  const taken=new Set([...products,...(snapshot.xmlPendingArticles||[])].flatMap(p=>[p.code,p.barcode,...(p.codes||[])]));
+  samples.forEach(([label,cabys,base],index)=>{
+    const number=String(index+1).padStart(2,'0'),code='FV-'+number,barcode='FV-DEMO-'+number;
+    if(taken.has(code)||taken.has(barcode))return;
+    const previous=(saved.products||[]).find(p=>p.legacyExample===true&&p.barcode===barcode&&p.code===code);
+    const name='Ejemplo · '+label;
+    const fields=values=>Object.entries(values).map(([key,value])=>[key,String(value),null]);
+    products.push(previous||{legacyExample:true,barcode,code,name,cabys,codes:[code,barcode],price:base+5,currency:'Colón',includesVAT:true,
+      details:{general:fields({codigo:code,barras:barcode,nombre:name,cabys,referencia:code,proveedor:supplier,caja:1}),
+        costs:fields({crc_reposicion:base-200}),prices:fields({lista0_precio:base+5})}});
+    products.at(-1).legacyExampleBase=base;
+  });
+  snapshot.products=products;
+}
 async function loadShared(){
   const store=await readStore(storePrefix);
   revision=store.revision;
@@ -40,6 +69,7 @@ async function loadShared(){
     purchaseDraft:{header:[],rows:[],xmlDocument:null},legacyPurchaseDraft:saved.legacyPurchaseDraft??null,
     sales:[],cashOutContacts:[],cashOutEntries:[],cxpState:null,xmlInboxState:saved.xmlInboxState??undefined,
     updatedAt:Math.max(saved.updatedAt||0,catalog.updatedAt||0)};
+  addLegacyExamples(snapshot,saved);
   return {cediShared:true,cediTrial:snapshot};
 }
 function stop(message){

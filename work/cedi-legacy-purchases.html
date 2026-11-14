@@ -3018,6 +3018,13 @@ window.addEventListener('message',event=>{
  const {id,error,price}=event.data;
  pendingLegacyPrices.get(id)?.(error,price,event.data.prices);
 });
+function legacyExamplePrices(product,day){
+ if(product?.legacyExample!==true)return null;
+ if(day<'2026-11-15'||day>'2026-11-24')return [];
+ const offset=Number(day.slice(-2))-15;
+ const first=product.legacyExampleBase+offset*10;
+ return [first,first+5];
+}
 function installLegacyPriceHistory(){
  const dialog=document.createElement('dialog');
  dialog.className='cabys-dialog';dialog.style.width='min(790px,92vw)';
@@ -3059,7 +3066,7 @@ function installLegacyPriceHistory(){
     clearTimeout(timeout);pendingLegacyPrices.delete(id);
     if(token!==version||!dialog.open)return;
     if(error||!Array.isArray(prices)){status.textContent='No se pudo consultar. Volvé a pulsar Buscar.';return;}
-    status.textContent=prices.length?'':'Sin precios vendidos terminados en 0 o 5 para esa fecha.';
+    status.textContent=product.legacyExample?'Precios de ejemplo · Del 15 al 24 de noviembre de 2026.':prices.length?'':'Sin precios vendidos terminados en 0 o 5 para esa fecha.';
     for(const price of prices){
      addResult(body,[product.barcode,providerCode(product),product.name,price.toLocaleString('es-CR')],()=>{
       if(!field?.isConnected||token!==version)return;
@@ -3068,6 +3075,8 @@ function installLegacyPriceHistory(){
     }
    };
    const timeout=setTimeout(()=>finish(true),30000);
+   const simulated=legacyExamplePrices(product,day);
+   if(simulated){finish(false,null,simulated);return;}
    pendingLegacyPrices.set(id,finish);
    const owner=supplier||(captureContactsState()?.records||[]).find(c=>[c.id,c.name,c.code,c.cedula].includes(purchaseSupplierValue(product)));
    const suppliers=[purchaseSupplierValue(product),purchaseSupplierLabel(product),owner?.id,owner?.code,owner?.name,owner?.cedula].filter(Boolean);
@@ -3109,6 +3118,8 @@ function applyLegacySalePrice(row,product){
  delete row.dataset.priceRequest;delete row.dataset.priceLookupError;
  formatPurchaseNumber(field,'');
  if(!day||!keys.length)return;
+ const simulated=legacyExamplePrices(product,day);
+ if(simulated){formatPurchaseNumber(field,simulated.at(-1)??'');return;}
  const id=crypto.randomUUID();
  row.dataset.priceRequest=id;
  const finish=(error,price)=>{
