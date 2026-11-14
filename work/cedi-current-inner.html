@@ -1834,6 +1834,10 @@ svg.lucide {
 
 html>body{padding:0}
 #articulos-cedi #perishables-view-tab-1[aria-selected="true"] { background: #78233e; border-color: #78233e; color: #fff; }
+
+#articulos-cedi .purchase-fields>.purchase-sequence-row{grid-column:1/-1;display:flex;align-items:center;gap:8px;min-width:0}
+#articulos-cedi .purchase-sequence-row>.purchase-consecutive{display:inline-flex;align-items:center;gap:6px;width:auto;flex:0 0 auto}
+#articulos-cedi .purchase-sequence-row>button{align-self:center}
 </style>
 <style id="codex-visualization-host-theme">:root {}</style>
 <script>
@@ -6770,7 +6774,11 @@ function sequence(){return String(Math.max(0,...trialPurchases.map(p=>Number(p.s
 const searchOrders=document.createElement('button');
 searchOrders.type='button';
 searchOrders.textContent='Buscar orden de compra';
-main.querySelector('.purchase-process').after(searchOrders);
+const consecutiveLabel=get('compraConsecutivo').closest('label');
+const consecutiveRow=document.createElement('div');
+consecutiveRow.className='purchase-sequence-row';
+consecutiveLabel.before(consecutiveRow);
+consecutiveRow.append(consecutiveLabel,searchOrders);
 const orderDialog=document.createElement('dialog');
 orderDialog.className='cabys-dialog';
 orderDialog.style.width='min(740px, 90vw)';
