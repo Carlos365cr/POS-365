@@ -6556,7 +6556,7 @@ function installFmgProducts(main){
 }
 
 function installEmptyModule(name,className,sections=[]){
- const button=document.createElement('button');button.type='button';button.className='menu-item cursor-interaction';button.textContent=name;menu.append(button);
+ const button=document.createElement('button');button.type='button';button.className='menu-item cursor-interaction';button.textContent=name;const placeholder=[...menu.children].find(item=>item.textContent.trim()===name);if(placeholder)placeholder.replaceWith(button);else menu.append(button);
  const main=document.createElement('main');main.hidden=true;main.className=className;const title=document.createElement('h2');title.textContent=name;main.append(title);root.append(main);
  if(className==='fmg-view')installFmgProducts(main);
  if(sections.length){
@@ -6737,6 +6737,7 @@ selector.onchange=()=>showRecord(trialPurchases.find(p=>p.id===selector.value));
 dialog.querySelector('[data-result-close]').onclick=()=>dialog.close();
 history.onclick=()=>show('Compras de prueba registradas','Los registros están incluidos en Respaldo. No son comprobantes fiscales.',trialPurchases.at(-1));
 installPurchaseConsultation();
+installEmptyModule('Usuarios y permisos','users-permissions-view',['Usuarios','Permisos']);
 installEmptyModule('FMG','fmg-view');
 installEmptyModule('Análisis perecederos','perishables-view',['Origen vegetal','Origen animal']);
 const annulDialog=document.createElement('dialog');annulDialog.className='cabys-dialog';
