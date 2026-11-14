@@ -27,6 +27,7 @@
   const initialGlobals = parse(initialStateElement?.textContent ?? "{}");
   initialStateElement?.remove();
   /** @type {Record<string, unknown> | null} */
+  globalThis.cediOpenPurchases = initialGlobals.openPurchases === true;
   let state = initialGlobals.widgetState ?? null;
   const statePersistence = initialGlobals.statePersistence ?? "none";
   let nextStateRequestId = 0;
@@ -6751,6 +6752,23 @@ function installPurchaseConsultation(){
  for(const button of menu.querySelectorAll('.menu-item')){const old=button.onclick;button.onclick=function(...args){if(view){view.remove();view=null;purchaseExclusion=null;operations[0].checked=true;}return old?.apply(this,args);};}
 }
 
+function addPurchaseFormatButton(label, destination){
+ const button=document.createElement('button');
+ button.type='button';
+ button.className='menu-item cursor-interaction';
+ button.textContent=label;
+ purchasesMenu.after(button);
+ button.onclick=async()=>{
+  button.disabled=true;
+  try{
+   await persistPurchaseConfirmed();
+   window.parent.postMessage({type:'cedi-switch-purchase-format',destination},'*');
+  }catch(error){
+   button.disabled=false;
+   window.alert(error.message);
+  }
+ };
+}
 function installPurchaseProcessing(){
 const main=purchasesMain;
 const get=name=>main.querySelector('[name="'+name+'"]');
@@ -6846,7 +6864,7 @@ dialog.querySelector('[data-result-close]').onclick=()=>dialog.close();
 history.onclick=()=>show('Compras de prueba registradas','Los registros están incluidos en Respaldo. No son comprobantes fiscales.',trialPurchases.at(-1));
 installPurchaseConsultation();
 installInternalInvoiceModule();
-installEmptyModule('Compras formato viejo','legacy-purchases-view');
+addPurchaseFormatButton('Compras formato viejo','legacy');
 installEmptyModule('Usuarios y permisos','users-permissions-view',['Usuarios','Permisos']);
 installEmptyModule('FMG','fmg-view');
 installEmptyModule('Análisis perecederos','perishables-view',['Origen vegetal','Origen animal']);
@@ -7427,6 +7445,7 @@ products:Array.from(savedTrialProducts.values()),
 sales:trialCompletedSales,
 purchaseCostPostingVersion,
 purchaseDraft:(currentPurchaseXml||purchaseModification||purchaseExclusion)?{header:[],rows:[],xmlDocument:null}:capturePurchaseDraft(),
+legacyPurchaseDraft:savedTrialSnapshot?.legacyPurchaseDraft??null,
 purchases:trialPurchases,
 cashOutContacts:cashOutContacts,
 cashOutEntries:cashOutEntries,
@@ -7642,8 +7661,8 @@ buildVersionFooter.setAttribute('aria-label','Versión de esta aplicación');
 buildVersionFooter.textContent='Versión '+document.querySelector('meta[name="cedi-build-version"]').content;
 menu.append(buildVersionFooter);
 
-homeMenu.click();
-requestAnimationFrame(focusArticleCode);
+if(window.cediOpenPurchases)purchasesMenu.click();
+else {homeMenu.click();requestAnimationFrame(focusArticleCode);}
 let trialHasEdits=false;
 restoreTrialState();
 root.addEventListener('input',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view')){trialHasEdits=true;}},true);

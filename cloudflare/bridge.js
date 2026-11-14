@@ -70,3 +70,10 @@ window.addEventListener('message',event=>{
     revision=result.revision;confirmedParts=parts;latest=updatedAt;reply(true);
   }).catch(e=>{reply(false,e.message);if(!blocked)stop(e.message);});
 });
+
+window.addEventListener('message', event=>{
+  if(event.source!==frame.contentWindow || event.data?.type!=='cedi-switch-purchase-format')return;
+  const destination=event.data.destination;
+  if(destination==='legacy')location.assign('/compras-formato-viejo.html');
+  if(destination==='current')location.assign('/?modulo=compras');
+});
