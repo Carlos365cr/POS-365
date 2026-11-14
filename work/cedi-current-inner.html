@@ -6846,6 +6846,7 @@ dialog.querySelector('[data-result-close]').onclick=()=>dialog.close();
 history.onclick=()=>show('Compras de prueba registradas','Los registros están incluidos en Respaldo. No son comprobantes fiscales.',trialPurchases.at(-1));
 installPurchaseConsultation();
 installInternalInvoiceModule();
+installEmptyModule('Compras formato viejo','legacy-purchases-view');
 installEmptyModule('Usuarios y permisos','users-permissions-view',['Usuarios','Permisos']);
 installEmptyModule('FMG','fmg-view');
 installEmptyModule('Análisis perecederos','perishables-view',['Origen vegetal','Origen animal']);
