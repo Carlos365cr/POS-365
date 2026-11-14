@@ -415,6 +415,17 @@ const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0)),url=URL.createObjectURL(
 }catch(error){}
 });
 </script>
+<!-- cedi-perishable-export-bridge -->
+<script>
+// Data-only Excel and PDF exports from this application's sandbox.
+window.addEventListener('message',event=>{
+const frame=document.getElementById('codex-visualization');if(event.source!==frame?.contentWindow||event.data?.type!=='cedi-perishable-export'){return;}
+const {filename,mime,content}=event.data;if(typeof filename!=='string'||!/^POS-365-ventas-origen-vegetal-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.(xlsx|pdf)$/.test(filename)||typeof content!=='string'||content.length>20*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(content)){return;}
+try{const decoded=atob(content);if(mime==='application/pdf'){if(!filename.endsWith('.pdf')||!decoded.startsWith('%PDF-1.4')){return;}}else if(mime==='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'){if(!filename.endsWith('.xlsx')||!decoded.startsWith('PK\x03\x04')){return;}}else{return;}
+const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:mime})),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}catch(error){}
+});
+</script>
 <script>
 // Data-only Excel and PDF exports from this application's sandbox.
 window.addEventListener('message',event=>{
