@@ -42,6 +42,13 @@ async function loadShared(){
     updatedAt:Math.max(saved.updatedAt||0,catalog.updatedAt||0)};
   return {cediShared:true,cediTrial:snapshot};
 }
+function stop(message){
+  blocked=true;
+  frame.inert=true;
+  const panel=document.createElement('dialog'),text=document.createElement('p'),button=document.createElement('button');
+  text.textContent=message;button.textContent='Volver a cargar';button.onclick=()=>location.reload();
+  panel.append(text,button);document.body.append(panel);panel.showModal();panel.oncancel=e=>e.preventDefault();
+}
 const pendingPrices=new Map();
 window.addEventListener('message',async event=>{
   if(storePrefix==='/api'||event.source!==frame.contentWindow||event.data?.type!=='cedi-legacy-price')return;
@@ -58,13 +65,6 @@ window.addEventListener('message',async event=>{
   try{const price=await pendingPrices.get(path);frame.contentWindow.postMessage({type:'cedi-legacy-price-result',id,price},'*');}
   catch{frame.contentWindow.postMessage({type:'cedi-legacy-price-result',id,error:true},'*');}
 });
-function stop(message){
-  blocked=true;
-  frame.inert=true;
-  const panel=document.createElement('dialog'),text=document.createElement('p'),button=document.createElement('button');
-  text.textContent=message;button.textContent='Volver a cargar';button.onclick=()=>location.reload();
-  panel.append(text,button);document.body.append(panel);panel.showModal();panel.oncancel=e=>e.preventDefault();
-}
 async function sendSaveStep(body){
   for(let attempt=0;;attempt++){
     let response;
