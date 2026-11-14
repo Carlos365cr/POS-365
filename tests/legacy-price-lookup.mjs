@@ -50,3 +50,13 @@ assert.deepEqual(await get('price?history=1&day=2026-11-10&key=abc&supplier=Prov
 assert.deepEqual(await get('price?history=1&day=2026-11-11&key=abc&supplier=Proveedor%20A'),{day:'2026-11-11',prices:[850]});
 assert.deepEqual(await get('price?history=1&day=2026-11-12&key=abc'),{day:'2026-11-12',prices:[]});
 console.log('PASS: indexed lookup, compact catalog, cache reuse and replacement, 12,004 sales');
+const posSource=fs.readFileSync('work/cedi-current-inner.html','utf8');
+const timestamp=(await import('data:text/javascript;base64,'+Buffer.from('export '+posSource.slice(posSource.indexOf('function posDocumentTimestamp'),posSource.indexOf('function initializePos'))).toString('base64'))).posDocumentTimestamp;
+for(const [recordedAt,price] of [['2026-11-15T05:58:00.001Z',1470],['2026-11-16T06:01:00.002Z',1475]]){
+  const date=timestamp('2026-11-20',new Date(recordedAt));
+  sales.push({date,recordedAt,lines:[{code:'002',price}]});
+}
+save('future');await get('catalog');
+assert.deepEqual(await get('price?day=2026-11-20&key=002'),{price:1475});
+assert.deepEqual(await get('price?history=1&day=2026-11-20&key=002'),{day:'2026-11-20',prices:[1470,1475]});
+assert.deepEqual(await get('price?day=2026-11-14&key=002'),{price:null});

@@ -120,9 +120,10 @@ async function prepareLegacyCatalog(primary,cache) {
     }
     const latest=new Map(),sold=new Set();
     for(const sale of sales){
-      const time=Date.parse(sale.date);
-      if(!Number.isFinite(time)||['annulled','cancelled','void'].includes(sale.status))continue;
-      const day=/^\d{4}-\d{2}-\d{2}$/.test(sale.date)?sale.date:priceDayFormat.format(time);
+      const documentTime=Date.parse(sale.date);
+      const time=Date.parse(sale.recordedAt||sale.date);
+      if(!Number.isFinite(documentTime)||!Number.isFinite(time)||['annulled','cancelled','void'].includes(sale.status))continue;
+      const day=/^\d{4}-\d{2}-\d{2}$/.test(sale.date)?sale.date:priceDayFormat.format(documentTime);
       for(const line of sale.lines||[]){
         const article=line.barcode||line.code;
         if(!article||!Number.isFinite(line.price)||line.price<0)continue;

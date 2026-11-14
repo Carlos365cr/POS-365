@@ -7952,7 +7952,14 @@ savedContactState=snapshot.contactsState || null;restoreContactsState(savedConta
 restorePurchaseDraft(snapshot.legacyPurchaseDraft);refreshPurchaseLedger();refreshContactLinks();refreshPerishablesProducts();refreshFmgProducts();refreshFmgInventoryViews();
 const photoDraft=snapshot.articlePhotoDraft,photoRecord=savedTrialProducts.get(photoDraft?.savedBarcode);resetArticlePhoto(photoDraft?.photo||photoRecord?.photo||null,!photoDraft?.photo&&photoRecord?.photoSuspended===true);articlePhotoDirty=Boolean(photoDraft?.photo);
 }
+function posDocumentTimestamp(day,instant){
+ const clock=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Costa_Rica',hourCycle:'h23',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(instant);
+ return day+'T'+clock+'.'+String(instant.getUTCMilliseconds()).padStart(3,'0')+'-06:00';
+}
 function initializePos(){
+const saleDate=posMain.querySelector('[name="posFecha"]');
+saleDate.required=true;
+saleDate.value=costaRicaDay();
 const entry=posMain.querySelector('#cedi-pos-entry');
 const paymentPanel=posMain.querySelector('[data-pos-panel="payment"]');
 paymentPanel.innerHTML=`<div class="pos-payment-layout"><section class="pos-payment-methods" aria-label="Medios de pago"><h3>Medios de pago</h3>
@@ -7977,7 +7984,7 @@ scaleNotices.setAttribute('aria-label','Promociones de Venta escala vigentes');
 scaleNotices.setAttribute('aria-live','polite');
 paymentBlank.append(scaleNotices);
 function renderScaleNotices(){
-const notices=buildPosPromotionNotices(Array.from(savedTrialProducts.values()),lines,costaRicaDay(),cabysCatalog);
+const notices=buildPosPromotionNotices(Array.from(savedTrialProducts.values()),lines,saleDate.value,cabysCatalog);
 scaleNotices.replaceChildren();
 const title=document.createElement('h3');title.textContent='Promociones vigentes';scaleNotices.append(title);
 if(!notices.length){const empty=document.createElement('p');empty.textContent='No hay promociones de Venta escala vigentes.';scaleNotices.append(empty);return;}
@@ -8111,7 +8118,7 @@ const body=posProductDialog.querySelector('tbody');
 body.replaceChildren();
 const page=Math.floor(posProductIndex/posProductPageSize);
 const pages=Math.ceil(posProductMatches.length/posProductPageSize);
-const today=costaRicaDay();
+const today=saleDate.value;
 posProductMatches.slice(page*posProductPageSize,(page+1)*posProductPageSize).forEach((product,offset)=>{
 const index=page*posProductPageSize+offset;
 const row=document.createElement('tr');
@@ -8342,6 +8349,7 @@ if(!/^\d*(?:[.,]\d{0,2})?$/.test(next)){event.preventDefault();}
 });
 function focusPaymentAmount(){paidInput.focus();paidInput.select();}
 function openPaymentMethod(){
+if(!saleDate.value||!saleDate.checkValidity()){showPosPanel('invoice');saleDate.reportValidity();return;}
 const entered=paidInput.value.trim();
 const parsed=parsePosTenderAmount(entered);
 const amount=parsed===0?paymentTotalCents/100:parsed;
@@ -8363,7 +8371,9 @@ const names={'1':'Efectivo','2':'Tarjeta','3':'SINPE Móvil'};
 if(!names[method]){return;}
 if(lines.length===0 || tenderCents<paymentTotalCents){paymentMethodDialog.querySelector('[data-error]').textContent='El total cambió. Regresá y revisá el monto.';return;}
 const discounted=distributePosSaleDiscount(saleRows,saleDiscountCents);
-const receipt={customer:getPosContactSnapshot(),id:globalThis.crypto?.randomUUID?.() || String(Date.now()),date:new Date().toISOString(),method:names[method],saleDiscountCents,exactTotalCents:saleExactTotalCents,roundingCents:paymentTotalCents-saleExactTotalCents,totalCents:paymentTotalCents,receivedCents:method==='1'?tenderCents:paymentTotalCents,changeCents:method==='1'?tenderCents-paymentTotalCents:0,lines:saleRows.map((line,index)=>({barcode:line.productId,cost:line.recordedCost??null,supplier:line.recordedSupplier||'',code:line.code,name:line.name,quantity:line.quantity,price:line.price,vatRate:line.vatRate,includesVAT:line.includesVAT,...discounted.amounts[index]}))};
+if(!saleDate.value||!saleDate.checkValidity()){paymentMethodDialog.querySelector('[data-error]').textContent='Revisá la fecha de la factura.';return;}
+const recordedAt=new Date();
+const receipt={customer:getPosContactSnapshot(),id:globalThis.crypto?.randomUUID?.() || String(Date.now()),date:posDocumentTimestamp(saleDate.value,recordedAt),recordedAt:recordedAt.toISOString(),method:names[method],saleDiscountCents,exactTotalCents:saleExactTotalCents,roundingCents:paymentTotalCents-saleExactTotalCents,totalCents:paymentTotalCents,receivedCents:method==='1'?tenderCents:paymentTotalCents,changeCents:method==='1'?tenderCents-paymentTotalCents:0,lines:saleRows.map((line,index)=>({barcode:line.productId,cost:line.recordedCost??null,supplier:line.recordedSupplier||'',code:line.code,name:line.name,quantity:line.quantity,price:line.price,vatRate:line.vatRate,includesVAT:line.includesVAT,...discounted.amounts[index]}))};
 try{storePosTrialSale(trialSalesStorage,receipt);}
 catch(error){paymentMethodDialog.querySelector('[data-error]').textContent='No se pudo guardar la venta de prueba. Los artículos se conservan para volver a intentar.';return;}
 tenderCents=null;
@@ -8388,7 +8398,7 @@ paymentMethodDialog.addEventListener('cancel',event=>{event.preventDefault();});
 paymentMethodDialog.addEventListener('close',()=>{tenderCents=null;if(!paymentPanel.hidden){focusPaymentAmount();}});
 paymentDoneDialog.querySelector('button').onclick=()=>paymentDoneDialog.close();
 paymentDoneDialog.addEventListener('close',focusPosCode);
-posMain.querySelector('[name="posFecha"]').value=costaRicaDay();
+saleDate.addEventListener('change',()=>{render();if(posProductDialog.open)renderPosProducts();});
 function showPosPanel(name){
 posMain.querySelectorAll('[data-pos-panel]').forEach(panel=>{panel.hidden=panel.dataset.posPanel!==name;});
 posMain.querySelectorAll('[data-pos-tab]').forEach(button=>{
@@ -8415,7 +8425,7 @@ let discountTotal=0;
 let subtotal=0;
 let vatTotal=0;
 let units=0;
-const today=costaRicaDay();
+const today=saleDate.value;
 saleRows=lines.flatMap((line,sourceIndex)=>buildPosSaleRows(line,sourceIndex,today,roundingEnabled));
 saleGrossCents=saleRows.reduce((sum,line)=>sum+calculatePosAmounts(line.quantity,line.price,line.discount,line.vatRate,line.includesVAT).totalCents,0);
 if(saleDiscountCents>saleGrossCents){saleDiscountCents=saleGrossCents;feedback.textContent='Se ajustó el descuento al nuevo total de la compra.';}
