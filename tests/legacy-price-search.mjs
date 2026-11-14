@@ -24,7 +24,7 @@ main.querySelector('[name=compraRecibido]').value='2026-11-14';
 const ctx={purchasesMain:main,selectedPurchaseRow:row,document:{createElement(tag){const el=element();if(tag==='dialog')dialogs.push(el);return el;}},
  allArticleRecords:()=>catalog.products,findArticleByKey:()=>null,normalizeCabysText:s=>s.trim().toLowerCase(),
  captureContactsState:()=>catalog.contactsState,articleCodeValues:p=>p.codes,
- purchaseSupplierValue:p=>p.details.general.find(f=>f[0]==='proveedor')[1],Event};
+ purchaseSupplierValue:p=>p.details.general.find(f=>f[0]==='proveedor')?.[1]||'',Event};
 vm.runInNewContext(ui.slice(ui.indexOf('function legacyExamplePrices'),ui.indexOf('function applyLegacySalePrice'))+';installLegacyPriceHistory()',ctx);
 main.querySelector('[data-purchase-old-prices]').onclick();
 const [dialog,picker]=dialogs,form=dialog.querySelector('form'),body=dialog.querySelector('tbody');
@@ -36,3 +36,21 @@ buscar('FV-01','2026-11-25');assert.equal(body.rows.length,0);assert.match(dialo
 buscar('FV-01','2026-11-15');body.rows[0].cells[4].child.onclick();
 assert.equal(field.value,'1470');assert.equal(dialog.open,false);assert.ok(!picker.open);
 console.log('PASS: Buscar with ten packaged examples, unique code without supplier, date changes and selection.');
+const real={code:'002',barcode:'0002',codes:['002'],name:'Artículo 002',details:{general:[]}};
+catalog.products.push(real);
+const requests=[];
+Object.assign(ctx,{crypto,pendingLegacyPrices:new Map(),articleRecordKey:p=>p.barcode,purchaseSupplierLabel:()=>'',
+ setTimeout,clearTimeout,window:{parent:{postMessage(message){requests.push(message);}}}});
+row.querySelector('[aria-label="Código"]').value='002';
+main.querySelector('[data-purchase-old-prices]').onclick();
+assert.equal(requests[0].day,'2026-11-14');
+buscar('002','2026-11-15');
+ctx.pendingLegacyPrices.get(requests[1].id)(false,null,[1475],'2026-11-15');
+ctx.pendingLegacyPrices.get(requests[0].id)(false,null,[1200],'2026-11-14');
+assert.deepEqual(body.rows.map(r=>r.cells[3].textContent),[(1475).toLocaleString('es-CR')]);
+buscar('002','2026-11-16');
+ctx.pendingLegacyPrices.get(requests[2].id)(false,null,[],'2026-11-16');
+assert.equal(body.rows.length,0);
+buscar('002','2026-11-17');
+ctx.pendingLegacyPrices.get(requests[3].id)(false,null,[1200],'2026-11-14');
+assert.equal(body.rows.length,0);

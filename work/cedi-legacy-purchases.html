@@ -3017,7 +3017,7 @@ return providerCode===code && (!supplier || [supplier.id,supplier.code,supplier.
 window.addEventListener('message',event=>{
  if(event.source!==window.parent||event.data?.type!=='cedi-legacy-price-result')return;
  const {id,error,price}=event.data;
- pendingLegacyPrices.get(id)?.(error,price,event.data.prices);
+ pendingLegacyPrices.get(id)?.(error,price,event.data.prices,event.data.day);
 });
 function legacyExamplePrices(product,day){
  if(product?.legacyExample!==true)return null;
@@ -3050,6 +3050,7 @@ function installLegacyPriceHistory(){
   const token=++version,term=normalizeCabysText(form.elements.query.value),day=form.elements.day.value;
   body.replaceChildren();status.textContent='';
   if(!day){status.textContent='Ingresá la fecha de recibido.';return;}
+  const displayedDay=day.split('-').reverse().join('/');
   const all=allArticleRecords();
   const supplierId=purchasesMain.querySelector('[name=compraProveedor]').value;
   const supplier=(captureContactsState()?.records||[]).find(c=>c.id===supplierId);
@@ -3074,16 +3075,16 @@ function installLegacyPriceHistory(){
    const id=crypto.randomUUID();
    const keys=[...new Set([articleRecordKey(product),product.barcode,product.code].filter(Boolean))].filter(key=>!all.some(p=>p!==product&&[articleRecordKey(p),p.barcode,p.code].includes(key)));
    if(!keys.length){status.textContent='El historial no identifica este artículo de forma única.';return;}
-   const finish=(error,unused,prices)=>{
+   const finish=(error,unused,prices,resultDay)=>{
     clearTimeout(timeout);pendingLegacyPrices.delete(id);
-    if(token!==version||!dialog.open)return;
-    if(error||!Array.isArray(prices)){status.textContent='No se pudo consultar. Volvé a pulsar Buscar.';return;}
-    status.textContent=prices.length?(product.legacyExample?'Precios de ejemplo.':''):'Sin precios vendidos terminados en 0 o 5 para esa fecha.';
+    if(token!==version||!dialog.open||form.elements.day.value!==day)return;
+    if(error||resultDay!==day||!Array.isArray(prices)){status.textContent='No se pudo consultar. Volvé a pulsar Buscar.';return;}
+    status.textContent=prices.length?'Precios vendidos el '+displayedDay:'Sin precios vendidos terminados en 0 o 5 el '+displayedDay+'.';
     for(const price of prices)addPrice(product,price);
    };
    const timeout=setTimeout(()=>finish(true),30000);
    const simulated=legacyExamplePrices(product,day);
-   if(simulated){finish(false,null,simulated);return;}
+   if(simulated){finish(false,null,simulated,day);return;}
    pendingLegacyPrices.set(id,finish);
    const owner=supplier||(captureContactsState()?.records||[]).find(c=>[c.id,c.name,c.code,c.cedula].includes(purchaseSupplierValue(product)));
    const suppliers=[purchaseSupplierValue(product),purchaseSupplierLabel(product),owner?.id,owner?.code,owner?.name,owner?.cedula].filter(Boolean);
@@ -3106,7 +3107,7 @@ function installLegacyPriceHistory(){
   field=row.querySelector('[aria-label="Precio 1"]');
   initialProduct=findArticleByKey(row.dataset.articleKey||row.dataset.productBarcode);
   initialCode=row.querySelector('[aria-label="Código"]').value.trim();
-  form.elements.day.value=purchasesMain.querySelector('[name=compraRecibido]').value||costaRicaDay();
+  form.elements.day.value=purchasesMain.querySelector('[name=compraRecibido]').value;
   form.elements.query.value=initialCode;
   dialog.showModal();search();
  }

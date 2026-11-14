@@ -213,8 +213,8 @@ export default { async fetch(request, env) {
       if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!keys.length||keys.length>3)return json({},400);
       if(url.searchParams.get('history')==='1'){
         const suppliers=url.searchParams.getAll('supplier');
-        const {results}=await db.prepare("SELECT DISTINCT p.price FROM lookup_sold_price p WHERE generation=(SELECT generation FROM lookup_head WHERE id=1) AND day=? AND article IN (SELECT value FROM json_each(?)) AND (supplier='' OR supplier IN (SELECT value FROM json_each(?))) ORDER BY price").bind(day,JSON.stringify(keys),JSON.stringify(suppliers)).all();
-        return json({prices:results.map(row=>row.price)});
+        const {results}=await db.prepare("SELECT DISTINCT p.day,p.price FROM lookup_sold_price p WHERE generation=(SELECT generation FROM lookup_head WHERE id=1) AND day=? AND article IN (SELECT value FROM json_each(?)) AND (supplier='' OR supplier IN (SELECT value FROM json_each(?))) ORDER BY price").bind(day,JSON.stringify(keys),JSON.stringify(suppliers)).all();
+        return json({day:results[0]?.day??day,prices:results.map(row=>row.price)});
       }
       const row=await db.prepare('SELECT (SELECT price FROM lookup_price WHERE generation=h.generation AND day=? AND article IN (SELECT value FROM json_each(?)) ORDER BY time DESC LIMIT 1) AS price FROM lookup_head h WHERE id=1').bind(day,JSON.stringify(keys)).first();
       return row?json(row):json({},503);
