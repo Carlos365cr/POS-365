@@ -105,7 +105,20 @@ export default { async fetch(request, env) {
     response.headers.set('Cache-Control','private, no-store');
     return response;
   }
-  const db=env.DB;
+  const legacy=url.pathname.startsWith('/api/legacy-purchases/');
+  const db=legacy?env.LEGACY_PURCHASES_DB:env.DB;
+  if(legacy){
+    if(!db)return json({error:'Falta conectar la base independiente de Compras formato viejo.'},503);
+    if(db===env.DB)return json({error:'La base de formato viejo debe ser independiente.'},503);
+    url.pathname=url.pathname.replace('/api/legacy-purchases/','/api/');
+    if(url.pathname==='/api/state'&&request.method==='GET'){
+      await db.batch([
+        db.prepare('CREATE TABLE IF NOT EXISTS cedi_head(id INTEGER PRIMARY KEY, revision TEXT NOT NULL, parts INTEGER NOT NULL, author TEXT NOT NULL)'),
+        db.prepare('CREATE TABLE IF NOT EXISTS cedi_parts(revision TEXT NOT NULL, part INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(revision,part))'),
+        db.prepare("INSERT OR IGNORE INTO cedi_head VALUES(1,'legacy-empty',0,'initial')")
+      ]);
+    }
+  }
   if(url.pathname==='/api/state' && request.method==='GET'){
     const row=await db.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();
     return row?json({...row,email}):json({error:'Falta importar la base.'},503);

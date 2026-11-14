@@ -12,7 +12,10 @@ for source,page in [('cedi-current-inner.html','index.html'),('cedi-legacy-purch
     start=s.index('// Origin-local backups');end=s.index('</script>',start)
     s=s[:start]+s[end:]
     s=s.replace('connect-src blob: data:',"connect-src 'self' blob: data:",1)
-    s=s.replace('</iframe>\n\n<script>(() => {','</iframe>\n<script>'+ (root/'bridge.js').read_text()+'</script>\n<script>(async () => {',1)
+    bridge=(root/'bridge.js').read_text()
+    if source=='cedi-legacy-purchases.html':
+        bridge=bridge.replace("const storePrefix='/api';","const storePrefix='/api/legacy-purchases';")
+    s=s.replace('</iframe>\n\n<script>(() => {','</iframe>\n<script>'+ bridge+'</script>\n<script>(async () => {',1)
     assert s.count('async () => {\n  const frame')==1
     target='const initialGlobals = {\n    widgetState: state,'
     assert s.count(target)==1
