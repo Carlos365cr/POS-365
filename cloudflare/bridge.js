@@ -94,5 +94,5 @@ window.addEventListener('message', event=>{
   if(event.source!==frame.contentWindow || event.data?.type!=='cedi-switch-purchase-format')return;
   const destination=event.data.destination;
   if(destination==='legacy')location.assign('/compras-formato-viejo.html');
-  if(destination==='current')location.assign('/?modulo=compras');
+  if(destination==='current')location.assign('/?modulo='+encodeURIComponent(event.data.moduleName||'Compras'));
 });

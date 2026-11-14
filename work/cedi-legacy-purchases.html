@@ -7665,6 +7665,22 @@ const currentEntry=purchaseEntries.find(item=>item.textContent.trim()==='Compras
 if(legacyEntry&&currentEntry)legacyEntry.after(currentEntry);
 
 
+let leavingLegacyPurchases=false;
+menu.addEventListener('click',async event=>{
+ const target=event.target.closest('button.menu-item');
+ if(!target||target===purchasesMenu||target.disabled)return;
+ event.stopImmediatePropagation();
+ event.preventDefault();
+ if(leavingLegacyPurchases)return;
+ leavingLegacyPurchases=true;
+ try{
+  await persistPurchaseConfirmed();
+  window.parent.postMessage({type:'cedi-switch-purchase-format',destination:'current',moduleName:target.textContent.trim()},'*');
+ }catch(error){
+  leavingLegacyPurchases=false;
+  window.alert(error.message);
+ }
+},true);
 purchasesMenu.click();
 let trialHasEdits=false;
 restoreTrialState();

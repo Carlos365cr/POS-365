@@ -23,6 +23,6 @@ for source,page in [('cedi-current-inner.html','index.html'),('cedi-legacy-purch
     target='delete frame.dataset.srcdoc;'
     pos=s.index(target);close=s.index('})();',pos);s=s[:close]+s[close:].replace('})();','})().catch(error=>stop(error.message));',1)
     if page=='index.html':
-        s=s.replace('widgetState: {privateContent: await loadShared()},',"widgetState: {privateContent: await loadShared()}, openPurchases: location.search==='?modulo=compras',",1)
+        s=s.replace('widgetState: {privateContent: await loadShared()},',"widgetState: {privateContent: await loadShared()}, entryModule: new URLSearchParams(location.search).get('modulo'),",1)
     (out/page).write_text(s)
 (out/'_worker.js').write_bytes((root/'_worker.js').read_bytes())

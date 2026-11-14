@@ -27,7 +27,7 @@
   const initialGlobals = parse(initialStateElement?.textContent ?? "{}");
   initialStateElement?.remove();
   /** @type {Record<string, unknown> | null} */
-  globalThis.cediOpenPurchases = initialGlobals.openPurchases === true;
+  globalThis.cediEntryModule = initialGlobals.entryModule;
   let state = initialGlobals.widgetState ?? null;
   const statePersistence = initialGlobals.statePersistence ?? "none";
   let nextStateRequestId = 0;
@@ -7666,7 +7666,8 @@ const currentEntry=purchaseEntries.find(item=>item.textContent.trim()==='Compras
 if(legacyEntry&&currentEntry)legacyEntry.after(currentEntry);
 
 
-if(window.cediOpenPurchases)purchasesMenu.click();
+const entryModule=[...menu.querySelectorAll('button.menu-item')].find(button=>button.textContent.trim()===window.cediEntryModule);
+if(entryModule&&!entryModule.disabled)entryModule.click();
 else {homeMenu.click();requestAnimationFrame(focusArticleCode);}
 let trialHasEdits=false;
 restoreTrialState();
