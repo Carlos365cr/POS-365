@@ -1,0 +1,85 @@
+--- a/work/cedi-current-inner.html
++++ b/work/cedi-current-inner.html
+@@ -5080,4 +5080,4 @@
+ let formats=[],customFormats=new Map();if(zip.file('xl/styles.xml')){const doc=await xml('xl/styles.xml');customFormats=new Map(descendants(doc,'numFmt').map(f=>[f.getAttribute('numFmtId'),f.getAttribute('formatCode')]));const xfs=descendants(doc,'cellXfs')[0];formats=Array.from(xfs?.children||[]).map(x=>customFormats.get(x.getAttribute('numFmtId'))||'General');}
+-return {sheets,async rows(sheet){const doc=await xml(sheet.path),rawRows=descendants(doc,'row');if(rawRows.length>5000){throw new Error('La hoja tiene demasiadas filas; la compra de prueba admite hasta 2000 filas con datos.');}const rows=[];for(const element of rawRows){const cells=Array(5).fill(null);for(const cell of Array.from(element.children).filter(c=>c.localName==='c')){const reference=cell.getAttribute('r')||'',letters=/^[A-Z]+/i.exec(reference)?.[0];if(!letters){continue;}let column=0;for(const letter of letters.toUpperCase()){column=column*26+letter.charCodeAt(0)-64;}if(column>5){continue;}const type=cell.getAttribute('t'),value=direct(cell,'v'),formula=direct(cell,'f');let text=type==='inlineStr'?descendants(cell,'t').map(t=>t.textContent).join(''):value?.textContent||'';if(type==='s'){text=strings[Number(text)];if(text===undefined){throw new Error('El Excel tiene una referencia de texto inválida.');}}if(type==='e'){throw new Error('La fila '+element.getAttribute('r')+' contiene un error de Excel.');}if(formula&&!value){throw new Error('La fila '+element.getAttribute('r')+' tiene una fórmula sin resultado guardado. Recalculá y guardá el Excel.');}if(text.length>10000){throw new Error('Una celda del Excel es demasiado larga.');}cells[column-1]={text,numeric:!['s','inlineStr','str','b','d'].includes(type)&&text!=='',format:formats[Number(cell.getAttribute('s')||0)]||'General'};}
+-if(cells.some(c=>c&&String(c.text).trim()!=='')){rows.push({number:Number(element.getAttribute('r')||rows.length+1),cells});if(rows.length>2001){throw new Error('La compra de prueba admite hasta 2000 filas con datos.');}}}return validatePurchaseExcelRows(rows);}};
++return {sheets,async rows(sheet,parse=validatePurchaseExcelRows){const doc=await xml(sheet.path),rawRows=descendants(doc,'row');if(rawRows.length>5000){throw new Error('La hoja tiene demasiadas filas; la compra de prueba admite hasta 2000 filas con datos.');}const rows=[];for(const element of rawRows){const cells=Array(5).fill(null);for(const cell of Array.from(element.children).filter(c=>c.localName==='c')){const reference=cell.getAttribute('r')||'',letters=/^[A-Z]+/i.exec(reference)?.[0];if(!letters){continue;}let column=0;for(const letter of letters.toUpperCase()){column=column*26+letter.charCodeAt(0)-64;}if(column>5){continue;}const type=cell.getAttribute('t'),value=direct(cell,'v'),formula=direct(cell,'f');let text=type==='inlineStr'?descendants(cell,'t').map(t=>t.textContent).join(''):value?.textContent||'';if(type==='s'){text=strings[Number(text)];if(text===undefined){throw new Error('El Excel tiene una referencia de texto inválida.');}}if(type==='e'){throw new Error('La fila '+element.getAttribute('r')+' contiene un error de Excel.');}if(formula&&!value){throw new Error('La fila '+element.getAttribute('r')+' tiene una fórmula sin resultado guardado. Recalculá y guardá el Excel.');}if(text.length>10000){throw new Error('Una celda del Excel es demasiado larga.');}cells[column-1]={text,numeric:!['s','inlineStr','str','b','d'].includes(type)&&text!=='',format:formats[Number(cell.getAttribute('s')||0)]||'General'};}
++if(cells.some(c=>c&&String(c.text).trim()!=='')){rows.push({number:Number(element.getAttribute('r')||rows.length+1),cells});if(rows.length>2001){throw new Error('La compra de prueba admite hasta 2000 filas con datos.');}}}return parse(rows);}};
+ }
+@@ -6172,2 +6172,63 @@
+ function syncPrimaryPriceEditor(product){if(selectedTrialBarcode!==product.barcode&&selectedPendingArticleId!==product.id)return;for(const name of ['lista0_precio','lista0_ganancia','fechaActualizacion','precioAnterior','usuarioActualizacion']){const value=product.details?.prices?.find(field=>field[0]===name)?.[1];if(value!==undefined&&priceForm.elements[name])priceForm.elements[name].value=value;}lastPriceValues.set(0,product.price);pendingGainEdits.delete(0);refreshPromotions();}
++function installArticleExcel(main){
++ const headers=['Código interno','Código de barras','Nombre','CABYS','Cantidad por caja'];
++ const tools=document.createElement('div');
++ tools.className='property-batch';
++ tools.innerHTML='<button type="button" data-template>Descargar plantilla</button><button type="button" data-upload>Cargar Excel</button><input type="file" accept=".xlsx" hidden>';
++ main.querySelector('.property-batch').before(tools);
++ const file=tools.querySelector('input'),upload=tools.querySelector('[data-upload]'),status=main.querySelector('[data-prop-status]');
++ const review=document.createElement('dialog');
++ review.className='cabys-dialog';
++ review.innerHTML='<h3>Importar artículos nuevos</h3><p></p><footer><button type="button" data-confirm>Crear artículos</button><button type="button" data-cancel>Cancelar</button></footer>';
++ main.append(review);
++ let pending=[];
++ tools.querySelector('[data-template]').onclick=async()=>{
++  try{
++   const bytes=await buildCediWorkbook([{name:'Artículos',data:[headers],widths:[24,24,52,22,20],textColumns:[0,1,3]}]);
++   downloadCashOutExport('Plantilla-articulos-CEDI.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',bytes);
++  }catch(error){status.textContent=error.message;}
++ };
++ upload.onclick=()=>file.click();
++ file.onchange=async()=>{
++  const selected=file.files[0];if(!selected)return;
++  upload.disabled=true;
++  try{
++   const workbook=await openPurchaseXlsx(new Uint8Array(await selected.arrayBuffer()));
++   const [head,...rows]=await workbook.rows(workbook.sheets[0],rows=>rows);
++   if(!head||headers.some((h,i)=>normalizeCabysText(h)!==normalizeCabysText(head.cells[i]?.text||'')))throw Error('Usá las cinco columnas de la plantilla en el orden indicado.');
++   if(!rows.length)throw Error('Agregá al menos un producto debajo de los encabezados.');
++   if(!cabysCatalog)throw Error('Esperá a que termine de cargar el catálogo CABYS.');
++   const seen=new Set(allArticleRecords().flatMap(p=>articleCodeValues(p).map(normalizeCabysText)));
++   pending=rows.map(({number,cells})=>{
++    const barcode=purchaseExcelCode(cells[1]),code=purchaseExcelCode(cells[0])||barcode;
++    const name=cells[2]?.text.trim(),cabys=purchaseExcelCode(cells[3]),box=purchaseExcelNumber(cells[4])??1;
++    const fail=msg=>{throw Error('Fila '+number+' · '+msg);};
++    if(!barcode||!name||name.length>1000)fail('Revisá el código de barras y el nombre.');
++    if(!cabysCatalog.has(cabys))fail('El CABYS debe existir en el catálogo.');
++    if(!Number.isSafeInteger(box)||box<1)fail('La cantidad por caja debe ser un entero positivo.');
++    const codes=[...new Set([barcode,code])];
++    if(codes.some(v=>seen.has(normalizeCabysText(v))))fail('El código ya existe en el catálogo o se repite en el archivo.');
++    codes.forEach(v=>seen.add(normalizeCabysText(v)));
++    return {barcode,code,name,cabys,codes,price:null,currency:'Colón',includesVAT:true,details:{general:[['codigo',code,null],['barras',barcode,null],['nombre',name,null],['cabys',cabys,null],['caja',String(box),null]],costs:[],prices:[]}};
++   });
++   if(savedTrialProducts.size+pending.length>1000)throw Error('La carga supera el máximo de 1000 artículos con código de barras del respaldo.');
++   review.querySelector('p').textContent=selected.name+' · '+pending.length+' artículos nuevos. Primero: '+pending[0].name;
++   review.showModal();
++  }catch(error){pending=[];status.textContent=error.message;}
++  finally{file.value='';upload.disabled=false;}
++ };
++ review.querySelector('[data-cancel]').onclick=()=>review.close();
++ review.querySelector('[data-confirm]').onclick=async()=>{
++  const products=pending;pending=[];review.close();upload.disabled=true;
++  try{
++   for(const product of products)savedTrialProducts.set(product.barcode,product);
++   trialHasEdits=true;status.textContent='Guardando artículos…';
++   await persistPurchaseConfirmed();
++   status.textContent=products.length+' artículos creados.';refreshArticleProperties();
++  }catch(error){
++   for(const product of products)if(savedTrialProducts.get(product.barcode)===product)savedTrialProducts.delete(product.barcode);
++   refreshArticleProperties();status.textContent='No se confirmó la importación. Revisá el catálogo antes de reintentar. '+error.message;
++  }finally{upload.disabled=false;}
++ };
++}
+ function installArticleProperties(){
+@@ -6198,3 +6259,3 @@
+ const photoBatch=document.createElement('div');photoBatch.className='property-batch';photoBatch.innerHTML='<button type="button" data-prop-images-delete disabled>Eliminar imágenes</button><button type="button" data-prop-images-suspend disabled>Suspender imágenes</button>';
+-main.querySelector('.property-batch').after(photoBatch);
++main.querySelector('.property-batch').after(photoBatch);installArticleExcel(main);
+ const deletePhotosButton=photoBatch.querySelector('[data-prop-images-delete]'),suspendPhotosButton=photoBatch.querySelector('[data-prop-images-suspend]');
+@@ -6277,4 +6338,4 @@
+ zip.file('xl/_rels/workbook.xml.rels','<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+sheets.map((_,i)=>'<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('')+'<Relationship Id="styles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+-zip.file('xl/styles.xml','<?xml version="1.0"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF24533D"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFill="1" applyFont="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
+-for(const [i,sheet] of sheets.entries()){const data=sheet.data.map((row,r)=>'<row r="'+(r+1)+'"'+(r===0?' ht="30" customHeight="1"':'')+'>'+row.map((value,c)=>{const id=letter(c)+(r+1);return typeof value==='number'&&Number.isFinite(value)?'<c r="'+id+'" s="'+(c===sheet.money?2:3)+'"><v>'+value+'</v></c>':'<c r="'+id+'" t="inlineStr" s="'+(r===0?1:0)+'"><is><t xml:space="preserve">'+xml(value)+'</t></is></c>';}).join('')+'</row>').join('');zip.file('xl/worksheets/sheet'+(i+1)+'.xml','<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>'+sheet.widths.map((width,c)=>'<col min="'+(c+1)+'" max="'+(c+1)+'" width="'+width+'" customWidth="1"/>').join('')+'</cols><sheetData>'+data+'</sheetData><autoFilter ref="A1:'+letter(sheet.data[0].length-1)+sheet.data.length+'"/></worksheet>');}
++zip.file('xl/styles.xml','<?xml version="1.0"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF24533D"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFill="1" applyFont="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
++for(const [i,sheet] of sheets.entries()){const data=sheet.data.map((row,r)=>'<row r="'+(r+1)+'"'+(r===0?' ht="30" customHeight="1"':'')+'>'+row.map((value,c)=>{const id=letter(c)+(r+1);return typeof value==='number'&&Number.isFinite(value)?'<c r="'+id+'" s="'+(c===sheet.money?2:3)+'"><v>'+value+'</v></c>':'<c r="'+id+'" t="inlineStr" s="'+(r===0?1:0)+'"><is><t xml:space="preserve">'+xml(value)+'</t></is></c>';}).join('')+'</row>').join('');zip.file('xl/worksheets/sheet'+(i+1)+'.xml','<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>'+sheet.widths.map((width,c)=>'<col min="'+(c+1)+'" max="'+(c+1)+'" width="'+width+'" customWidth="1"'+(sheet.textColumns?.includes(c)?' style="4"':'')+'/>').join('')+'</cols><sheetData>'+data+'</sheetData><autoFilter ref="A1:'+letter(sheet.data[0].length-1)+sheet.data.length+'"/></worksheet>');}
+ return zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
