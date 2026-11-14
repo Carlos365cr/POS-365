@@ -29,7 +29,7 @@ vm.runInNewContext(ui.slice(ui.indexOf('function legacyExamplePrices'),ui.indexO
 main.querySelector('[data-purchase-old-prices]').onclick();
 const [dialog,picker]=dialogs,form=dialog.querySelector('form'),body=dialog.querySelector('tbody');
 assert.equal(dialog.open,true);assert.ok(!picker.open);assert.equal(body.rows.length,2);
-function buscar(term,day){form.elements.query.value=term;form.elements.day.value=day;form.onsubmit({preventDefault(){}});}
+function buscar(term,day){form.elements.query.value=term;form.elements.day.value=day;form.querySelector('[data-search-prices]').onclick();}
 buscar('','2026-11-14');assert.equal(body.rows.length,20);
 buscar('Ejemplo','2026-11-15');assert.equal(body.rows.length,20);
 buscar('FV-01','2026-11-25');assert.equal(body.rows.length,0);assert.match(dialog.querySelector('[role=status]').textContent,/14 al 24/);
@@ -48,6 +48,11 @@ buscar('002','2026-11-15');
 ctx.pendingLegacyPrices.get(requests[1].id)(false,null,[1475],'2026-11-15');
 ctx.pendingLegacyPrices.get(requests[0].id)(false,null,[1200],'2026-11-14');
 assert.deepEqual(body.rows.map(r=>r.cells[3].textContent),[(1475).toLocaleString('es-CR')]);
+form.elements.day.value='2026-11-16';
+form.oninput?.();
+assert.equal(requests.length,2);
+assert.deepEqual(body.rows.map(r=>r.cells[3].textContent),[(1475).toLocaleString('es-CR')]);
+assert.match(dialog.querySelector('[role=status]').textContent,/15\/11\/2026/);
 buscar('002','2026-11-16');
 ctx.pendingLegacyPrices.get(requests[2].id)(false,null,[],'2026-11-16');
 assert.equal(body.rows.length,0);

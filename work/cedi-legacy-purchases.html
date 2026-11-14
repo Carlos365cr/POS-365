@@ -3029,7 +3029,7 @@ function installLegacyPriceHistory(){
  const dialog=document.createElement('dialog');
  dialog.className='cabys-dialog';dialog.style.width='min(790px,92vw)';
  dialog.setAttribute('aria-label','Precios vendidos');
- dialog.innerHTML='<h3>Precios vendidos</h3><form style="display:flex;flex-wrap:wrap;align-items:end;gap:8px"><label>Fecha de recibido<input required type="date" name="day"></label><label>Artículo<input type="search" name="query" placeholder="Nombre o código"></label><button type="submit">Buscar</button></form><p role="status"></p><div style="max-height:44vh;overflow:auto"><table><thead><tr><th>Código de barras</th><th>Código proveedor</th><th>Nombre del producto</th><th>Precio vendido (₡)</th><th></th></tr></thead><tbody></tbody></table></div><footer><button type="button">Regresar</button></footer>';
+ dialog.innerHTML='<h3>Precios vendidos</h3><form style="display:flex;flex-wrap:wrap;align-items:end;gap:8px"><label>Fecha de recibido<input required type="date" name="day"></label><label>Artículo<input type="search" name="query" placeholder="Nombre o código"></label><button type="button" data-search-prices>Buscar</button></form><p role="status"></p><div style="max-height:44vh;overflow:auto"><table><thead><tr><th>Código de barras</th><th>Código proveedor</th><th>Nombre del producto</th><th>Precio vendido (₡)</th><th></th></tr></thead><tbody></tbody></table></div><footer><button type="button">Regresar</button></footer>';
  purchasesMain.append(dialog);
  const picker=document.createElement('dialog');
  picker.className='cabys-dialog';picker.style.width='min(690px,90vw)';
@@ -3076,7 +3076,7 @@ function installLegacyPriceHistory(){
    if(!keys.length){status.textContent='El historial no identifica este artículo de forma única.';return;}
    const finish=(error,unused,prices,resultDay)=>{
     clearTimeout(timeout);pendingLegacyPrices.delete(id);
-    if(token!==version||!dialog.open||form.elements.day.value!==day)return;
+    if(token!==version||!dialog.open)return;
     if(error||resultDay!==day||!Array.isArray(prices)){status.textContent='No se pudo consultar. Volvé a pulsar Buscar.';return;}
     status.textContent=prices.length?'Precios vendidos el '+displayedDay:'Sin precios vendidos terminados en 0 o 5 el '+displayedDay+'.';
     for(const price of prices)addPrice(product,price);
@@ -3097,7 +3097,13 @@ function installLegacyPriceHistory(){
   picker.showModal();
  }
  form.onsubmit=event=>{event.preventDefault();search();};
- form.oninput=()=>{version++;body.replaceChildren();status.textContent='';};
+ form.querySelector('[data-search-prices]').onclick=()=>search();
+ form.addEventListener('keydown',event=>{
+  if(event.key==='Enter'&&event.target.tagName==='INPUT'&&!event.isComposing){
+   event.preventDefault();
+   if(!event.repeat)search();
+  }
+ });
  dialog.querySelector('footer button').onclick=()=>dialog.close();
  picker.querySelector('footer button').onclick=()=>picker.close();
  dialog.addEventListener('close',()=>{version++;field?.focus();field=null;});
