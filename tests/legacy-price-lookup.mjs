@@ -44,10 +44,10 @@ save('second');
 assert.notEqual((await get('catalog')).generation,head.generation);
 assert.deepEqual(await get('price?day=2026-11-10&key=abc'),{price:500});
 assert.equal(env.LEGACY_PURCHASES_DB.sql.prepare('SELECT count(distinct generation) AS n FROM lookup_price').get().n,1);
-sales.push({date:'2026-11-10T18:00:00Z',lines:[1471,1474.57,1470,1475,1470].map(price=>({barcode:'abc',price,supplier:'Proveedor A'})).concat([{barcode:'abc',price:1550,supplier:'Proveedor B'}])});
+sales.push({invoiceDate:'2026-11-10',date:'2026-11-10T18:00:00Z',lines:[1471,1474.57,1470,1475,1470].map(price=>({barcode:'abc',price,supplier:'Proveedor A'})).concat([{barcode:'abc',price:1550,supplier:'Proveedor B'}])});
 save('third');await get('catalog');
-assert.deepEqual(await get('price?history=1&day=2026-11-10&key=abc&supplier=Proveedor%20A'),{day:'2026-11-10',prices:[500,1470,1475]});
-assert.deepEqual(await get('price?history=1&day=2026-11-11&key=abc&supplier=Proveedor%20A'),{day:'2026-11-11',prices:[850]});
+assert.deepEqual(await get('price?history=1&day=2026-11-10&key=abc&supplier=Proveedor%20A'),{day:'2026-11-10',prices:[1470,1475]});
+assert.deepEqual(await get('price?history=1&day=2026-11-11&key=abc&supplier=Proveedor%20A'),{day:'2026-11-11',prices:[]});
 assert.deepEqual(await get('price?history=1&day=2026-11-12&key=abc'),{day:'2026-11-12',prices:[]});
 console.log('PASS: indexed lookup, compact catalog, cache reuse and replacement, 12,004 sales');
 const posSource=fs.readFileSync('work/cedi-current-inner.html','utf8');
@@ -56,6 +56,7 @@ for(const [recordedAt,price] of [['2026-11-15T05:58:00.001Z',1470],['2026-11-16T
   const date=timestamp('2026-11-20',new Date(recordedAt));
   sales.push({date,recordedAt,lines:[{code:'002',price}]});
 }
+sales.push({date:'2026-11-20T12:00:00Z',lines:[{code:'002',price:995}]});
 save('future');await get('catalog');
 assert.deepEqual(await get('price?day=2026-11-20&key=002'),{price:1475});
 assert.deepEqual(await get('price?history=1&day=2026-11-20&key=002'),{day:'2026-11-20',prices:[1470,1475]});

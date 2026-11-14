@@ -87,7 +87,7 @@ async function prepareLegacyCatalog(primary,cache) {
   const current=await primary.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();
   if(!current)throw Error('Falta la base principal');
   const previous=await cache.prepare('SELECT revision,generation,parts FROM lookup_head WHERE id=1').first();
-  const indexRevision='history-v1:'+current.revision;
+  const indexRevision='confirmed-history-v2:'+current.revision;
   if(previous?.revision===indexRevision)return previous;
   let offset=0;
   const stream=new ReadableStream({async pull(controller){
@@ -124,10 +124,14 @@ async function prepareLegacyCatalog(primary,cache) {
       const time=Date.parse(sale.recordedAt||sale.date);
       if(!Number.isFinite(documentTime)||!Number.isFinite(time)||['annulled','cancelled','void'].includes(sale.status))continue;
       const day=/^\d{4}-\d{2}-\d{2}$/.test(sale.date)?sale.date:priceDayFormat.format(documentTime);
+      // The previous POS stored the selected date in a Costa Rica timestamp
+      // alongside recordedAt. Older clock-only receipts cannot establish that date.
+      const confirmedDay=sale.invoiceDate!==undefined?sale.invoiceDate===day:
+        Number.isFinite(Date.parse(sale.recordedAt))&&sale.date.endsWith('-06:00');
       for(const line of sale.lines||[]){
         const article=line.barcode||line.code;
         if(!article||!Number.isFinite(line.price)||line.price<0)continue;
-        if(Number.isSafeInteger(line.price)&&line.price%5===0)sold.add(JSON.stringify([day,article,line.supplier||'',line.price]));
+        if(confirmedDay&&Number.isSafeInteger(line.price)&&line.price%5===0)sold.add(JSON.stringify([day,article,line.supplier||'',line.price]));
         const key=JSON.stringify([day,article]),old=latest.get(key);
         if(!old||old[2]<=time)latest.set(key,[day,article,time,line.price]);
       }
