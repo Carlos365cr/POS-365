@@ -2810,7 +2810,7 @@ function purchaseInputRaw(input){return input.dataset.purchaseDisplay===input.va
 function formatPurchaseNumber(input,value=purchaseInputRaw(input)){
 if(input.type!=='number'||input.getAttribute('aria-label')==='Ítem')return;
 if(String(value).trim()===''||!Number.isFinite(Number(value))){input.value='';delete input.dataset.purchaseRaw;delete input.dataset.purchaseDisplay;return;}
-input.dataset.purchaseRaw=String(value);input.value=Number(value).toFixed(2);input.dataset.purchaseDisplay=input.value;
+input.dataset.purchaseRaw=String(value);input.value=Number(value).toFixed(input.getAttribute('aria-label')==='Precio 1'?0:2);input.dataset.purchaseDisplay=input.value;
 }
 function showPurchaseCurrentGain(row,product){
 const current=product?(findArticleByKey(articleRecordKey(product))||product):null;
@@ -2883,7 +2883,7 @@ const product=row.dataset.xmlProductId?pendingProduct(row.dataset.xmlProductId):
 if(gainInput.value.trim()===''){delete row.dataset.purchaseGainTarget;return;}
 row.dataset.purchaseGainTarget=gainInput.value;if(!product)return;
 const context=purchaseGainContext(row,product),gain=Number(gainInput.value);
-if(context.cost>0&&Number.isFinite(gain)&&gain>=-100){row.querySelector('[aria-label="Precio 1"]').value=normalizePrimaryPrice(priceFromGain(context.cost,0,gain),product.currency).toFixed(2);}
+if(context.cost>0&&Number.isFinite(gain)&&gain>=-100){formatPurchaseNumber(row.querySelector('[aria-label="Precio 1"]'),normalizePrimaryPrice(priceFromGain(context.cost,0,gain),product.currency));}
 });
 gainInput.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();commitPurchaseGain(row);}});
 const publicPrice=row.querySelector('[aria-label="Precio 1"]');
@@ -3011,7 +3011,7 @@ row.dataset.productBarcode=product?.barcode || '';
 const stock=product?getPurchaseAvailableStock(product):null;
 row.querySelector('[aria-label="Existencia"]').value=stock===null?'':String(stock);
 row.querySelector('[aria-label="Precio actual"]').value=typeof product?.price==='number' && Number.isFinite(product.price)?product.price.toFixed(2):'';
-if(row.dataset.excelPriceProvided!=='true'){row.querySelector('[aria-label="Precio 1"]').value=typeof product?.price==='number' && Number.isFinite(product.price)?product.price.toFixed(2):'';}
+if(row.dataset.excelPriceProvided!=='true'){formatPurchaseNumber(row.querySelector('[aria-label="Precio 1"]'),typeof product?.price==='number' && Number.isFinite(product.price)?product.price:'');}
 row.querySelector('[aria-label="Cant. x CJ"]').value=product?String(getProductUnitsPerBox(product)):'';
 const catalogTax=product?cabysCatalog?.get(product.cabys)?.[2]:null;
 const rate=catalogTax==='Exento'?0:typeof catalogTax==='number'?catalogTax:null;
@@ -3035,7 +3035,7 @@ if(!product||!input)return;
 const context=purchaseGainContext(row,product),price=row.querySelector('[aria-label="Precio 1"]').value;
 const target=row.dataset.purchaseGainTarget;
 if(target!==undefined&&context.cost>0&&Number.isFinite(Number(target))){
-row.querySelector('[aria-label="Precio 1"]').value=normalizePrimaryPrice(priceFromGain(context.cost,0,Number(target)),product.currency).toFixed(2);
+formatPurchaseNumber(row.querySelector('[aria-label="Precio 1"]'),normalizePrimaryPrice(priceFromGain(context.cost,0,Number(target)),product.currency));
 row.dataset.excelPriceProvided='true';
 }
 const currentPrice=row.querySelector('[aria-label="Precio 1"]').value;
@@ -3051,7 +3051,7 @@ const gain=Number(input.value),context=purchaseGainContext(row,product);
 if(input.value.trim()===''||!Number.isFinite(gain)||gain< -100)throw new Error('Ingresá un porcentaje de ganancia válido.');
 row.dataset.purchaseGainTarget=String(gain);
 if(context.cost===null||context.cost<=0){purchasesMain.querySelector('[data-purchase-status]').textContent='Porcentaje conservado. Ingresá el costo para calcular Precio 1.';return true;}
-row.querySelector('[aria-label="Precio 1"]').value=normalizePrimaryPrice(priceFromGain(context.cost,context.tax,gain),product.currency).toFixed(2);
+formatPurchaseNumber(row.querySelector('[aria-label="Precio 1"]'),normalizePrimaryPrice(priceFromGain(context.cost,context.tax,gain),product.currency));
 return commitPurchasePrice1(row);
 }catch(error){input.setCustomValidity(error.message);input.reportValidity();return false;}
 }
@@ -3062,7 +3062,7 @@ try{
 const product=row.dataset.xmlProductId?pendingProduct(row.dataset.xmlProductId):savedTrialProducts.get(row.dataset.productBarcode);
 if(!product)throw new Error('Ingresá primero el código de un artículo guardado.');
 if(input.value.trim()===''||!Number.isFinite(Number(input.value))||Number(input.value)<0)throw new Error('Ingresá un Precio 1 válido.');
-input.value=normalizePrimaryPrice(Number(input.value),product.currency).toFixed(2);
+formatPurchaseNumber(input,normalizePrimaryPrice(Number(purchaseInputRaw(input)),product.currency));
 row.dataset.excelPriceProvided='true';if(row.dataset.xmlIndex!==undefined)row.dataset.xmlInitialized='true';
 refreshPurchaseGain(row);if(!currentPurchaseXml)persistTrialSnapshot();
 purchasesMain.querySelector('[data-purchase-status]').textContent='Precio 1 en revisión. Se actualizará en el artículo al procesar la compra.';
