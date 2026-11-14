@@ -5,12 +5,18 @@ async function loadShared(){
     const response=await fetch('/api/state',{cache:'no-store'});
     if(!response.ok)throw Error('Se requiere iniciar sesión para abrir POS 365.');
     const head=await response.json(),parts=[];
-    for(let start=0;start<head.parts;start+=8){
-      const response=await fetch('/api/parts?revision='+encodeURIComponent(head.revision)+'&start='+start,{cache:'no-store'});
-      if(!response.ok)throw Error('No se pudo leer la base compartida.');
-      const page=await response.json();
-      if(page.some((row,i)=>row.part!==start+i)||page.length!==Math.min(8,head.parts-start))break;
-      parts.push(...page.map(row=>row.payload));
+    for(let start=0;start<head.parts;start+=24){
+      const starts=[start,start+8,start+16].filter(offset=>offset<head.parts);
+      const pages=await Promise.all(starts.map(async offset=>{
+        const response=await fetch('/api/parts?revision='+encodeURIComponent(head.revision)+'&start='+offset,{cache:'no-store'});
+        if(!response.ok)throw Error('No se pudo leer la base compartida.');
+        const page=await response.json();
+        if(!Array.isArray(page)||page.length!==Math.min(8,head.parts-offset)||
+            page.some((row,i)=>row.part!==offset+i||typeof row.payload!=='string'))return null;
+        return page;
+      }));
+      if(pages.some(page=>page===null))break;
+      for(const page of pages)parts.push(...page.map(row=>row.payload));
     }
     if(parts.length===head.parts){revision=head.revision;confirmedParts=parts;return {cediShared:true,cediTrialGzip:parts.join('')};}
   }

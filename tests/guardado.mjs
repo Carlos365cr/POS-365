@@ -43,3 +43,24 @@ draftListeners.input();draftListeners.change();assert.equal(pendingTimers.size,0
 draftContext.currentPurchaseXml=null;draftListeners.input();pendingTimers.get(1)();assert.equal(saves,1);
 draftListeners.change();draftContext.currentPurchaseXml={};pendingTimers.get(1)();assert.equal(saves,1);
 console.log('PASS: XML edit isolation and atomic staged saves, including retries, conflicts and rollback');
+
+const bridge=fs.readFileSync('cloudflare/bridge.js','utf8');
+let inFlight=0,maxInFlight=0,headReads=0,dropFirst=false;
+const loadContext={document:{getElementById:()=>({})},fetch:async url=>{
+ if(url==='/api/state'){headReads++;return {ok:true,json:async()=>({revision:'snapshot-'+headReads,parts:50})};}
+ const parsed=new URL(url,'https://cedi.test'),offset=Number(parsed.searchParams.get('start'));
+ inFlight++;maxInFlight=Math.max(maxInFlight,inFlight);
+ await new Promise(resolve=>setTimeout(resolve,offset===0?8:1));
+ inFlight--;
+ return {ok:true,json:async()=>dropFirst&&headReads===1&&offset===8?[]:Array.from({length:Math.min(8,50-offset)},(_,i)=>({part:offset+i,payload:String(offset+i)+','}))};
+}};
+vm.createContext(loadContext);
+vm.runInContext(bridge.slice(0,bridge.indexOf('function stop(')),loadContext);
+let loaded=await vm.runInContext('loadShared()',loadContext);
+assert.equal(loaded.cediTrialGzip,Array.from({length:50},(_,i)=>i+',').join(''));
+assert.equal(maxInFlight,3);assert.equal(inFlight,0);
+dropFirst=true;headReads=0;
+loaded=await vm.runInContext('loadShared()',loadContext);
+assert.equal(headReads,2);
+assert.equal(loaded.cediTrialGzip,Array.from({length:50},(_,i)=>i+',').join(''));
+console.log('PASS: three concurrent reads, ordered reconstruction, complete retry after snapshot changes');
