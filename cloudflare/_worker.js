@@ -62,7 +62,7 @@ main{width:min(100%,990px);display:grid;grid-template-columns:1.1fr 1fr;border-r
 .entry{padding:clamp(28px,5vw,64px);align-self:center;min-width:0}.entry h2{margin:0;font-size:clamp(32px,4vw,44px);letter-spacing:-.05em}.entry p{line-height:1.55;color:#51665f}.entry #google{min-height:44px;margin-top:32px}.entry #status{color:#8a331d;font-size:14px}.entry #status:empty{display:none}
 @media(max-width:680px){body{padding:16px}main{grid-template-columns:1fr}.brand{min-height:202px;padding:26px}.art{position:absolute;right:4px;top:8px;transform:rotate(9deg) scale(.66);transform-origin:top right;margin:12px}.brand h1{font-size:32px}.brand p{font-size:14px}.entry{padding:32px 26px 40px}}
 </style>
-<main><section class="brand"><div class="wordmark"><i class="mark" aria-hidden="true"></i>POS 365</div>
+<main><section class="brand"><div class="wordmark"><img src="/assets/pos-365-logo.png" alt="POS 365 · Sistema de facturación" style="width:min(100%,320px);height:auto;background:#edf2ed;padding:12px;border-radius:12px"></div>
 <div class="art" aria-hidden="true"><div class="paper"><b>POS 365</b><div class="lines"></div><div class="bars"></div></div></div>
 <div><h1>POS 365</h1><p>Ventas, compras e inventario</p></div></section>
 <section class="entry" aria-labelledby="welcome"><h2 id="welcome">Bienvenido</h2><p>Ingresá con tu cuenta de la empresa.</p><div id="google"></div><p id="status" role="status"></p><noscript>Activá JavaScript para iniciar sesión con Google.</noscript></section></main>
@@ -76,6 +76,7 @@ function saveError(error){
 }
 export default { async fetch(request, env) {
   const url=new URL(request.url);
+  if(url.pathname==='/assets/pos-365-logo.png' && request.method==='GET')return env.ASSETS.fetch(request);
   if(url.pathname==='/favicon.ico')return new Response(null,{status:204});
   if(url.pathname==='/login')return login();
   if(url.pathname==='/auth/login' && request.method==='POST'){
