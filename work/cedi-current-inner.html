@@ -6306,6 +6306,100 @@ for(const menuItem of menu.querySelectorAll('.menu-item')){if(menuItem===item){c
 item.onclick=()=>{showConfiguration(false);Array.from(root.children).filter(view=>view.tagName==='MAIN').forEach(view=>{view.hidden=view!==main;});menu.querySelectorAll('.menu-item').forEach(button=>{button.classList.remove('selected');button.removeAttribute('aria-current');});main.hidden=false;item.classList.add('selected');item.setAttribute('aria-current','page');controller.refresh();panel.querySelector('[data-cash-name]').focus();};
 }
 
+function installPurchaseConsultation(){
+ const operations=purchasesMain.querySelectorAll('[name="compraOperacion"]');
+ const consultation=operations[1];consultation.disabled=false;
+ const popup=document.createElement('dialog');popup.className='cabys-dialog';
+ popup.style.cssText='width:min(1450px,96vw);max-width:96vw;max-height:90vh;overflow:auto';
+ popup.setAttribute('aria-labelledby','purchase-consultation-title');
+ popup.innerHTML='<header><h3 id="purchase-consultation-title">Consulta de compras</h3><button type="button" data-close>Cerrar</button></header><div class="grid"><label>Seleccionar proveedor<select data-filter="supplier"><option value="">Todos los proveedores</option></select></label><label>Número de factura<input type="search" data-filter="invoice"></label><label>Consecutivo<input type="search" data-filter="sequence"></label><label>Comentario<input type="search" data-filter="comment"></label><button type="button" data-clear-filters>Limpiar</button></div><p data-count role="status"></p><div style="overflow:auto"><table><thead><tr></tr></thead><tbody></tbody></table></div>';
+ root.append(popup);
+ let view=null,page=0,sortKey='systemDate',ascending=false,appliedFilters=null;
+ const pageSize=10;
+ const columns=[
+  ['supplier','Proveedor',r=>r.supplier.name],
+  ['invoice','Número de factura',r=>r.invoice],
+  ['totalCents','Total factura',r=>r.totalCents],
+  ['comment','Comentario',r=>r.comment],
+  ['sequence','Consecutivo',r=>r.sequence],
+  ['supplierCode','Código proveedor',r=>r.supplier.code],
+  ['credit','Contado / Crédito',r=>r.credit],
+  ['invoiceDate','Fecha de factura',r=>r.invoiceDate],
+  ['systemDate','Fecha sistema',r=>r.systemDate]
+ ];
+ const footer=document.createElement('footer'),previous=document.createElement('button'),next=document.createElement('button');
+ previous.type=next.type='button';previous.textContent='Anterior';next.textContent='Siguiente';footer.append(previous,next);popup.append(footer);
+ const normalize=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es');
+ const money=cents=>(Number(cents||0)/100).toLocaleString('es-CR',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const date=value=>value?String(value).split('-').reverse().join('/'):'';
+ function returnToInclusion(){
+  if(view){view.remove();view=null;}
+  operations[0].checked=true;purchasesMain.hidden=false;
+ }
+ function display(record){
+  if(view)view.remove();
+  view=purchasesMain.cloneNode(true);view.hidden=false;
+  view.querySelectorAll('dialog').forEach(node=>node.remove());
+  view.querySelectorAll('[id]').forEach(node=>node.removeAttribute('id'));
+  const put=(name,value)=>{const input=view.querySelector('[name="'+name+'"]');if(!input)return;
+   if(input.tagName==='SELECT'){const option=document.createElement('option');option.value=String(value??'');option.textContent=String(value??'');input.replaceChildren(option);}
+   input.value=value??'';
+  };
+  for(const [name,value,checked] of record.header||[]){if(checked===null)put(name,value);}
+  for(const [name,value] of Object.entries({compraProveedorCodigo:record.supplier.code,compraProveedor:record.supplier.name,compraConsecutivo:record.sequence,compraFactura:record.invoice,compraFacturaFecha:record.invoiceDate,compraFecha:record.systemDate,compraRecibido:record.receivedDate,compraBodega:record.warehouse,compraMoneda:record.currency,compraCredito:record.credit,compraComentario:record.comment,compraElectronico:record.xmlDocument?.key||'',compraCorreo:record.supplier.email||'',compraSubtotal:Number(record.subtotalCents||0)/100,compraMontoDescuento:Number(record.discountCents||0)/100,compraImpuesto:Number(record.vatCents||0)/100,compraTotalFactura:Number(record.totalCents||0)/100,compraCargos:Number(record.otherChargesCents||0)/100})){put(name,value);}
+  const body=view.querySelector('.purchase-table tbody'),template=purchasesMain.querySelector('.purchase-table tbody tr');
+  body.replaceChildren();
+  for(const [index,line] of record.lines.entries()){
+   const row=template.cloneNode(true);
+   const values={'Ítem':index+1,'Código':line.barcode||line.code,'Nombre':line.name,'Existencia':line.previousStock,'Cant. x CJ':line.unitsPerBox,'Cajas':line.boxes,'Cantidad':line.quantity,'Precio actual':line.currentPrice,'Precio 1':line.price1,'Costo actual':line.currentCost,'Costo actual S/IVA':line.currentCost,'Precio lista s/IVA':line.cost,'Costo':line.unitNetCost,'Costo S/IVA':line.unitNetCost,'Costo C/IVA':line.quantity?Number(line.totalCents||0)/100/line.quantity:0,'Subtotal':Number(line.netSubtotalCents??line.subtotalCents??0)/100,'Desc. 1 (%)':line.discount1,'Desc. 2 (%)':line.discount2,'OC':Number(line.otherChargesCents||0)/100,'IVA (%)':line.vatRate==null?'':line.vatRate+'%','Monto descuento':Number(line.discountCents||0)/100,'Monto IVA':Number(line.vatCents||0)/100,'Total línea':Number(line.totalCents||0)/100};
+   for(const input of row.querySelectorAll('input')){
+    const label=input.getAttribute('aria-label');input.value=values[label]??'';
+    if(input.type==='number')formatPurchaseNumber(input,input.value);
+   }
+   row.querySelector('[aria-label="% Gan. actual"]').textContent='—';
+   body.append(row);
+  }
+  for(const input of view.querySelectorAll('input,select,textarea,button'))input.disabled=true;
+  const modes=view.querySelectorAll('[name="compraOperacion"]');modes[0].disabled=false;modes[1].disabled=false;modes[1].checked=true;
+  modes[0].onchange=returnToInclusion;modes[1].onclick=()=>{page=0;refreshSuppliers();render();popup.showModal();};
+  view.querySelector('[data-purchase-status]').textContent='Consulta de compra '+record.sequence+' · Solo lectura';
+  root.append(view);purchasesMain.hidden=true;popup.close();
+ }
+ function render(apply=false){
+  if(apply||!appliedFilters)appliedFilters=Object.fromEntries(Array.from(popup.querySelectorAll('[data-filter]'),input=>[input.dataset.filter,normalize(input.value)]));
+  const filters=appliedFilters;
+  const selected=columns.find(column=>column[0]===sortKey);
+  const records=trialPurchases.filter(r=>(!filters.supplier||normalize(r.supplier.id||r.supplier.code)===filters.supplier)&&normalize(r.invoice).includes(filters.invoice)&&normalize(r.sequence).includes(filters.sequence)&&normalize(r.comment).includes(filters.comment));
+  records.sort((a,b)=>{const av=selected[2](a)??'',bv=selected[2](b)??'';const result=typeof av==='number'&&typeof bv==='number'?av-bv:String(av).localeCompare(String(bv),'es',{numeric:true});return result?(ascending?result:-result):String(b.date||b.sequence).localeCompare(String(a.date||a.sequence),'es',{numeric:true});});
+  page=Math.max(0,Math.min(page,Math.ceil(records.length/pageSize)-1));
+  const head=popup.querySelector('thead tr'),body=popup.querySelector('tbody');head.replaceChildren();body.replaceChildren();
+  for(const [key,title] of columns){const th=document.createElement('th'),button=document.createElement('button');button.type='button';button.textContent=title+' '+(key===sortKey?(ascending?'↑':'↓'):'↕');th.setAttribute('aria-sort',key===sortKey?(ascending?'ascending':'descending'):'none');button.onclick=()=>{ascending=key===sortKey?!ascending:true;sortKey=key;page=0;render();};th.append(button);head.append(th);}
+  const action=document.createElement('th');action.textContent='Acción';head.prepend(action);
+  for(const record of records.slice(page*pageSize,(page+1)*pageSize)){
+   const row=document.createElement('tr');
+   for(const [key,,value] of columns){const cell=document.createElement('td');cell.textContent=key==='totalCents'?money(value(record)):key.endsWith('Date')?date(value(record)):String(value(record)??'');row.append(cell);}
+   const cell=document.createElement('td'),button=document.createElement('button');button.type='button';button.textContent='Seleccionar';button.setAttribute('aria-label','Seleccionar factura '+record.invoice);button.onclick=()=>display(record);cell.append(button);row.prepend(cell);body.append(row);
+  }
+  popup.querySelector('[data-count]').textContent=records.length+' compras · Página '+(page+1)+' de '+Math.max(1,Math.ceil(records.length/pageSize));
+  previous.disabled=page===0;next.disabled=(page+1)*pageSize>=records.length;
+ }
+ previous.onclick=()=>{page--;render();};next.onclick=()=>{page++;render();};
+ popup.querySelectorAll('[data-filter]').forEach(input=>input.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();page=0;render(true);}});
+ popup.querySelector('[data-clear-filters]').onclick=()=>{popup.querySelectorAll('[data-filter]').forEach(input=>input.value='');page=0;sortKey='systemDate';ascending=false;render(true);popup.querySelector('[data-filter="supplier"]').focus();};
+ function refreshSuppliers(){
+  const select=popup.querySelector('[data-filter="supplier"]'),selected=select.value;
+  select.replaceChildren(new Option('Todos los proveedores',''));
+  const suppliers=new Map(trialPurchases.map(record=>[record.supplier.id||record.supplier.code,record.supplier]));
+  for(const [id,supplier] of [...suppliers].sort((a,b)=>a[1].name.localeCompare(b[1].name,'es'))){select.append(new Option(supplier.code+' · '+supplier.name,id));}
+  if([...select.options].some(option=>option.value===selected))select.value=selected;
+ }
+
+ popup.querySelector('[data-close]').onclick=()=>popup.close();
+ popup.addEventListener('close',()=>{if(!view)operations[0].checked=true;});
+ consultation.onchange=()=>{clearTimeout(purchaseBackupTimer);purchasesMain.querySelectorAll('.purchase-table tbody tr').forEach(cancelPurchasePriceTimer);page=0;refreshSuppliers();render();popup.showModal();};
+ for(const button of menu.querySelectorAll('.menu-item')){const old=button.onclick;button.onclick=function(...args){if(view){view.remove();view=null;operations[0].checked=true;}return old?.apply(this,args);};}
+}
+
 function installPurchaseProcessing(){
 const main=purchasesMain;
 const get=name=>main.querySelector('[name="'+name+'"]');
@@ -6330,6 +6424,7 @@ if(!dialog.open){dialog.showModal();}dialog.querySelector('[data-result-close]')
 selector.onchange=()=>showRecord(trialPurchases.find(p=>p.id===selector.value));
 dialog.querySelector('[data-result-close]').onclick=()=>dialog.close();
 history.onclick=()=>show('Compras de prueba registradas','Los registros están incluidos en Respaldo. No son comprobantes fiscales.',trialPurchases.at(-1));
+installPurchaseConsultation();
 process.onclick=async()=>{
 if(processing){return;}processing=true;process.disabled=true;
 try{
