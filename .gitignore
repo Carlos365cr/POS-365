@@ -1,0 +1,8 @@
+salida/
+.wrangler/
+.env*
+.dev.vars*
+__pycache__/
+*.sql
+*.p12
+*.xml

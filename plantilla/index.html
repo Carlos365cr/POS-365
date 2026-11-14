@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="es-419">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>articulos-cedi.html</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{box-sizing:border-box;padding:0;background:inherit}iframe{display:block;width:100%;max-width:none;height:100vh!important;height:100dvh!important;margin:0;border:0}</style>
+
+</head>
+<body>
+<iframe id="codex-visualization" sandbox="allow-scripts" scrolling="no" referrerpolicy="no-referrer" title="articulos-cedi.html" data-srcdoc="__CEDI_UI__"></iframe>
+
+<script>(() => {
+  const frame = document.getElementById("codex-visualization");
+  if (!(frame instanceof HTMLIFrameElement)) {
+    return;
+  }
+  const isShare = document.documentElement.classList.contains(
+    "visualization-share-root",
+  );
+  let viewportHeight = globalThis.innerHeight;
+  let sizeFingerprint = null;
+  let sizeWriteTimeout;
+  let lastSize = null;
+  let pendingSize = null;
+  const storageKey = `codex:visualization-widget-state-v2:${JSON.stringify([
+    globalThis.location.pathname,
+    globalThis.location.search,
+  ])}`;
+  const sizeStorageKey = `${storageKey}:share-size-v1`;
+  const parseState = (serializedState) => {
+    if (
+      typeof serializedState !== "string" ||
+      new TextEncoder().encode(serializedState).length > 16 * 1024
+    ) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    /** @type {unknown} */
+    const state = JSON.parse(serializedState);
+    if (
+      state == null ||
+      typeof state !== "object" ||
+      Array.isArray(state) ||
+      ("imageIds" in state &&
+        (!Array.isArray(state.imageIds) || state.imageIds.length > 0))
+    ) {
+      throw new TypeError("Widget state must be a JSON object");
+    }
+    const storedState = { modelContent: null, privateContent: null, ...state };
+    const canonicalState = JSON.stringify(
+      storedState,
+      (_key, /** @type {unknown} */ value) => {
+        if (typeof value === "number" && !Number.isFinite(value)) {
+          throw new TypeError("Widget state must contain finite numbers");
+        }
+        return value;
+      },
+    );
+    if (new TextEncoder().encode(canonicalState).length > 16 * 1024) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    return storedState;
+  };
+  let storage = null;
+  let state = null;
+  try {
+    const localStorage = globalThis.localStorage;
+    const probeKey = `${storageKey}:probe`;
+    localStorage.setItem(probeKey, "1");
+    localStorage.removeItem(probeKey);
+    storage = localStorage;
+    const savedState = storage.getItem(storageKey);
+    if (savedState != null) {
+      try {
+        state = parseState(savedState);
+      } catch {
+        // Invalid saved state does not disable future writes.
+      }
+    }
+  } catch {
+    storage = null;
+  }
+  const persistSize = () => {
+    globalThis.clearTimeout(sizeWriteTimeout);
+    if (pendingSize == null) {
+      return;
+    }
+    try {
+      storage?.setItem(sizeStorageKey, pendingSize);
+    } catch {
+      // A denied or full cache must not affect the visualization.
+    }
+    pendingSize = null;
+  };
+  if (isShare) {
+    globalThis.addEventListener("pagehide", persistSize);
+  }
+  const initialGlobals = {
+    widgetState: state,
+    statePersistence: storage == null ? "none" : "local",
+  };
+
+  const channel = new MessageChannel();
+  channel.port1.addEventListener("message", (event) => {
+    const data = event.data;
+    if (typeof data !== "object" || data == null) {
+      return;
+    }
+    if (data.type === "widget-state-write") {
+      if (!Number.isSafeInteger(data.id) || data.id <= 0) {
+        return;
+      }
+      let ok = false;
+      try {
+        if (storage != null) {
+          const state = parseState(data.state);
+          storage.setItem(storageKey, JSON.stringify(state));
+          ok = true;
+        }
+      } catch {
+        // Storage denial, quota limits, and invalid state return a failed receipt.
+      }
+      channel.port1.postMessage({
+        type: "widget-state-result",
+        id: data.id,
+        ok,
+      });
+      return;
+    }
+    if (data.type === "height") {
+      const height = data.height;
+      if (
+        typeof height !== "number" ||
+        !Number.isFinite(height) ||
+        height < 0
+      ) {
+        return;
+      }
+      if (height <= 10_000) {
+        const width = isShare && storage != null ? frame.clientWidth : null;
+        frame.style.height = Math.ceil(height) + "px";
+        if (isShare && storage != null) {
+          const size = JSON.stringify({
+            fingerprint: sizeFingerprint,
+            width,
+            viewportHeight: globalThis.innerHeight,
+            dark: globalThis.matchMedia("(prefers-color-scheme: dark)").matches,
+            scale: globalThis.devicePixelRatio,
+            height: Math.ceil(height),
+          });
+          if (size !== lastSize) {
+            lastSize = size;
+            pendingSize = size;
+            globalThis.clearTimeout(sizeWriteTimeout);
+            sizeWriteTimeout = globalThis.setTimeout(persistSize, 100);
+          }
+        }
+      }
+      if (isShare) {
+        // Keep unusually tall content accessible without accepting an unbounded height.
+        if (height > 10_000 && Number.parseFloat(frame.style.height) === 0) {
+          frame.style.removeProperty("height");
+        }
+        frame.scrolling = height > 10_000 ? "auto" : "no";
+        document.documentElement.classList.add("visualization-share-ready");
+      }
+      return;
+    }
+    if (data.type === "scroll-to") {
+      const top = data.top;
+      if (
+        typeof top === "number" &&
+        Number.isFinite(top) &&
+        top >= 0 &&
+        globalThis.navigator.userActivation?.isActive === true
+      ) {
+        globalThis.scrollTo({
+          top: Math.ceil(
+            globalThis.scrollY + frame.getBoundingClientRect().top + top,
+          ),
+        });
+      }
+      return;
+    }
+    if (data.type === "open-external") {
+      const rawHref = data.href;
+      if (typeof rawHref !== "string") {
+        return;
+      }
+      let href;
+      try {
+        const url = new URL(rawHref, document.baseURI);
+        if (url.protocol !== "https:") {
+          return;
+        }
+        href = url.href;
+      } catch {
+        return;
+      }
+      if (globalThis.navigator.userActivation?.isActive === true) {
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.rel = "noopener noreferrer";
+        anchor.target = "_blank";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+      return;
+    }
+    if (data.type === "follow-up") {
+      const prompt = data.prompt;
+      if (
+        typeof prompt !== "string" ||
+        globalThis.navigator.userActivation?.isActive !== true
+      ) {
+        return;
+      }
+      const title = data.title;
+      globalThis.prompt(typeof title === "string" ? title : prompt, prompt);
+    }
+  });
+  channel.port1.start();
+  const srcdoc = frame.dataset.srcdoc;
+  if (srcdoc == null) {
+    return;
+  }
+  globalThis.addEventListener("resize", () => {
+    const height = Number.parseFloat(frame.style.height);
+    if (!isShare && (!Number.isFinite(height) || height <= viewportHeight)) {
+      frame.style.removeProperty("height");
+    }
+    viewportHeight = globalThis.innerHeight;
+    channel.port1.postMessage({ type: "measure" });
+  });
+  frame.addEventListener(
+    "load",
+    () => {
+      frame.contentWindow?.postMessage(
+        { type: "codex-visualization-initialize" },
+        "*",
+        [channel.port2],
+      );
+    },
+    { once: true },
+  );
+  // Match the trusted bootstrap element, not the same text in an authored title.
+  const frameHtml = srcdoc.replace(
+    '<script type="application/json" id="codex-visualization-widget-state">__CODEX_VISUALIZATION_WIDGET_STATE__<\/script>',
+    () =>
+      '<script type="application/json" id="codex-visualization-widget-state">' +
+      JSON.stringify(initialGlobals).replaceAll("<", "\\u003c") +
+      "<\/script>",
+  );
+  if (isShare && storage != null) {
+    // Fingerprint the rendered document, including restored widget state, without
+    // storing its content. This is a layout cache, not a security identity.
+    let hash = 5381;
+    for (let index = 0; index < frameHtml.length; index += 1) {
+      hash = (hash * 33 + frameHtml.charCodeAt(index)) % 4_294_967_296;
+    }
+    sizeFingerprint = hash.toString(36);
+    try {
+      const size = JSON.parse(storage.getItem(sizeStorageKey) ?? "null");
+      if (
+        size?.fingerprint === sizeFingerprint &&
+        size.width === frame.clientWidth &&
+        size.viewportHeight === globalThis.innerHeight &&
+        size.dark ===
+          globalThis.matchMedia("(prefers-color-scheme: dark)").matches &&
+        size.scale === globalThis.devicePixelRatio &&
+        typeof size.height === "number" &&
+        Number.isFinite(size.height) &&
+        size.height >= 0 &&
+        size.height <= 10_000
+      ) {
+        frame.style.height = size.height + "px";
+      }
+    } catch {
+      // Ignore missing or invalid cache entries and measure the live frame.
+    }
+  }
+  frame.srcdoc = frameHtml;
+  delete frame.dataset.srcdoc;
+})();
+</script>
+
+<script>
+// The sandbox never receives download privileges. Only this parent creates files.
+globalThis.addEventListener('message',event=>{
+const frame=document.getElementById('codex-visualization');
+if(!frame || event.source!==frame.contentWindow || event.data?.type!=='cedi-backup-download'){return;}
+const {content,filename}=event.data;
+if(typeof content!=='string' || content.length>128*1024*1024 || typeof filename!=='string' || !/^CEDI-respaldo-[a-zA-Z0-9-]+\.json$/.test(filename)){return;}
+try{
+const value=JSON.parse(content);if(value?.format!=='cedi-trial-backup' || value.version!==1 || !Array.isArray(value.snapshot?.products)){return;}
+const url=URL.createObjectURL(new Blob([content],{type:'application/json'}));
+const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}catch(error){}
+});
+</script>
+<script>
+// Only relay POS shortcuts while its own frame reports an open cashier window.
+(()=>{
+let posActive=false;
+const frame=document.getElementById('codex-visualization');
+window.addEventListener('message',event=>{
+if(event.source===frame?.contentWindow && event.data?.type==='cedi-pos-active'){
+posActive=event.data.active===true;
+}
+});
+document.addEventListener('keydown',event=>{
+if(!posActive || event.altKey || event.ctrlKey || event.metaKey || (event.shiftKey && event.key!=='+') || !['F2','F3','F4','F5','F9','Escape','+'].includes(event.key)){return;}
+event.preventDefault();if(event.repeat){return;}
+frame.contentWindow.focus();
+frame.contentWindow.postMessage({type:'cedi-pos-key',key:event.key},'*');
+},true);
+})();
+</script>
+<script>
+// Only permit data-file downloads requested by this sandbox, never script execution.
+window.addEventListener('message',event=>{
+const frame=document.getElementById('codex-visualization');
+if(event.source!==frame?.contentWindow || event.data?.type!=='cedi-purchase-download'){return;}
+const {filename,mime,content}=event.data;
+if(typeof filename!=='string' || filename.length>200 || /[\x00-\x1f<>:"/\\|?*]/.test(filename) || typeof content!=='string' || content.length>20*1024*1024 || !/^[A-Za-z0-9+/]*={0,2}$/.test(content)){return;}
+try{
+const decoded=atob(content);
+if(mime==='application/pdf'){if(!filename.endsWith('.pdf') || !decoded.startsWith('%PDF-1.4')){return;}}
+else if(mime==='message/rfc822'){if(!/^CEDI-compra-\d{5,9}\.eml$/.test(filename) || !decoded.startsWith('X-Unsent: 1\r\n') || !decoded.includes('Content-Type: multipart/mixed;')){return;}}
+else{return;}
+const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([bytes],{type:mime}));
+const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}catch(error){}
+});
+</script>
+
+<script>
+// Original XML is downloaded as data by its own iframe, never executed.
+window.addEventListener('message',event=>{
+const frame=document.getElementById('codex-visualization');if(event.source!==frame?.contentWindow||event.data?.type!=='cedi-xml-download'){return;}
+const {filename,mime,content}=event.data;if(mime!=='application/xml'||typeof filename!=='string'||filename.length>180||/[\x00-\x1f<>:"/\\|?*]/.test(filename)||!/\.xml$/i.test(filename)||typeof content!=='string'||content.length>2666672||!/^[A-Za-z0-9+/]*={0,2}$/.test(content)){return;}
+try{const binary=atob(content);if(binary.length>2000000){return;}const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0)),text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);if(/<!DOCTYPE|<!ENTITY/i.test(text)){return;}const doc=new DOMParser().parseFromString(text,'application/xml');if(doc.querySelector('parsererror')||doc.documentElement.localName!=='FacturaElectronica'){return;}const url=URL.createObjectURL(new Blob([bytes],{type:'application/xml'}));const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}catch(error){}
+});
+</script>
+
+<script>
+// Origin-local backups, including article images. No server upload.
+(()=>{
+const storageKey='cedi:trial-with-xml:v1',maxSize=128*1024*1024;
+let databasePromise=null,queue=Promise.resolve();
+function database(){
+ if(!databasePromise){databasePromise=new Promise((resolve,reject)=>{
+  const request=indexedDB.open('cedi-local-trial',1);
+  request.onupgradeneeded=()=>request.result.createObjectStore('state');
+  request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+ });}
+ return databasePromise;
+}
+function legacy(){
+ try{const text=localStorage.getItem(storageKey);return text&&text.length<=maxSize?JSON.parse(text):null;}catch(error){return null;}
+}
+async function read(){
+ const old=legacy();
+ try{
+  const db=await database();
+  const stored=await new Promise((resolve,reject)=>{const request=db.transaction('state').objectStore('state').get(storageKey);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+  return stored&&(!old||stored.updatedAt>=old.updatedAt)?stored:old;
+ }catch(error){return old;}
+}
+async function save(value){
+ try{
+  const db=await database();
+  await new Promise((resolve,reject)=>{
+   const transaction=db.transaction('state','readwrite'),store=transaction.objectStore('state'),request=store.get(storageKey);
+   request.onsuccess=()=>{if(!request.result||request.result.updatedAt<=value.updatedAt){store.put(value,storageKey);}};
+   transaction.oncomplete=resolve;transaction.onabort=()=>reject(transaction.error);transaction.onerror=()=>reject(transaction.error);
+  });
+ }catch(error){
+  const old=legacy();if(!old||old.updatedAt<=value.updatedAt){localStorage.setItem(storageKey,JSON.stringify(value));}
+ }
+}
+window.addEventListener('message',event=>{
+ const frame=document.getElementById('codex-visualization');
+ if(event.source!==frame?.contentWindow){return;}
+ const data=event.data;if(!data||!['cedi-trial-state-save','cedi-trial-state-read'].includes(data.type)){return;}
+ const reply=value=>frame.contentWindow.postMessage(value,'*');
+ queue=queue.then(async()=>{
+  if(data.type==='cedi-trial-state-read'){const saved=await read();if(saved){reply({type:'cedi-trial-state-loaded',content:saved.content});}return;}
+  if(!Number.isSafeInteger(data.updatedAt)||data.updatedAt<0||!data.content||typeof data.content!=='object'||Array.isArray(data.content)){return;}
+  const content=data.content;
+  if(!(content.cediTrial?.version===1||typeof content.cediTrialGzip==='string'&&/^[A-Za-z0-9+/]*={0,2}$/.test(content.cediTrialGzip))){return;}
+  const value={updatedAt:data.updatedAt,content};
+  if(JSON.stringify(value).length>maxSize){throw new Error('Storage limit');}
+  const previous=await read();if(!previous||previous.updatedAt<=value.updatedAt){await save(value);}
+  reply({type:'cedi-trial-state-saved',ok:true,updatedAt:data.updatedAt});
+ }).catch(()=>reply({type:'cedi-trial-state-saved',ok:false,updatedAt:data.updatedAt}));
+});
+})();
+
+</script>
+<script>
+// Data-only Excel and PDF exports from this application's sandbox.
+window.addEventListener('message',event=>{
+const frame=document.getElementById('codex-visualization');if(event.source!==frame?.contentWindow||event.data?.type!=='cedi-cash-export'){return;}
+const {filename,mime,content}=event.data;if(typeof filename!=='string'||!/^CEDI-salidas-(sistema|pago)-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.(xlsx|pdf)$/.test(filename)||typeof content!=='string'||content.length>20*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(content)){return;}
+try{const decoded=atob(content);if(mime==='application/pdf'){if(!filename.endsWith('.pdf')||!decoded.startsWith('%PDF-1.4')){return;}}else if(mime==='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'){if(!filename.endsWith('.xlsx')||!decoded.startsWith('PK\x03\x04')){return;}}else{return;}
+const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:mime})),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}catch(error){}
+});
+</script>
+<script>
+// Data-only Excel and PDF exports from this application's sandbox.
+window.addEventListener('message',event=>{
+const frame=document.getElementById('codex-visualization');if(event.source!==frame?.contentWindow||event.data?.type!=='cedi-inbox-export'){return;}
+const {filename,mime,content}=event.data;if(typeof filename!=='string'||!/^CEDI-(?:productos|cargas)-XML-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.(xlsx|pdf)$/.test(filename)||typeof content!=='string'||content.length>20*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(content)){return;}
+try{const decoded=atob(content);if(mime==='application/pdf'){if(!filename.endsWith('.pdf')||!decoded.startsWith('%PDF-1.4')){return;}}else if(mime==='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'){if(!filename.endsWith('.xlsx')||!decoded.startsWith('PK\x03\x04')){return;}}else{return;}
+const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:mime})),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}catch(error){}
+});
+</script>
+<!-- cedi-price-print-bridge -->
+<script>
+// The application iframe stays allow-scripts only. A separate script-free print frame owns the browser print dialog.
+(()=>{
+ let previousFrame=null;const requests=new Set();
+ window.addEventListener('message',event=>{
+  const source=document.getElementById('codex-visualization');
+  if(event.source!==source?.contentWindow||event.data?.type!=='cedi-price-print')return;
+  const {requestId,html}=event.data;
+  if(typeof requestId!=='string'||requestId.length>100||typeof html!=='string'||html.length>25*1024*1024)return;
+  const reply=data=>source.contentWindow.postMessage({...data,requestId},'*');
+  if(requests.has(requestId))return;requests.add(requestId);if(requests.size>50)requests.delete(requests.values().next().value);
+  try{
+   const parsed=new DOMParser().parseFromString(html,'text/html');
+   for(const node of parsed.querySelectorAll('script,iframe,object,embed,base,link,form'))node.remove();
+   for(const node of parsed.querySelectorAll('*'))for(const attribute of [...node.attributes])if(/^on/i.test(attribute.name))node.removeAttribute(attribute.name);
+   const policy=parsed.createElement('meta');policy.httpEquiv='Content-Security-Policy';policy.content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; form-action 'none'; base-uri 'none'";parsed.head.prepend(policy);
+   if(previousFrame)previousFrame.remove();
+   const frame=document.createElement('iframe');previousFrame=frame;frame.title='Impresión de Consulta de precios F12';frame.setAttribute('sandbox','allow-same-origin allow-modals');frame.style.cssText='position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0';
+   let returned=false;const done=(ok,error)=>{if(returned)return;returned=true;reply({type:'cedi-price-print-returned',ok,error});};
+   frame.addEventListener('load',()=>{
+    try{const printWindow=frame.contentWindow;printWindow.addEventListener('afterprint',()=>done(true),{once:true});reply({type:'cedi-price-print-started'});printWindow.focus();printWindow.print();}catch(error){done(false,'No se pudo abrir el diálogo de impresión. La lista se conserva.');}
+   },{once:true});
+   frame.srcdoc='<!doctype html>'+parsed.documentElement.outerHTML;document.body.append(frame);
+  }catch(error){reply({type:'cedi-price-print-returned',ok:false,error:'No se pudo preparar la impresión. La lista se conserva.'});}
+ });
+})();
+
+</script>
+<!-- /cedi-price-print-bridge -->
+</body>
+</html>
