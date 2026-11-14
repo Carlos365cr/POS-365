@@ -12,6 +12,7 @@ const ctx=vm.createContext({Intl,Date,Map,Set,Number,String,Array,Error,
  trialPurchases:[{receivedDate:'2026-10-20',invoiceDate:'2026-09-20',currency:'Colón',lines:[{barcode:product.barcode,totalCents:2345}]},{status:'annulled',receivedDate:'2026-10-20',lines:[{barcode:product.barcode,totalCents:99999}]}]
 });
 vm.runInContext(source.slice(source.indexOf('function perishableDay('),source.indexOf('function installVegetableProducts(')),ctx);
+assert.equal(ctx.perishableReport([],'2026-10-01','2026-10-31','animal').title,'Ventas de origen animal');
 let report=ctx.perishableReport([product.barcode,product.barcode],'2026-10-01','2026-10-31');
 assert.equal(report.salesCents,12445);assert.equal(report.purchaseCents,2345);assert.equal(report.rows.length,1);
 product.price=1;assert.equal(ctx.perishableReport([product.barcode],'2026-10-01','2026-10-31').salesCents,12445);
