@@ -7659,6 +7659,11 @@ buildVersionFooter.className='cedi-build-version';
 buildVersionFooter.setAttribute('aria-label','Versión de esta aplicación');
 buildVersionFooter.textContent='Versión '+document.querySelector('meta[name="cedi-build-version"]').content;
 menu.append(buildVersionFooter);
+const purchaseEntries=Array.from(menu.querySelectorAll('button.menu-item'));
+const legacyEntry=purchaseEntries.find(item=>item.textContent.trim()==='Compras Formato Viejo');
+const currentEntry=purchaseEntries.find(item=>item.textContent.trim()==='Compras');
+if(legacyEntry&&currentEntry)legacyEntry.after(currentEntry);
+
 
 purchasesMenu.click();
 let trialHasEdits=false;
