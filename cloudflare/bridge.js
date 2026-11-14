@@ -23,12 +23,28 @@ function stop(message){
   text.textContent=message;button.textContent='Volver a cargar';button.onclick=()=>location.reload();
   panel.append(text,button);document.body.append(panel);panel.showModal();panel.oncancel=e=>e.preventDefault();
 }
+async function sendSaveStep(body){
+  for(let attempt=0;;attempt++){
+    let response;
+    try{
+      response=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(response.ok)return await response.json();
+    }catch{
+      if(attempt===2)throw Error('Se perdió la conexión al guardar. Consultá Compras registradas antes de reintentar.');
+    }
+    if(response && (attempt===2 || ![429,500,502,503,504].includes(response.status))){
+      const details=await response.json().catch(()=>({}));
+      throw Error(details.error || 'El servidor no confirmó el guardado. Consultá Compras registradas antes de reintentar.');
+    }
+    await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));
+  }
+}
 window.addEventListener('message',event=>{
   if(event.source!==frame.contentWindow||event.data?.type!=='cedi-trial-state-save')return;
   const {content,updatedAt}=event.data;
   const reply=(ok,reason)=>frame.contentWindow.postMessage({type:'cedi-trial-state-saved',updatedAt,ok,reason},'*');
   queue=queue.then(async()=>{
-    if(blocked||!revision){reply(false);return;}
+    if(blocked||!revision){reply(false,"La sesión tiene un guardado sin confirmar. Revisá Compras registradas.");return;}
     if(updatedAt<=latest){reply(false,"Se recibió una versión más reciente. Consultá Compras registradas.");return;}
     let encoded=content.cediTrialGzip;
     if(!encoded){
@@ -39,16 +55,12 @@ window.addEventListener('message',event=>{
     const parts=encoded.match(/.{1,64000}/g)||[];
     const changes=[];
     parts.forEach((payload,part)=>{if(payload!==confirmedParts[part])changes.push({part,payload});});
-    let response;
-    try{
-      response=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({base:revision,count:parts.length,changes})});
-    }catch{
-      throw Error('Se perdió la conexión al guardar. Consultá Compras registradas antes de repetir la operación.');
+    const save={id:crypto.randomUUID(),base:revision,count:parts.length};
+    for(let start=0;start<changes.length;start+=4){
+      await sendSaveStep({...save,changes:changes.slice(start,start+4)});
     }
-    if(!response.ok){
-      const details=await response.json().catch(()=>({}));
-      throw Error(details.error || 'El servidor respondió con el código '+response.status+'. Consultá Compras registradas antes de reintentar.');
-    }
-    revision=(await response.json()).revision;confirmedParts=parts;latest=updatedAt;reply(true);
+    const result=await sendSaveStep({...save,finish:true,changes:changes.length});
+    if(result.revision!=='save:'+save.id)throw Error('La confirmación del guardado no coincide con la operación.');
+    revision=result.revision;confirmedParts=parts;latest=updatedAt;reply(true);
   }).catch(e=>{reply(false,e.message);if(!blocked)stop(e.message);});
 });

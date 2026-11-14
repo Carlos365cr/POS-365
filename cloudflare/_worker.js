@@ -69,6 +69,11 @@ main{width:min(100%,990px);display:grid;grid-template-columns:1.1fr 1fr;border-r
 <script nonce="${nonce}">function iniciar(){google.accounts.id.initialize({client_id:'${clientId}',nonce:'${nonce}',callback:async function(r){const status=document.getElementById('status');try{const result=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:r.credential,challenge:'${nonce}'})});if(result.ok){location.replace('/');return}const error=await result.json();status.textContent=error.error || 'Falló la verificación de Google. Volvé a intentarlo.'}catch{status.textContent='Falló la conexión. Intentá otra vez.'}}});google.accounts.id.renderButton(document.getElementById('google'),{type:'standard',locale:'es',size:'large',width:Math.min(360,document.getElementById('google').clientWidth)})}</script>
 <script src="https://accounts.google.com/gsi/client" async onload="iniciar()"></script></html>`,{headers:{'Content-Type':'text/html;charset=UTF-8','Cache-Control':'no-store','Set-Cookie':setCookie(nonceCookie+'_'+nonce,nonce,600),'Cross-Origin-Opener-Policy':'same-origin-allow-popups','Referrer-Policy':'strict-origin-when-cross-origin','X-Frame-Options':'DENY'}});
 }
+function saveError(error){
+      const kind=String(error.message||'').toLowerCase();
+      const reason=/too large|too big|limit|quota/.test(kind)?'La base alcanzó un límite al guardar.':/busy|locked/.test(kind)?'La base estaba ocupada.':'El servicio de base de datos no pudo completar la escritura.';
+      return json({error:reason+' Consultá Compras registradas antes de reintentar.'},503);
+}
 export default { async fetch(request, env) {
   const url=new URL(request.url);
   if(url.pathname==='/favicon.ico')return new Response(null,{status:204});
@@ -110,6 +115,41 @@ export default { async fetch(request, env) {
     const {results}=await db.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? ORDER BY part LIMIT 8').bind(rev,start).all();
     return json(results);
   }
+  // Upload bounded batches first. Only the final transaction publishes a revision.
+  if(url.pathname==='/api/save' && request.method==='POST'){
+    if(request.headers.get('Origin')!==url.origin || request.headers.get('Content-Type')!=='application/json')return json({},403);
+    const {base,id,count,changes,finish}=await request.json();
+    if(typeof base!=='string'||typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id)||!Number.isInteger(count)||count<1||count>1600)return json({},400);
+    try{
+      const rev='save:'+id;
+      const head=await db.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();
+      if(head?.revision===rev)return json({revision:rev});
+      const conflict=()=>json({error:'La base cambió en otra sesión. Revisá la compra antes de repetirla.'},409);
+      if(head?.revision!==base)return conflict();
+      // Keep staging separate from live parts so retries cannot modify a published revision.
+      await db.prepare('CREATE TABLE IF NOT EXISTS cedi_stage (id TEXT, part INTEGER, payload TEXT, created INTEGER, PRIMARY KEY(id,part))').run();
+      const key=email+'|'+base+'|'+id;
+      if(finish!==true){
+        if(!Array.isArray(changes)||!changes.length||changes.length>4||changes.some(c=>!c||!Number.isInteger(c.part)||c.part<0||c.part>=count||typeof c.payload!=='string'||!c.payload.length||c.payload.length>64000||!/^[A-Za-z0-9+/]+=*$/.test(c.payload)))return json({},400);
+        await db.prepare("INSERT OR REPLACE INTO cedi_stage SELECT ?,json_extract(value,'$.part'),json_extract(value,'$.payload'),unixepoch() FROM json_each(?)").bind(key,JSON.stringify(changes)).run();
+        return json({staged:true});
+      }
+      if(!Number.isInteger(changes)||changes<0||changes>count)return json({},400);
+      // Both copies and the head switch run under the same D1 transaction.
+      const results=await db.batch([
+        db.prepare('INSERT INTO cedi_parts SELECT ?,p.part,p.payload FROM cedi_parts p WHERE p.revision=? AND p.part<? AND NOT EXISTS(SELECT 1 FROM cedi_stage s WHERE s.id=? AND s.part=p.part) AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,base,count,key,base),
+        db.prepare('INSERT INTO cedi_parts SELECT ?,part,payload FROM cedi_stage WHERE id=? AND part<? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,key,count,base),
+        db.prepare('UPDATE cedi_head SET revision=?,parts=?,author=? WHERE id=1 AND revision=? AND (SELECT COUNT(*) FROM cedi_parts WHERE revision=?)=? AND (SELECT COUNT(*) FROM cedi_stage WHERE id=?)=?').bind(rev,count,email,base,rev,count,key,changes),
+        db.prepare('DELETE FROM cedi_parts WHERE revision IN (?,?) AND revision<>(SELECT revision FROM cedi_head WHERE id=1)').bind(base,rev),
+        db.prepare('DELETE FROM cedi_stage WHERE id=? OR created<unixepoch()-86400').bind(key)
+      ]);
+      if(!results[2].meta.changes){
+        const now=await db.prepare('SELECT revision FROM cedi_head WHERE id=1').first();
+        if(now?.revision!==rev)return conflict();
+      }
+      return json({revision:rev});
+    }catch(error){return saveError(error);}
+  }
   if(url.pathname==='/api/state' && request.method==='PUT'){
     if(request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({},403);
     const body=await request.json();
@@ -145,9 +185,7 @@ export default { async fetch(request, env) {
         return conflict();
       }
     }catch(error){
-      const kind=String(error.message||'').toLowerCase();
-      const reason=/too large|too big|limit|quota/.test(kind)?'La base alcanzó un límite al guardar.':/busy|locked/.test(kind)?'La base estaba ocupada.':'El servicio de base de datos no pudo completar la escritura.';
-      return json({error:reason+' Consultá Compras registradas antes de reintentar.'},503);
+      return saveError(error);
     }
     // Cleanup failure must not turn a confirmed commit into an apparent failure.
     await db.prepare('DELETE FROM cedi_parts WHERE revision=?').bind(base).run().catch(()=>{});

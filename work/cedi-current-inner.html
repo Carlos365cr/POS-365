@@ -3064,7 +3064,7 @@ if(!product)throw new Error('Ingresá primero el código de un artículo guardad
 if(input.value.trim()===''||!Number.isFinite(Number(input.value))||Number(input.value)<0)throw new Error('Ingresá un Precio 1 válido.');
 input.value=normalizePrimaryPrice(Number(input.value),product.currency).toFixed(2);
 row.dataset.excelPriceProvided='true';if(row.dataset.xmlIndex!==undefined)row.dataset.xmlInitialized='true';
-refreshPurchaseGain(row);persistTrialSnapshot();
+refreshPurchaseGain(row);if(!currentPurchaseXml)persistTrialSnapshot();
 purchasesMain.querySelector('[data-purchase-status]').textContent='Precio 1 en revisión. Se actualizará en el artículo al procesar la compra.';
 return true;
 }catch(error){input.setCustomValidity(error.message);input.reportValidity();return false;}
@@ -3141,7 +3141,7 @@ purchasesMain.querySelector('[name="compraFecha"]').value=costaRicaDay();
 refreshPurchaseSystemDate();
 purchasesMain.querySelector('[name="compraFacturaFecha"]').value=costaRicaDay();
 purchasesMain.querySelector('[name="compraRecibido"]').value=costaRicaDay();
-function discardPurchaseDraft(){
+function discardPurchaseDraft(persist=true){
 currentPurchaseXml=null;refreshXmlImportStatus();
 for(const dialog of [purchaseProductDialog,purchaseClearDialog]){if(dialog.open){dialog.close();}}
 purchaseSearchCandidates=null;purchaseSearchRow=null;purchaseArticleReturn=null;updateArticleReturnButtons();
@@ -3154,7 +3154,7 @@ purchasesMain.querySelector('.purchase-table tbody').replaceChildren();selectedP
 purchasesMain.querySelectorAll('.purchase-bottom input[readonly]').forEach(input=>{input.value='0.00';});
 refreshPurchaseSystemDate();updatePurchaseChargeTotal();refreshPurchaseLedger();
 purchasesMain.querySelector('[data-purchase-status]').textContent='Compra descartada. Podés iniciar una nueva.';
-persistTrialSnapshot();supplier.focus();
+clearTimeout(purchaseBackupTimer);if(persist)persistTrialSnapshot();supplier.focus();
 }
 const discardPurchaseDialog=document.createElement('dialog');discardPurchaseDialog.className='cabys-dialog';discardPurchaseDialog.setAttribute('aria-labelledby','purchase-discard-title');
 discardPurchaseDialog.innerHTML='<header><h3 id="purchase-discard-title">¿Desea borrar todo?</h3></header><p>Se borrarán los datos de la compra en pantalla y se quitará el proveedor seleccionado.</p><footer><button type="button" class="primary" data-discard-yes autofocus>Sí</button><button type="button" data-discard-no>No</button></footer>';
@@ -4350,7 +4350,7 @@ function loadMarkedPurchaseProducts(){
  if(!purchaseMarked.size || !purchaseProductDialog.open || !body.contains(anchor)){return;}
  const products=Array.from(purchaseMarked.values());
  if(products.length===1){
-   purchaseMarked.clear();selectPurchaseProduct(products[0]);trialHasEdits=true;persistTrialSnapshot();return;
+   purchaseMarked.clear();selectPurchaseProduct(products[0]);trialHasEdits=true;if(!currentPurchaseXml)persistTrialSnapshot();return;
  }
  const useAnchor=!(anchor.dataset.articleKey||anchor.dataset.xmlProductId||anchor.dataset.productBarcode) || anchor.dataset.xmlIndex!==undefined;
  let previous=null;
@@ -4362,7 +4362,7 @@ function loadMarkedPurchaseProducts(){
    row.querySelector('[aria-label="Código"]').value=product.barcode||product.code;
    fillPurchaseProduct(row,false,product);previous=row;
  }
- ensurePurchaseBlankRow();renumberPurchaseRows();purchaseSearchFocus='Cantidad';purchaseProductDialog.close();trialHasEdits=true;persistTrialSnapshot();
+ ensurePurchaseBlankRow();renumberPurchaseRows();purchaseSearchFocus='Cantidad';purchaseProductDialog.close();trialHasEdits=true;if(!currentPurchaseXml)persistTrialSnapshot();
 }
 const movements=document.createElement('dialog');movements.className='cabys-dialog';movements.style.cssText='width:min(1320px,96vw);max-width:96vw;max-height:85vh;overflow:auto';
 movements.innerHTML='<header><h3>Historial de movimientos</h3><button type="button">Cerrar</button></header><p></p><div style="overflow:auto"><table><thead><tr></tr></thead><tbody></tbody></table></div>';
@@ -5023,7 +5023,7 @@ function xmlFreshFields(target,overrides){const clone=target.cloneNode(true);clo
 function createXmlPendingProduct(line,supplierId){
 const existing=xmlCatalogProducts().find(p=>purchaseSupplierValue(p)===supplierId&&p.details?.general?.some(f=>f[0]==='referencia'&&f[1]===line.providerCode));if(existing){return existing;}
 let next=Math.max(0,...xmlCatalogProducts().map(p=>/^\d+$/.test(p.code)?Number(p.code):0))+1;const code=String(next).padStart(5,'0'),id='xml-'+(globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2));
-const product={id,xmlOriginId:id,code,barcode:'',name:line.name,cabys:line.cabys,codes:[code,...(line.commercial||[]).filter(c=>c.code!==line.providerCode).map(c=>c.code)],price:null,currency:'Colón',includesVAT:true,origin:'xml',details:{general:xmlFreshFields(form,{codigo:code,barras:'',nombre:line.name,cabys:line.cabys,referencia:line.providerCode,proveedor:supplierId,caja:'1'}),costs:xmlFreshFields(costsForm,{}),prices:xmlFreshFields(priceForm,{lista0_precio:''}),promotions:{scannerEnabled:false,scaleEnabled:false}}};xmlPendingArticles.push(product);persistTrialSnapshot();return product;
+const product={id,xmlOriginId:id,code,barcode:'',name:line.name,cabys:line.cabys,codes:[code,...(line.commercial||[]).filter(c=>c.code!==line.providerCode).map(c=>c.code)],price:null,currency:'Colón',includesVAT:true,origin:'xml',details:{general:xmlFreshFields(form,{codigo:code,barras:'',nombre:line.name,cabys:line.cabys,referencia:line.providerCode,proveedor:supplierId,caja:'1'}),costs:xmlFreshFields(costsForm,{}),prices:xmlFreshFields(priceForm,{lista0_precio:''}),promotions:{scannerEnabled:false,scaleEnabled:false}}};xmlPendingArticles.push(product);return product;
 }
 function xmlPurchaseBoxSize(product){
  const configured=Number(product?.details?.general?.find(field=>field[0]==='caja')?.[1]);
@@ -5120,28 +5120,27 @@ billing.onchange=()=>{
  for(const row of purchasesMain.querySelectorAll('tr[data-xml-index]'))applyXmlPurchasePresentation(row);
  const missing=purchasesMain.querySelectorAll('tr[data-xml-box-factor="0"]').length;
  status.textContent=missing?'Revisá la cantidad por caja en Artículos para '+missing+' líneas.':'Presentación aplicada a esta factura de '+supplier.name+'.';
- persistTrialSnapshot();
 };
 refreshXmlImportStatus=()=>{billing.disabled=!currentPurchaseXml?.supplierId;billing.value=currentPurchaseXml?.billingUnit||'unit';resolve.hidden=!currentPurchaseXml;originalDownload.disabled=!currentPurchaseXml?.originalXml;};
 const question=document.createElement('dialog');question.className='cabys-dialog';question.innerHTML='<header><h3 data-title></h3></header><p data-text></p><footer><button type="button" data-yes>Sí</button><button type="button" data-no>No</button><button type="button" data-all>Crear todos los productos nuevos</button></footer>';purchasesMain.append(question);
 const ask=(title,text,all=false)=>new Promise(done=>{question.querySelector('[data-title]').textContent=title;question.querySelector('[data-text]').textContent=text;question.querySelector('[data-all]').hidden=!all;let resolved=false;const finish=value=>{if(resolved){return;}resolved=true;question.close();done(value);};question.querySelector('[data-yes]').onclick=()=>finish('yes');question.querySelector('[data-no]').onclick=()=>finish('no');question.querySelector('[data-all]').onclick=()=>finish('all');question.oncancel=event=>{event.preventDefault();finish('no');};question.showModal();question.querySelector('[data-yes]').focus();});
 async function resolveCatalog(){
-const data=currentPurchaseXml;if(!data){return;}const records=captureContactsState()?.records||[];let supplier=records.find(c=>c.cedula.replace(/\D/g,'')===data.issuer.identification&&c.supplier&&c.active&&c.status==='saved');
+const data=currentPurchaseXml;if(!data){return;}let catalogChanged=false;const records=captureContactsState()?.records||[];let supplier=records.find(c=>c.cedula.replace(/\D/g,'')===data.issuer.identification&&c.supplier&&c.active&&c.status==='saved');
 if(!supplier){const decision=await ask('¿Desea agregar este proveedor?',data.issuer.name+' · Cédula '+data.issuer.identification);if(decision==='yes'){supplier=await openXmlSupplierEditor(data.issuer);}}
 if(supplier){data.supplierId=supplier.id;refreshContactLinks();const select=purchasesMain.querySelector('[name=compraProveedor]');select.value=supplier.id;select.dispatchEvent(new Event('change',{bubbles:true}));let allNew=false;const handled=new Map();for(const [index,line] of data.rows.entries()){
 if(handled.has(line.providerCode)){data.mapping[index]=handled.get(line.providerCode);continue;}
 const matches=resolveXmlProviderCode(xmlCatalogProducts(),line.providerCode,supplier,captureContactsState()?.records||[]);let product=matches.length===1?matches[0]:null;
 if(matches.length>1){const list=document.createElement('dialog');list.className='cabys-dialog';const title=document.createElement('h3');title.textContent='Elegí el artículo para '+line.providerCode;list.append(title);purchasesMain.append(list);product=await new Promise(done=>{for(const match of matches){const button=document.createElement('button');button.type='button';button.textContent=match.code+' · '+match.name;button.onclick=()=>{list.close();done(match);};list.append(button);}const skip=document.createElement('button');skip.type='button';skip.textContent='Omitir';skip.onclick=()=>{list.close();done(null);};list.append(skip);list.oncancel=event=>{event.preventDefault();list.close();done(null);};list.showModal();});list.remove();}
-if(!product&&matches.length===0){const decision=allNew?'yes':await ask('¿Desea crear este producto nuevo?',line.providerCode+' · '+line.name+' · CABYS '+line.cabys,true);if(decision==='all'){allNew=true;}if(decision==='yes'||decision==='all'){product=createXmlPendingProduct(line,supplier.id);}}
+if(!product&&matches.length===0){const decision=allNew?'yes':await ask('¿Desea crear este producto nuevo?',line.providerCode+' · '+line.name+' · CABYS '+line.cabys,true);if(decision==='all'){allNew=true;}if(decision==='yes'||decision==='all'){product=createXmlPendingProduct(line,supplier.id);catalogChanged=true;}}
 const key=product?xmlProductKey(product):null;data.mapping[index]=key;handled.set(line.providerCode,key);
 }}else{data.supplierId=null;}
-data.billingUnit=data.billingUnit||'unit';loadRows();persistTrialSnapshot();
+data.billingUnit=data.billingUnit||'unit';loadRows();if(catalogChanged)persistTrialSnapshot();
 }
 function loadRows(){const data=currentPurchaseXml;if(!data){return;}const set=(name,value)=>{purchasesMain.querySelector('[name='+name+']').value=value;};set('compraFactura',data.invoice);set('compraFacturaFecha',data.date.slice(0,10));set('compraElectronico',data.key);set('compraTipoCambio',data.exchange);set('compraMoneda','Colón');set('compraCredito',data.condition==='01'?'Contado':data.creditDays+' días');refreshPurchaseSystemDate();
 const body=purchasesMain.querySelector('.purchase-table tbody');body.replaceChildren();selectedPurchaseRow=null;for(const [index,source] of data.rows.entries()){const row=addPurchaseRow();row.dataset.xmlIndex=String(index);const put=(name,value)=>{formatPurchaseNumber(row.querySelector('[aria-label="'+name+'"]'),value);};put('Cantidad',source.quantity);put('Precio lista s/IVA',source.cost);put('Desc. 1 (%)',String(Number(source.discountPercentage)));put('Desc. 2 (%)','0');put('OC',source.originalOC||'0');row.dataset.quantitySource='units';populateXmlPurchaseRow(row);row.dataset.xmlInitialized='true';applyXmlPurchasePresentation(row);}addPurchaseRow();renumberPurchaseRows();updatePurchaseChargeTotal();const missing=data.mapping.filter(id=>!id).length;status.textContent=data.rows.length+' líneas XML cargadas para revisión. El XML se guarda solo al Procesar correctamente. '+(data.supplierId?'Proveedor vinculado.':'Proveedor pendiente: no se puede procesar.')+' '+missing+' líneas sin artículo vinculado. '+(data.rows.some(line=>line.taxDetails?.length>1)?'Las líneas con varios impuestos conservan los importes originales; no cambies su cantidad, costo, descuentos ni OC. ':'')+'Los artículos nuevos quedan en Propiedad artículo → Pendientes por XML.';refreshXmlImportStatus();}
 let busy=false;resolve.onclick=async()=>{if(busy){return;}busy=true;try{await resolveCatalog();}catch(error){status.textContent=error.message;}finally{busy=false;}};
 xmlButton.onclick=()=>input.click();input.onchange=async()=>{const file=input.files?.[0];input.value='';if(file){await loadPurchaseXmlFile(file);}};
-loadPurchaseXmlFile=async file=>{if(!file||busy){return false;}busy=true;const previousDraft=capturePurchaseDraft();try{status.textContent='Leyendo XML: '+file.name+'…';if(file.size>2000000){throw new Error('El XML supera 2 MB.');}let bytes,text;if(typeof file.arrayBuffer==='function'){bytes=new Uint8Array(await file.arrayBuffer());text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}else{text=await file.text();bytes=new TextEncoder().encode(text);}const data=parsePurchaseXml(text,file.name);const original={filename:file.name,byteLength:bytes.byteLength,base64:encodeXmlBytes(bytes)};validateOriginalXmlAsset(original);data.originalXml=original;currentPurchaseXml=data;refreshXmlImportStatus();purchasesMain.querySelector('[name=compraProveedor]').value='';purchasesMain.querySelector('[name=compraProveedor]').dispatchEvent(new Event('change',{bubbles:true}));await resolveCatalog();return true;}catch(error){restorePurchaseDraft(previousDraft);status.textContent='No se cargó el XML: '+error.message;errorDialog.querySelector('[data-xml-error]').textContent=error.message;errorDialog.showModal();errorDialog.querySelector('button').focus();return false;}finally{busy=false;}};
+loadPurchaseXmlFile=async file=>{if(!file||busy){return false;}busy=true;const previousDraft=capturePurchaseDraft();try{status.textContent='Leyendo XML: '+file.name+'…';if(file.size>2000000){throw new Error('El XML supera 2 MB.');}let bytes,text;if(typeof file.arrayBuffer==='function'){bytes=new Uint8Array(await file.arrayBuffer());text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}else{text=await file.text();bytes=new TextEncoder().encode(text);}const data=parsePurchaseXml(text,file.name);const original={filename:file.name,byteLength:bytes.byteLength,base64:encodeXmlBytes(bytes)};validateOriginalXmlAsset(original);data.originalXml=Object.freeze(original);currentPurchaseXml=data;refreshXmlImportStatus();purchasesMain.querySelector('[name=compraProveedor]').value='';purchasesMain.querySelector('[name=compraProveedor]').dispatchEvent(new Event('change',{bubbles:true}));await resolveCatalog();return true;}catch(error){restorePurchaseDraft(previousDraft);status.textContent='No se cargó el XML: '+error.message;errorDialog.querySelector('[data-xml-error]').textContent=error.message;errorDialog.showModal();errorDialog.querySelector('button').focus();return false;}finally{busy=false;}};
 }
 function validThemeMonthDay(value){if(typeof value!=='string'||!/^\d{2}-\d{2}$/.test(value)){return false;}const [month,day]=value.split('-').map(Number);return month>=1&&month<=12&&day>=1&&day<=[31,29,31,30,31,30,31,31,30,31,30,31][month-1];}
 function posChristmasIsActive(settings,today=costaRicaDay()){if(!settings?.enabled||!validThemeMonthDay(settings.start)||!validThemeMonthDay(settings.end)){return false;}const day=today.slice(5,10);return settings.start<=settings.end?day>=settings.start&&day<=settings.end:day>=settings.start||day<=settings.end;}
@@ -6339,6 +6338,7 @@ const contact=(captureContactsState()?.records || []).find(c=>c.id===get('compra
 if(!contact){throw new Error('Seleccioná un proveedor activo guardado en Contactos.');}
 if(trialPurchases.length>=2000){throw new Error('El historial de prueba alcanzó 2000 compras. Descargá un respaldo antes de continuar.');}
 const invoice=get('compraFactura').value.trim();if(invoice.length>200){throw new Error('El número de factura supera 200 caracteres.');}if(!invoice){throw new Error('Falta el número de factura.');}
+if(currentPurchaseXml?.key&&trialPurchases.some(p=>p.xmlDocument?.key===currentPurchaseXml.key)){throw new Error('Esta clave electrónica ya tiene una compra registrada. Revisá Compras registradas.');}
 if(trialPurchases.some(p=>p.supplier.id===contact.id && p.invoice.toLocaleLowerCase('es')===invoice.toLocaleLowerCase('es'))){throw new Error('Esta factura ya está registrada para el proveedor. Revisá Compras registradas.');}
 for(const name of ['compraFacturaFecha','compraRecibido']){if(!get(name).value || !get(name).checkValidity()){throw new Error('Completá Fecha de factura y Fecha recibido.');}}
 const currency=get('compraMoneda').value;
@@ -6357,13 +6357,13 @@ const rate=cabysCatalog?.get(product.cabys)?.[2];const vat=xmlSource?Number(xmlS
 const result=xmlSource?calculateXmlPurchaseAmounts(xmlSource,qty,cost,amount('Desc. 1 (%)'),amount('Desc. 2 (%)'),amount('OC'),Number(row.dataset.xmlBoxFactor??1)):calculatePurchaseLine(qty,cost,amount('Desc. 1 (%)'),amount('Desc. 2 (%)'),vat,amount('OC'));
 if(xmlSource?.taxDetails?.length>1&&!result){throw new Error('Línea '+item+': conserva la cantidad, costo, descuentos y OC originales del XML con varios impuestos.');}
 if(!result || result.totalCents===null || !totals.every(k=>Number.isSafeInteger(result[k]) && result[k]>=0)){throw new Error('Línea '+item+': revisá costo sin IVA, descuentos, OC y tarifa CABYS.');}
-lines.push({...(xmlSource?{xmlSource,xmlBoxFactor:Number(row.dataset.xmlBoxFactor??1)}:{}),...(!product.barcode||xmlSource?{xmlProductId:xmlProductKey(product)}:{}),previousStock:getPurchaseAvailableStock(product),boxes:Number(amount('Cajas') || 0),currentPrice:product.price ?? null,price1:amount('Precio 1')===''?null:Number(amount('Precio 1')),currentCost:getProductCurrentCost(product,costBasis.value),code:product.code || product.barcode,barcode:product.barcode,name:product.name,cabys:product.cabys,quantity:qty,unitsPerBox:getProductUnitsPerBox(product),cost:Number(cost),discount1:Number(amount('Desc. 1 (%)') || 0),discount2:Number(amount('Desc. 2 (%)') || 0),vatRate:vat,...result,netSubtotalCents:purchaseNetAmounts(result,qty).subtotalCents,unitNetCost:purchaseNetAmounts(result,qty).unitCost});
+lines.push({...(xmlSource?{xmlSource:structuredClone(xmlSource),xmlBoxFactor:Number(row.dataset.xmlBoxFactor??1)}:{}),...(!product.barcode||xmlSource?{xmlProductId:xmlProductKey(product)}:{}),previousStock:getPurchaseAvailableStock(product),boxes:Number(amount('Cajas') || 0),currentPrice:product.price ?? null,price1:amount('Precio 1')===''?null:Number(amount('Precio 1')),currentCost:getProductCurrentCost(product,costBasis.value),code:product.code || product.barcode,barcode:product.barcode,name:product.name,cabys:product.cabys,quantity:qty,unitsPerBox:getProductUnitsPerBox(product),cost:Number(cost),discount1:Number(amount('Desc. 1 (%)') || 0),discount2:Number(amount('Desc. 2 (%)') || 0),vatRate:vat,...result,netSubtotalCents:purchaseNetAmounts(result,qty).subtotalCents,unitNetCost:purchaseNetAmounts(result,qty).unitCost});
 }
 if(!lines.length){throw new Error('Agregá al menos un artículo con cantidad y costo.');}
 const sum=Object.fromEntries(totals.map(k=>[k,lines.reduce((n,line)=>n+line[k],0)]));
 if(currentPurchaseXml){for(const [key,rawKey] of [['subtotalCents','gross'],['discountCents','discount'],['otherChargesCents','oc'],['vatCents','tax'],['totalCents','total']]){const raw=lines.reduce((value,line)=>value+(line.raw?xmlFixed(line.raw[rawKey]):BigInt(line[key])*10000n),['oc','total'].includes(rawKey)?xmlFixed(currentPurchaseXml.documentCharges||'0'):0n);sum[key]=Number((raw+5000n)/10000n);}}
 if(!totals.every(k=>Number.isSafeInteger(sum[k]))){throw new Error('El monto de la compra es demasiado grande.');}
-const record={...(currentPurchaseXml?{xmlDocument:{documentCharges:currentPurchaseXml.documentCharges||'0',originalDocumentCharges:currentPurchaseXml.originalDocumentCharges||currentPurchaseXml.documentCharges||'0',otherCharges:currentPurchaseXml.otherCharges||[],key:currentPurchaseXml.key,totals:currentPurchaseXml.totals,filename:currentPurchaseXml.filename,...(currentPurchaseXml.originalXml?{originalXml:JSON.parse(JSON.stringify(currentPurchaseXml.originalXml))}:{})}}:{}),header:capturePurchaseDraft().header,attachmentName:get('compraAdjunto').files?.[0]?.name || '',id:'purchase-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),sequence:sequence(),date:new Date().toISOString(),systemDate:costaRicaDay(),invoiceDate:get('compraFacturaFecha').value,receivedDate:get('compraRecibido').value,invoice,warehouse:get('compraBodega').value,currency,credit:get('compraCredito').value,comment:get('compraComentario').value,supplier:{id:contact.id,cedula:contact.cedula||'',code:contact.code,name:contact.name,email:contact.fields?.find(f=>f[0]==='correo')?.[1] || ''},lines,...sum};
+const record={...(currentPurchaseXml?{xmlDocument:{documentCharges:currentPurchaseXml.documentCharges||'0',originalDocumentCharges:currentPurchaseXml.originalDocumentCharges||currentPurchaseXml.documentCharges||'0',otherCharges:structuredClone(currentPurchaseXml.otherCharges||[]),key:currentPurchaseXml.key,totals:structuredClone(currentPurchaseXml.totals),filename:currentPurchaseXml.filename,...(currentPurchaseXml.originalXml?{originalXml:JSON.parse(JSON.stringify(currentPurchaseXml.originalXml))}:{})}}:{}),header:capturePurchaseDraft().header,attachmentName:get('compraAdjunto').files?.[0]?.name || '',id:'purchase-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),sequence:sequence(),date:new Date().toISOString(),systemDate:costaRicaDay(),invoiceDate:get('compraFacturaFecha').value,receivedDate:get('compraRecibido').value,invoice,warehouse:get('compraBodega').value,currency,credit:get('compraCredito').value,comment:get('compraComentario').value,supplier:{id:contact.id,cedula:contact.cedula||'',code:contact.code,name:contact.name,email:contact.fields?.find(f=>f[0]==='correo')?.[1] || ''},lines,...sum};
 // Persist the complete record and clear only the submitted draft, not the catalog.
 const before=capturePurchaseDraft();const catalogBefore=new Map(savedTrialProducts),pendingBefore=xmlPendingArticles.slice();
 const replacementUpdates=purchaseReplacementUpdates(record);
@@ -6378,7 +6378,7 @@ replacementUpdates.set(key,updated);
 }
 applyPurchaseReplacementUpdates(replacementUpdates);
 trialPurchases.push(record);
-try{trialHasEdits=true;discardPurchaseDraft();get('compraConsecutivo').value=sequence();status.textContent='Guardando compra…';await persistPurchaseConfirmed();}catch(error){trialPurchases.pop();xmlPendingArticles=pendingBefore;savedTrialProducts.clear();for(const [key,value] of catalogBefore){savedTrialProducts.set(key,value);}restorePurchaseDraft(before);persistTrialSnapshot();throw error;}
+try{trialHasEdits=true;discardPurchaseDraft(false);get('compraConsecutivo').value=sequence();status.textContent='Guardando compra…';await persistPurchaseConfirmed();}catch(error){trialPurchases.pop();xmlPendingArticles=pendingBefore;savedTrialProducts.clear();for(const [key,value] of catalogBefore){savedTrialProducts.set(key,value);}restorePurchaseDraft(before);throw error;}
 const selected=savedTrialProducts.get(selectedTrialBarcode);if(selected){const cost=getProductCurrentCost(selected,'reposicion');if(cost!==null)formatPurchaseNumber(costsForm.elements.crc_reposicion,cost);updateTaxedCosts(cabysCatalog?.get(selected.cabys)?.[2]);}refreshArticleProperties();refreshInventoryDashboard();refreshPurchaseLedger();refreshXmlInbox();status.textContent='Compra de prueba '+record.sequence+' registrada. Costos de reposición actualizados. Descargá Respaldo para conservarla.';
 show('Compra ingresada correctamente','Compra de prueba '+record.sequence+' registrada. Se guardó el detalle y los totales, y se actualizaron los costos de reposición; no se modifica inventario ni se emite una factura electrónica.',record);
 }catch(error){show('No se pudo ingresar la compra',error.message);status.textContent=error.message;}
@@ -6825,7 +6825,8 @@ return savedTrialSnapshot.updatedAt;
 }
 async function persistHostTrialSnapshot(snapshot,requireConfirmation){
 if(!window.openai?.setWidgetState){return;}
-const serialized=JSON.stringify(snapshot);
+// Compress the large XML archive first so ordinary edits preserve its compressed prefix.
+const serialized=JSON.stringify(sharedPurchaseStorage?{xmlInboxState:snapshot.xmlInboxState,...snapshot}:snapshot);
 let privateContent={cediTrial:snapshot};
 if(serialized.length>=14000){
 const stream=new Blob([serialized]).stream().pipeThrough(new CompressionStream('gzip'));
@@ -7023,7 +7024,7 @@ restoreTrialState();
 root.addEventListener('input',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view')){trialHasEdits=true;}},true);
 root.addEventListener('change',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view')){trialHasEdits=true;}},true);
 let purchaseBackupTimer;
-for(const name of ['input','change']){purchasesMain.addEventListener(name,()=>{clearTimeout(purchaseBackupTimer);purchaseBackupTimer=setTimeout(persistTrialSnapshot,400);});}
+for(const name of ['input','change']){purchasesMain.addEventListener(name,()=>{clearTimeout(purchaseBackupTimer);if(!currentPurchaseXml)purchaseBackupTimer=setTimeout(()=>{if(!currentPurchaseXml)persistTrialSnapshot();},400);});}
 window.addEventListener('openai:set_globals',async event=>{
 const snapshot=await readHostTrialSnapshot(event.detail?.globals?.widgetState);
 if(!trialHasEdits && snapshot && (snapshot.updatedAt||0)>=(savedTrialSnapshot?.updatedAt||0)){restoreTrialSnapshot(snapshot);}

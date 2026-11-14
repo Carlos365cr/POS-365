@@ -15,3 +15,31 @@ const inner=fs.readFileSync('work/cedi-current-inner.html','utf8');const fn=inne
 let callback,timeout=0;const parent={};const ctx={window:{parent,addEventListener:(t,c)=>callback=c,removeEventListener(){}},persistTrialSnapshot:()=>42,sharedPurchaseStorage:true,setTimeout(){timeout++},clearTimeout(){}};
 vm.runInNewContext(fn,ctx);let saved=ctx.persistPurchaseConfirmed();assert.equal(timeout,0);callback({source:parent,data:{type:'cedi-trial-state-saved',updatedAt:42,ok:true}});await saved;saved=ctx.persistPurchaseConfirmed();callback({source:parent,data:{type:'cedi-trial-state-saved',updatedAt:42,ok:false,reason:'La base estaba ocupada.'}});await assert.rejects(saved,/ocupada/);
 console.log('PASS: partial write, preserved blocks, concurrency conflict, failed write rollback, shared confirmation without 12s timeout, error display');
+
+const operation={base:revision,id:crypto.randomUUID(),count:270};
+const stage=(data)=>worker.fetch(new Request('https://cedi.test/api/save',{method:'POST',headers:{Origin:'https://cedi.test','Content-Type':'application/json'},body:JSON.stringify({...operation,...data})}),{DB:db});
+const current=()=>sql.prepare('SELECT revision FROM cedi_head').get().revision;
+const edits={changes:[{part:269,payload:'DDDD'}]};
+fail=false;
+assert.equal((await stage(edits)).status,200);
+assert.equal((await stage(edits)).status,200);
+assert.equal(current(),revision);
+fail=true;
+assert.equal((await stage({finish:true,changes:1})).status,503);
+assert.equal(current(),revision);
+fail=false;
+const finished=await stage({finish:true,changes:1});
+assert.equal(finished.status,200);
+assert.equal(current(),(await finished.json()).revision);
+assert.equal((await stage({finish:true,changes:1})).status,200);
+assert.equal(sql.prepare('SELECT COUNT(*) n FROM cedi_parts').get().n,270);
+assert.equal((await stage({...edits,id:crypto.randomUUID()})).status,409);
+assert.equal((await stage({id:crypto.randomUUID(),base:current(),count:271,changes:0,finish:true})).status,409);
+
+const draftListeners={},pendingTimers=new Map();let saves=0;
+const draftContext={currentPurchaseXml:{},purchasesMain:{addEventListener:(name,fn)=>draftListeners[name]=fn},clearTimeout:id=>pendingTimers.delete(id),setTimeout:fn=>{pendingTimers.set(1,fn);return 1},persistTrialSnapshot:()=>saves++};
+vm.runInNewContext(inner.slice(inner.indexOf('let purchaseBackupTimer;'),inner.indexOf("window.addEventListener('openai:set_globals'",inner.indexOf('let purchaseBackupTimer;'))),draftContext);
+draftListeners.input();draftListeners.change();assert.equal(pendingTimers.size,0);
+draftContext.currentPurchaseXml=null;draftListeners.input();pendingTimers.get(1)();assert.equal(saves,1);
+draftListeners.change();draftContext.currentPurchaseXml={};pendingTimers.get(1)();assert.equal(saves,1);
+console.log('PASS: XML edit isolation and atomic staged saves, including retries, conflicts and rollback');
