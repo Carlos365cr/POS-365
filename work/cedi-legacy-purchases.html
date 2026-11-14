@@ -7689,7 +7689,12 @@ installXmlPurchaseImport();
 installPurchaseExcelImport();
 installArticleProperties();
 installPosThemes();
-installXmlInboxModule();
+// The inbox opens through the main menu router. Direct file imports belong to this purchase.
+const xmlInboxLink=document.createElement('button');
+xmlInboxLink.type='button';
+xmlInboxLink.className='menu-item cursor-interaction';
+xmlInboxLink.textContent='Cargas XML';
+purchasesMenu.after(xmlInboxLink);
 installCompanyHeaderConfiguration();
 installInventoryDashboard();
 installPrintDesigns();
