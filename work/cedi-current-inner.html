@@ -2312,6 +2312,8 @@ let savedTrialSnapshot=null;
 let companyHeaderState=emptyCompanyHeader(),refreshCompanyHeaderForm=()=>{},refreshInventoryDashboard=()=>{};
 let printDesignService=null,capturePrintDesignState=()=>null,restorePrintDesignState=()=>{};
 let refreshContactLinks=()=>{};let selectedPosContactId=null;let getPosContactSnapshot=()=>null;let resetPosContact=()=>{};
+let purchaseOrders=[];
+let linkedOrder=null;
 let savedCxpState=null;let perishablesState={vegetal:[],animal:[],inventory:{vegetal:{},animal:{}}};let fmgState={products:[]};let refreshFmgProducts=()=>{};const perishablesRefreshers=[];let refreshPerishablesProducts=()=>perishablesRefreshers.forEach(refresh=>refresh());
 let purchaseCostPostingVersion=1;let purchaseModification=null;let purchaseExclusion=null;
 let loadPurchaseXmlFile=async()=>false;let xmlInboxState=emptyXmlInbox();let refreshXmlInbox=()=>{};let xmlPendingArticles=[];let currentPurchaseXml=null;let refreshArticleProperties=()=>{};let refreshXmlImportStatus=()=>{};let openXmlSupplierEditor=async()=>null;
@@ -2692,7 +2694,7 @@ const purchasesMain=document.createElement('main');
 purchasesMain.hidden=true;
 purchasesMain.className='purchase-view';
 purchasesMain.innerHTML=`<h2>Mantenimiento de compras</h2>
-<div class="purchase-top"><div class="purchase-fields"><label>Proveedor · Código<input name="compraProveedorCodigo" placeholder="Código"></label><label class="span2">Proveedor<select name="compraProveedor"><option>Sin asignar</option></select></label><button type="button" disabled aria-label="Buscar proveedor"><i data-lucide="search" aria-hidden="true"></i></button><label class="span2">Bodega<select name="compraBodega"><option>Belén</option><option>Cartago</option><option>Desamparados</option><option>Liquidaciones</option></select></label><label>Moneda<select name="compraMoneda"><option>Colón</option><option>Dólar</option><option>Euro</option><option>Yen</option></select></label><label>Tipo de cambio<input name="compraTipoCambio" type="number" min="0" step="0.01"></label><label class="span2 purchase-consecutive">Consecutivo<input name="compraConsecutivo" readonly value="00001" aria-label="Consecutivo de compra"></label></div><div><fieldset class="purchase-process"><legend>Tipo de proceso</legend><div class="checks"><label class="check"><input type="radio" name="compraProceso" value="compra" checked>Compra</label><label class="check"><input type="radio" name="compraProceso" value="orden">Orden de compra</label><label class="check"><input type="radio" name="compraProceso" value="requisicion">Requisición</label></div></fieldset><div class="purchase-files"><button type="button" disabled>Archivo…</button><select aria-label="Formato de archivo"><option>1</option></select><button type="button" disabled>XML…</button><label data-xml-billing>El proveedor factura por <select disabled aria-label="Presentación de la factura XML"><option value="unit">Unidad</option><option value="box">Caja</option></select></label></div></div></div>
+<div class="purchase-top"><div class="purchase-fields"><label>Proveedor · Código<input name="compraProveedorCodigo" placeholder="Código"></label><label class="span2">Proveedor<select name="compraProveedor"><option>Sin asignar</option></select></label><button type="button" disabled aria-label="Buscar proveedor"><i data-lucide="search" aria-hidden="true"></i></button><label class="span2">Bodega<select name="compraBodega"><option>Belén</option><option>Cartago</option><option>Desamparados</option><option>Liquidaciones</option></select></label><label>Moneda<select name="compraMoneda"><option>Colón</option><option>Dólar</option><option>Euro</option><option>Yen</option></select></label><label>Tipo de cambio<input name="compraTipoCambio" type="number" min="0" step="0.01"></label><label class="span2 purchase-consecutive"><span data-sequence-caption>Consecutivo</span><input name="compraConsecutivo" readonly value="00001" aria-label="Consecutivo de compra"></label></div><div><fieldset class="purchase-process"><legend>Tipo de proceso</legend><div class="checks"><label class="check"><input type="radio" name="compraProceso" value="compra" checked>Compra</label><label class="check"><input type="radio" name="compraProceso" value="orden">Orden de compra</label><label class="check"><input type="radio" name="compraProceso" value="requisicion">Requisición</label></div></fieldset><div class="purchase-files"><button type="button" disabled>Archivo…</button><select aria-label="Formato de archivo"><option>1</option></select><button type="button" disabled>XML…</button><label data-xml-billing>El proveedor factura por <select disabled aria-label="Presentación de la factura XML"><option value="unit">Unidad</option><option value="box">Caja</option></select></label></div></div></div>
 <fieldset><legend>Compra</legend><div class="purchase-fields"><label>Factura<input name="compraFactura"></label><label>Fecha recibido<input name="compraRecibido" type="date"></label><label>Vía<input name="compraVia"></label><label class="purchase-comment">Comentario<textarea name="compraComentario" rows="2"></textarea></label><label>Pedido<input name="compraPedido"></label><label>Fecha de factura<input name="compraFacturaFecha" type="date"></label><label>Correo<input name="compraCorreo" type="email"></label><label>Orden de compra<input name="compraOrden"></label><label>Fecha sistema<input name="compraFecha" type="date" readonly aria-readonly="true"></label><label>FOB<input name="compraFOB"></label><label class="span4">N.º electrónico<input name="compraElectronico"></label></div></fieldset>
 <div class="purchase-detail"><table class="purchase-table"><colgroup><col style="width:48px"><col style="width:115px"><col style="width:210px"><col style="width:85px"><col style="width:70px"><col style="width:75px"><col style="width:90px"><col style="width:100px"><col style="width:100px"><col style="width:100px"><col style="width:110px"><col style="width:105px"><col style="width:75px"><col style="width:75px"><col style="width:100px"><col style="width:75px"><col style="width:110px"><col style="width:110px"><col style="width:115px"><col style="width:100px"><col style="width:100px"></colgroup><thead><tr><th>Ítem</th><th>Código</th><th>Nombre</th><th>Existencia</th><th data-tooltip="Cantidad de unidades por caja">Cant. x CJ</th><th>Cajas</th><th>Cantidad</th><th>% GAN.</th><th>Precio 1</th><th>% GAN. actual</th><th data-tooltip="Costo guardado según el tipo seleccionado en Configuración">Costo actual S/IVA</th><th>Costo C/IVA</th><th data-tooltip="Subtotal sin IVA dividido entre la cantidad; ya incluye descuentos y OC">Costo S/IVA</th><th data-tooltip="Importe después de Desc. 1 y Desc. 2, más OC, sin IVA">Subtotal</th><th>Desc. 1 (%)</th><th>Desc. 2 (%)</th><th data-tooltip="Otros cargos por línea, después de descuentos y antes de IVA">Otros C.</th><th>IVA (%)</th><th>Monto descuento</th><th>Monto IVA</th><th>Total línea</th></tr></thead><tbody></tbody></table></div>
 <div class="purchase-files"><button type="button" data-purchase-search aria-keyshortcuts="F2">F2 · Buscar artículo</button><button type="button" data-purchase-remove aria-keyshortcuts="F3">F3 · Borrar línea</button><button type="button" data-purchase-clear aria-keyshortcuts="F4">F4 · Borrar todas</button><button type="button" data-purchase-articles aria-keyshortcuts="F5">F5 · Artículos</button><small>Pruebas · Registro local y reporte PDF. Inventario y contabilidad pendientes.</small></div>
@@ -3149,6 +3151,7 @@ refreshPurchaseSystemDate();
 purchasesMain.querySelector('[name="compraFacturaFecha"]').value=costaRicaDay();
 purchasesMain.querySelector('[name="compraRecibido"]').value=costaRicaDay();
 function discardPurchaseDraft(persist=true){
+linkedOrder=null;
 purchaseModification=null;purchaseExclusion=null;purchasesMain.querySelectorAll('[name="compraOperacion"]')[0].checked=true;
 currentPurchaseXml=null;refreshXmlImportStatus();
 for(const dialog of [purchaseProductDialog,purchaseClearDialog]){if(dialog.open){dialog.close();}}
@@ -4488,6 +4491,10 @@ const snapshot=value.snapshot;
 const text=(v,max=20000)=>typeof v==='string' && v.length<=max;
 const fields=values=>Array.isArray(values) && values.length<=1000 && values.every(row=>Array.isArray(row) && row.length===3 && text(row[0],100) && text(row[1]) && (row[2]===null || typeof row[2]==='boolean'));
 if(!snapshot || snapshot.version!==1 || !fields(snapshot.general) || !fields(snapshot.costs) || !fields(snapshot.prices) || !Array.isArray(snapshot.products) || snapshot.products.length>1000){fail('El respaldo contiene datos incompletos o demasiados productos.');}
+if(snapshot.purchaseOrders!==undefined){
+ const orders=snapshot.purchaseOrders;
+ if(!Array.isArray(orders)||orders.some(o=>!o||!/^OC-[0-9]{5}$/.test(o.sequence)||typeof o.invoice!=='string'||typeof o.supplier!=='string'||!Number.isSafeInteger(o.totalCents)||!Array.isArray(o.draft?.header)||!Array.isArray(o.draft?.rows))||new Set(orders.map(o=>o.sequence)).size!==orders.length)fail('Las órdenes de compra no son válidas.');
+}
 if(snapshot.fmgState!==undefined){const list=snapshot.fmgState?.products;if(!Array.isArray(list)||list.length>10000||list.some(key=>!text(key,200)||!key)||new Set(list).size!==list.length)fail('La lista de productos FMG no es válida.');}
 if(snapshot.perishablesState!==undefined){for(const kind of ['vegetal','animal']){const list=snapshot.perishablesState?.[kind]??[];if(!Array.isArray(list)||list.length>10000||list.some(key=>!text(key,200)||!key)||new Set(list).size!==list.length)fail('La lista de productos de origen '+kind+' no es válida.');}}
 if(snapshot.perishablesState?.inventory!==undefined){for(const kind of ['vegetal','animal']){const entries=snapshot.perishablesState.inventory?.[kind]??{};if(!entries||typeof entries!=='object'||Array.isArray(entries)||Object.keys(entries).length>2400)fail('Inventarios de períodos inválidos.');for(const [key,entry]of Object.entries(entries)){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(key)||!entry||!Number.isSafeInteger(entry.openingCents)||entry.openingCents<0||!Number.isSafeInteger(entry.closingCents)||entry.closingCents<0)fail('Monto de inventario de período inválido.');}}}
@@ -6746,10 +6753,72 @@ const history=document.createElement('button');history.type='button';history.tex
 const dialog=document.createElement('dialog');dialog.className='cabys-dialog';dialog.setAttribute('aria-labelledby','purchase-result-title');
 dialog.innerHTML='<header><h3 id="purchase-result-title"></h3></header><p data-result-message role="status"></p><div data-purchase-report><label>Compra registrada<select data-purchase-record></select></label><label>Correo del proveedor<input type="email" data-report-to readonly></label><label>Otros correos<input data-report-extra placeholder="Separados por coma"></label><label>Asunto<input data-report-subject readonly></label><p data-report-name></p><p data-report-xml-info></p><p>Correo sin enviar. Descargá el PDF o un borrador de correo con el PDF adjunto. El envío automático todavía no está conectado.</p><div class="actions"><button type="button" data-report-pdf>Descargar PDF</button><button type="button" data-report-xml disabled>Descargar XML original</button><button type="button" data-report-eml>Descargar borrador de correo</button><button type="button" data-report-send disabled aria-describedby="purchase-email-pending">Enviar por correo</button><button type="button" data-report-resend disabled aria-describedby="purchase-email-pending">Reenviar al correo</button></div><p id="purchase-email-pending">Envío y reenvío pendientes de integración. Reenviar se habilitará después de un envío confirmado.</p><p data-report-status role="status"></p></div><footer><button type="button" class="primary" data-result-close>Regresar</button></footer>';
 main.append(dialog);
+const duplicateInvoiceDialog=document.createElement('dialog');
+duplicateInvoiceDialog.setAttribute('aria-labelledby','purchase-duplicate-title');
+duplicateInvoiceDialog.style.cssText='width:min(210px,85vw);aspect-ratio:1;box-sizing:border-box;text-align:center;margin:auto;border:1px solid var(--line);border-radius:8px;color:var(--ink);background:var(--paper)';
+duplicateInvoiceDialog.innerHTML='<div style="height:100%;display:grid;align-content:center;justify-items:center;gap:18px"><strong id="purchase-duplicate-title">Factura ya existe</strong><button type="button" autofocus>Regresar</button></div>';
+main.append(duplicateInvoiceDialog);
+duplicateInvoiceDialog.querySelector('button').onclick=()=>duplicateInvoiceDialog.close();
+duplicateInvoiceDialog.addEventListener('close',()=>{
+ const invoiceField=get('compraFactura');
+ invoiceField.focus();
+ invoiceField.select();
+});
 const selector=dialog.querySelector('[data-purchase-record]');let shown=null;let processing=false;
 const totals=['subtotalCents','discountCents','otherChargesCents','vatCents','totalCents'];
 function sequence(){return String(Math.max(0,...trialPurchases.map(p=>Number(p.sequence)))+1).padStart(5,'0');}
-refreshPurchaseLedger=()=>{get('compraConsecutivo').value=sequence();history.disabled=trialPurchases.length===0;};
+const searchOrders=document.createElement('button');
+searchOrders.type='button';
+searchOrders.textContent='Buscar orden de compra';
+main.querySelector('.purchase-process').after(searchOrders);
+const orderDialog=document.createElement('dialog');
+orderDialog.className='cabys-dialog';
+orderDialog.style.width='min(740px, 90vw)';
+orderDialog.setAttribute('aria-label','Buscar orden de compra');
+orderDialog.innerHTML='<h3>Buscar orden de compra</h3><input type="search" aria-label="Buscar por orden, factura o proveedor" placeholder="Orden, factura o proveedor"><table><thead><tr><th>Orden de compra</th><th>Número de factura</th><th>Proveedor</th><th>Bodega</th><th>Monto</th><th>Uso</th><th></th></tr></thead><tbody></tbody></table><button type="button">Cerrar</button>';
+main.append(orderDialog);
+const filterOrders=orderDialog.querySelector('input');
+function nextOrderNumber(){
+ const next=purchaseOrders.reduce((max,o)=>Math.max(max,Number(o.sequence.slice(3))),0)+1;
+ return 'OC-'+String(next).padStart(5,'0');
+}
+function renderOrders(){
+ const body=orderDialog.querySelector('tbody');
+ body.replaceChildren();
+ for(const order of [...purchaseOrders].reverse()){
+  if(![order.sequence,order.invoice,order.supplier].join(' ').toLowerCase().includes(filterOrders.value.trim().toLowerCase()))continue;
+  const used=trialPurchases.some(p=>p.orderSequence===order.sequence);
+  const row=body.insertRow();
+  for(const value of [order.sequence,order.invoice,order.supplier,order.warehouse||order.draft.header.find(field=>field[0]==='compraBodega')?.[1]||'',formatPosProductMoney(order.totalCents/100,order.currency),used?'X':''])row.insertCell().textContent=value;
+  const select=document.createElement('button');
+  select.type='button';select.textContent='Seleccionar';select.disabled=used;
+  select.onclick=()=>{
+   restorePurchaseDraft(structuredClone(order.draft));
+   main.querySelector('[name=compraProceso][value=compra]').checked=true;
+   linkedOrder=order.sequence;
+   displayProcessSequence();
+   orderDialog.close();
+   status.textContent='Orden seleccionada: '+order.sequence;
+  };
+  row.insertCell().append(select);
+ }
+ if(!body.rows.length){const cell=body.insertRow().insertCell();cell.colSpan=7;cell.textContent='Sin órdenes de compra para mostrar.';}
+}
+searchOrders.onclick=()=>{filterOrders.value='';renderOrders();orderDialog.showModal();};
+filterOrders.oninput=renderOrders;
+orderDialog.querySelector('button').onclick=()=>orderDialog.close();
+function displayProcessSequence(){
+ const order=main.querySelector('[name=compraProceso][value=orden]').checked;
+ process.textContent=order?'Guardar':'Procesar';
+ main.querySelector('[data-purchase-cancel]').textContent=order?'No guardar':'No procesar';
+ const field=get('compraConsecutivo');
+ main.querySelector('[data-sequence-caption]').textContent=order?'Orden de compra':'Consecutivo';
+ field.setAttribute('aria-label',order?'Orden de compra':'Consecutivo de compra');
+ searchOrders.hidden=!main.querySelector('[name=compraProceso][value=compra]').checked||!!purchaseModification;
+ field.value=order?nextOrderNumber():purchaseModification?.record.sequence||sequence();
+}
+for(const option of main.querySelectorAll('[name=compraProceso]'))option.addEventListener('change',displayProcessSequence);
+refreshPurchaseLedger=()=>{displayProcessSequence();history.disabled=trialPurchases.length===0;};
 function label(record){return (record.status==='annulled'?'Anulada · ':'Ingresado · ')+record.supplier.name+' · Factura '+record.invoice+' / Consecutivo '+record.sequence;}
 function filename(record){return ('Ingresado - '+record.supplier.name+' - Factura '+record.invoice+' - Consecutivo '+record.sequence).replace(/[\x00-\x1f<>:"/\\|?*]/g,'-').slice(0,180)+'.pdf';}
 function showRecord(record){shown=record;selector.value=record.id;dialog.querySelector('[data-report-to]').value=record.supplier.email || '';dialog.querySelector('[data-report-extra]').value='';dialog.querySelector('[data-report-subject]').value=label(record);dialog.querySelector('[data-report-name]').textContent=filename(record);dialog.querySelector('[data-report-status]').textContent='';dialog.querySelector('[data-report-xml]').disabled=!record.xmlDocument?.originalXml;dialog.querySelector('[data-report-xml-info]').textContent=record.xmlDocument?.originalXml?'XML original guardado: '+record.xmlDocument.originalXml.filename:'Esta compra no tiene guardado el archivo XML original.';}
@@ -6810,13 +6879,20 @@ noProcess.onclick=()=>{if(purchaseModification){discardPurchaseDraft(false);stat
 process.onclick=async()=>{
 if(processing){return;}processing=true;process.disabled=true;
 try{
-if(get('compraProceso').value!=='compra' || !main.querySelector('[name=compraProceso][value=compra]').checked){throw new Error('Esta prueba procesa compras. Orden de compra y Requisición todavía están pendientes.');}
+const orderMode=main.querySelector('[name=compraProceso][value=orden]').checked;
+if(!orderMode&&!main.querySelector('[name=compraProceso][value=compra]').checked)throw new Error('Requisición está pendiente.');
+if(orderMode&&purchaseModification)throw new Error('Volvé a Inclusión para guardar una orden.');
+if(!orderMode&&linkedOrder&&!purchaseModification&&trialPurchases.some(p=>p.orderSequence===linkedOrder))throw new Error('Esta orden ya se utilizó en una compra.');
 const contact=(captureContactsState()?.records || []).find(c=>c.id===get('compraProveedor').value && c.status==='saved' && c.active && c.supplier);
 if(!contact){throw new Error('Seleccioná un proveedor activo guardado en Contactos.');}
 if(!purchaseModification&&trialPurchases.length>=2000){throw new Error('El historial de prueba alcanzó 2000 compras. Descargá un respaldo antes de continuar.');}
-const invoice=get('compraFactura').value.trim();if(invoice.length>200){throw new Error('El número de factura supera 200 caracteres.');}if(!invoice){throw new Error('Falta el número de factura.');}
-if(currentPurchaseXml?.key&&trialPurchases.some(p=>p.id!==purchaseModification?.record.id&&p.xmlDocument?.key===currentPurchaseXml.key)){throw new Error('Esta clave electrónica ya tiene una compra registrada. Revisá Compras registradas.');}
-if(trialPurchases.some(p=>p.id!==purchaseModification?.record.id&&p.supplier.id===contact.id && p.invoice.toLocaleLowerCase('es')===invoice.toLocaleLowerCase('es'))){throw new Error('Esta factura ya está registrada para el proveedor. Revisá Compras registradas.');}
+const invoice=get('compraFactura').value.trim();if(invoice.length>200){throw new Error('El número de factura supera 200 caracteres.');}if(!invoice&&!orderMode){throw new Error('Falta el número de factura.');}
+if(!orderMode&&trialPurchases.some(p=>p.id!==purchaseModification?.record.id&&p.supplier.id===contact.id&&p.invoice.toLocaleLowerCase('es')===invoice.toLocaleLowerCase('es'))){
+ duplicateInvoiceDialog.showModal();
+ return;
+}
+if(!orderMode&&currentPurchaseXml?.key&&trialPurchases.some(p=>p.id!==purchaseModification?.record.id&&p.xmlDocument?.key===currentPurchaseXml.key)){throw new Error('Esta clave electrónica ya tiene una compra registrada. Revisá Compras registradas.');}
+
 for(const name of ['compraFacturaFecha','compraRecibido']){if(!get(name).value || !get(name).checkValidity()){throw new Error('Completá Fecha de factura y Fecha recibido.');}}
 const currency=get('compraMoneda').value;
 if(currency!=='Colón'){throw new Error('El procesamiento de prueba está habilitado en colones. La conversión de compras en otras monedas todavía está pendiente.');}
@@ -6843,7 +6919,22 @@ if(purchaseModification?.record.xmlDocument?.documentCharges&&!currentPurchaseXm
  const charges=xmlCents(purchaseModification.record.xmlDocument.documentCharges);sum.otherChargesCents+=charges;sum.totalCents+=charges;
 }
 if(!totals.every(k=>Number.isSafeInteger(sum[k]))){throw new Error('El monto de la compra es demasiado grande.');}
-const editing=purchaseModification;const record={...(currentPurchaseXml?{xmlDocument:{documentCharges:currentPurchaseXml.documentCharges||'0',originalDocumentCharges:currentPurchaseXml.originalDocumentCharges||currentPurchaseXml.documentCharges||'0',otherCharges:structuredClone(currentPurchaseXml.otherCharges||[]),key:currentPurchaseXml.key,totals:structuredClone(currentPurchaseXml.totals),filename:currentPurchaseXml.filename,...(currentPurchaseXml.originalXml?{originalXml:JSON.parse(JSON.stringify(currentPurchaseXml.originalXml))}:{})}}:{}),header:capturePurchaseDraft().header,attachmentName:get('compraAdjunto').files?.[0]?.name || '',id:'purchase-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),sequence:sequence(),date:new Date().toISOString(),systemDate:costaRicaDay(),invoiceDate:get('compraFacturaFecha').value,receivedDate:get('compraRecibido').value,invoice,warehouse:get('compraBodega').value,currency,credit:get('compraCredito').value,comment:get('compraComentario').value,supplier:{id:contact.id,cedula:contact.cedula||'',code:contact.code,name:contact.name,email:contact.fields?.find(f=>f[0]==='correo')?.[1] || ''},lines,...sum};
+if(orderMode){
+ const sequence=nextOrderNumber();
+ if(sequence.length!==8)throw new Error('Se agotaron los números de orden.');
+ const draft=structuredClone(capturePurchaseDraft());
+ const order={sequence,draft,invoice,supplier:contact.name,warehouse:get('compraBodega').value,currency,totalCents:sum.totalCents};
+ purchaseOrders.push(order);
+ discardPurchaseDraft(false);
+ main.querySelector('[name=compraProceso][value=orden]').checked=true;
+ displayProcessSequence();
+ try{trialHasEdits=true;await persistPurchaseConfirmed();}
+ catch(error){purchaseOrders.pop();restorePurchaseDraft(draft);displayProcessSequence();throw error;}
+ status.textContent='Orden de compra '+sequence+' guardada como pendiente.';
+ show('Orden de compra guardada',status.textContent);
+ return;
+}
+const editing=purchaseModification;const record={orderSequence:editing?.record.orderSequence||linkedOrder||null,...(currentPurchaseXml?{xmlDocument:{documentCharges:currentPurchaseXml.documentCharges||'0',originalDocumentCharges:currentPurchaseXml.originalDocumentCharges||currentPurchaseXml.documentCharges||'0',otherCharges:structuredClone(currentPurchaseXml.otherCharges||[]),key:currentPurchaseXml.key,totals:structuredClone(currentPurchaseXml.totals),filename:currentPurchaseXml.filename,...(currentPurchaseXml.originalXml?{originalXml:JSON.parse(JSON.stringify(currentPurchaseXml.originalXml))}:{})}}:{}),header:capturePurchaseDraft().header,attachmentName:get('compraAdjunto').files?.[0]?.name || '',id:'purchase-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),sequence:sequence(),date:new Date().toISOString(),systemDate:costaRicaDay(),invoiceDate:get('compraFacturaFecha').value,receivedDate:get('compraRecibido').value,invoice,warehouse:get('compraBodega').value,currency,credit:get('compraCredito').value,comment:get('compraComentario').value,supplier:{id:contact.id,cedula:contact.cedula||'',code:contact.code,name:contact.name,email:contact.fields?.find(f=>f[0]==='correo')?.[1] || ''},lines,...sum};
 if(editing){
  const original=editing.record;
  const {xmlDocument,changeHistory,...before}=original;
@@ -6989,10 +7080,10 @@ objects[1]='<< /Type /Pages /Kids ['+kids.join(' ')+'] /Count '+pages.length+' >
 function capturePurchaseDraft(){
 const header=Array.from(purchasesMain.querySelectorAll('[name]')).filter(input=>input.type!=='file' && !input.readOnly && !input.disabled).map(input=>[input.name,input.value,['radio','checkbox'].includes(input.type)?input.checked:null]);
 const rows=Array.from(purchasesMain.querySelectorAll('.purchase-table tbody tr')).filter(row=>Array.from(row.querySelectorAll('input:not([readonly])')).some(input=>input.value.trim()!=='' && (input.type!=='number' || Number(input.value)!==0))).map(row=>({productKey:row.dataset.articleKey||'',productBarcode:row.dataset.productBarcode||'',excelPriceProvided:row.dataset.excelPriceProvided==='true',xmlIndex:row.dataset.xmlIndex===undefined?null:Number(row.dataset.xmlIndex),source:row.dataset.quantitySource==='boxes'?'boxes':'units',values:Array.from(row.querySelectorAll('input:not([readonly]):not([data-purchase-cost-editor])')).map(input=>[input.getAttribute('aria-label')==='Precio lista s/IVA'?'Costo':input.getAttribute('aria-label'),purchaseInputRaw(input)])}));
-return {header,rows,xmlDocument:currentPurchaseXml};
+return {header,rows,xmlDocument:currentPurchaseXml,linkedOrder};
 }
 function restorePurchaseDraft(draft){
-if(!draft){return;}currentPurchaseXml=draft.xmlDocument||null;refreshXmlImportStatus();
+if(!draft){return;}linkedOrder=draft.linkedOrder||null;currentPurchaseXml=draft.xmlDocument||null;refreshXmlImportStatus();
 const fields=Array.from(purchasesMain.querySelectorAll('[name]'));
 for(const [name,value,checked] of draft.header){
 const input=fields.find(input=>input.name===name && (checked===null || input.value===value));
@@ -7327,6 +7418,7 @@ cashOutEntries:cashOutEntries,
 contactsState:captureContactsState(),
 cxpState:savedCxpState,
 perishablesState:structuredClone(perishablesState),
+purchaseOrders:structuredClone(purchaseOrders),
 fmgState:structuredClone(fmgState),
 xmlPendingArticles:xmlPendingArticles,
 xmlInboxState:xmlInboxState,
@@ -7598,6 +7690,7 @@ function restoreTrialSnapshot(snapshot){
 if(snapshot?.version!==1 || !Array.isArray(snapshot.general)){return;}
 if(savedTrialSnapshot && (savedTrialSnapshot.updatedAt || 0)>=(snapshot.updatedAt || 0)){return;}
 perishablesState={vegetal:[...(snapshot.perishablesState?.vegetal||[])],animal:[...(snapshot.perishablesState?.animal||[])],inventory:structuredClone(snapshot.perishablesState?.inventory||{vegetal:{},animal:{}})};
+purchaseOrders=structuredClone(snapshot.purchaseOrders||[]);
 fmgState={products:[...(snapshot.fmgState?.products||[])]};
 restoreTrialForm(form,snapshot.general);
 restoreTrialForm(costsForm,snapshot.costs);
@@ -7651,7 +7744,7 @@ refreshPosLookup();
 refreshDynamics();
 const recoveredCosts=snapshot.purchaseCostPostingVersion!==1&&reconcileLegacyPurchaseCosts();purchaseCostPostingVersion=1;const normalizedPrices=roundingEnabled&&normalizeSavedPrimaryPrices();refreshArticleProperties();refreshInventoryDashboard();if(recoveredCosts||normalizedPrices)queueMicrotask(()=>persistTrialSnapshot());refreshPurchaseProducts();
 savedContactState=snapshot.contactsState || null;restoreContactsState(savedContactState);
-restorePurchaseDraft(snapshot.purchaseDraft);refreshContactLinks();refreshPerishablesProducts();refreshFmgProducts();refreshFmgInventoryViews();
+restorePurchaseDraft(snapshot.purchaseDraft);refreshPurchaseLedger();refreshContactLinks();refreshPerishablesProducts();refreshFmgProducts();refreshFmgInventoryViews();
 const photoDraft=snapshot.articlePhotoDraft,photoRecord=savedTrialProducts.get(photoDraft?.savedBarcode);resetArticlePhoto(photoDraft?.photo||photoRecord?.photo||null,!photoDraft?.photo&&photoRecord?.photoSuspended===true);articlePhotoDirty=Boolean(photoDraft?.photo);
 }
 function initializePos(){
