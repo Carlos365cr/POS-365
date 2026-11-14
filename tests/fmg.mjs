@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
+const source=fs.readFileSync(new URL('../work/cedi-current-inner.html',import.meta.url),'utf8');
+const product={barcode:'0001234567890',code:'P001',name:'Tomate',details:{general:[['referencia','SUP-001',null],['proveedor','supplier-1',null]]}};
+const line={barcode:product.barcode,name:'Tomate histórico',quantity:.5,totalCents:1234,xmlSource:{providerCode:'XML-01'}};
+const purchase={id:'purchase-1',sequence:'00001',invoice:'FAC-001',receivedDate:'2026-11-02',invoiceDate:'2026-10-01',currency:'Colón',supplier:{id:'supplier-1',name:'Proveedor uno'},lines:[line,{...line,quantity:1,totalCents:2468}]};
+const ctx=vm.createContext({Intl,Date,Map,Set,Number,String,Array,Error,cashOutDateISO:v=>/^\d{4}-\d{2}-\d{2}$/.test(v)?v:null,perishableDay:v=>v||'',findArticleByKey:k=>k===product.barcode?product:null,articleRecordKey:p=>p.barcode,purchaseSupplierValue:p=>p.details.general.find(f=>f[0]==='proveedor')[1],trialPurchases:[purchase,{...purchase,id:'purchase-2',sequence:'00002',invoice:'FAC-002',supplier:{id:'supplier-2',name:'Proveedor dos'},lines:[{...line,xmlSource:{providerCode:'XML-02'}}]},{...purchase,id:'void',status:'annulled'}]});
+vm.runInContext(source.slice(source.indexOf('function fmgPurchaseRows('),source.indexOf('function installFmgProducts(')),ctx);
+const report=ctx.fmgPurchaseRows([product.barcode,product.barcode],'2026-11-01','2026-11-30');assert.equal(report.rows.length,2);assert.equal(report.totalCents,4936);
+const a=report.rows.find(r=>r.invoice==='FAC-001');assert.equal(a.quantity,1.5);assert.equal(a.totalCents,3702);assert.equal(a.supplierCode,'XML-01');assert.equal(a.name,'Tomate histórico');assert.equal(a.supplier,'Proveedor uno');assert.equal(report.rows.find(r=>r.invoice==='FAC-002').supplierCode,'XML-02');
+assert.equal(ctx.fmgPurchaseRows([product.barcode],'2026-10-01','2026-10-31').rows.length,0);assert.throws(()=>ctx.fmgPurchaseRows([],'2026-11-10','2026-11-01'),/fechas/);
+ctx.trialPurchases=[{...purchase,lines:[{...line,xmlSource:null}]}];assert.equal(ctx.fmgPurchaseRows([product.barcode],'2026-11-01','2026-11-30').rows[0].supplierCode,'SUP-001');
+ctx.trialPurchases=[{...purchase,supplier:{id:'supplier-2',name:'Otro'},lines:[{...line,xmlSource:null}]}];assert.equal(ctx.fmgPurchaseRows([product.barcode],'2026-11-01','2026-11-30').rows[0].supplierCode,'');
+console.log('PASS: FMG quantities and original totals by product/invoice, received dates, annulments, provider-specific codes and duplicate selection');
