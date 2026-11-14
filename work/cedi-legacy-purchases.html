@@ -2329,6 +2329,7 @@ let cashOutContacts=[];
 let cashOutEntries=[];
 let trialPurchases=[];
 let refreshPurchaseLedger=()=>{};
+let legacyPricesByDay=new Map();
 let trialCompletedSales=[];
 try{const saved=JSON.parse(localStorage.getItem('cedi-pos-trial-sales-v1') || '[]');if(Array.isArray(saved)){trialCompletedSales=saved;}}catch(error){}
 const trialSalesStorage={getItem(){return JSON.stringify(trialCompletedSales);},setItem(key,value){trialCompletedSales=JSON.parse(value);persistTrialSnapshot();}};
@@ -3011,6 +3012,34 @@ const providerCode=String(product.details?.general?.find(field=>field[0]==='refe
 return providerCode===code && (!supplier || [supplier.id,supplier.code,supplier.name].includes(purchaseSupplierValue(product)));
 });
 }
+function indexLegacySalePrices(history){
+ const days=new Map();
+ for(const sale of history){
+  const time=Date.parse(sale.date),day=perishableDay(sale.date);
+  if(!day||!Number.isFinite(time))continue;
+  if(!days.has(day))days.set(day,new Map());
+  const prices=days.get(day);
+  for(const line of sale.lines){
+   const key=line.barcode||line.code;
+   if(!key||!Number.isFinite(line.price)||line.price<0)continue;
+   if(!prices.has(key)||prices.get(key).time<=time)prices.set(key,{time,price:line.price});
+  }
+ }
+ return days;
+}
+function applyLegacySalePrice(row,product){
+ const day=purchasesMain.querySelector('[name=compraRecibido]').value;
+ const prices=legacyPricesByDay.get(day);
+ const keys=product?[articleRecordKey(product),product.barcode,product.code]:[];
+ const match=keys.map(key=>prices?.get(key)).filter(Boolean).sort((a,b)=>b.time-a.time)[0];
+ formatPurchaseNumber(row.querySelector('[aria-label="Precio 1"]'),match?.price??'');
+}
+purchasesMain.querySelector('[name=compraRecibido]').addEventListener('change',()=>{
+ for(const row of purchasesMain.querySelectorAll('.purchase-table tbody tr')){
+  applyLegacySalePrice(row,findArticleByKey(row.dataset.articleKey||row.dataset.productBarcode));
+  refreshPurchaseGain(row);
+ }
+});
 function fillPurchaseProduct(row,interactive=false,chosenProduct=null){
 if(chosenProduct&&articleRecordKey(chosenProduct)!==row.dataset.articleKey){resetPurchaseEntry(row);}
 if(row.dataset.xmlIndex!==undefined&&currentPurchaseXml){return populateXmlPurchaseRow(row,chosenProduct);}
@@ -3027,7 +3056,7 @@ row.dataset.productBarcode=product?.barcode || '';
 const stock=product?getPurchaseAvailableStock(product):null;
 row.querySelector('[aria-label="Existencia"]').value=stock===null?'':String(stock);
 row.querySelector('[aria-label="Precio actual"]').value=typeof product?.price==='number' && Number.isFinite(product.price)?product.price.toFixed(2):'';
-if(row.dataset.excelPriceProvided!=='true'){formatPurchaseNumber(row.querySelector('[aria-label="Precio 1"]'),typeof product?.price==='number' && Number.isFinite(product.price)?product.price:'');}
+if(row.dataset.excelPriceProvided!=='true')applyLegacySalePrice(row,product);
 row.querySelector('[aria-label="Cant. x CJ"]').value=product?String(getProductUnitsPerBox(product)):'';
 const catalogTax=product?cabysCatalog?.get(product.cabys)?.[2]:null;
 const rate=catalogTax==='Exento'?0:typeof catalogTax==='number'?catalogTax:null;
@@ -7740,6 +7769,7 @@ else{input.checked=checked===true;}
 });if(target===form)updateArticleCodeLimit();if(target===costsForm)for(const input of costInputs)formatPurchaseNumber(input);
 }
 function restoreTrialSnapshot(snapshot){
+if(snapshot.legacyPriceHistory)legacyPricesByDay=indexLegacySalePrices(snapshot.legacyPriceHistory);
 if(snapshot?.version!==1 || !Array.isArray(snapshot.general)){return;}
 if(savedTrialSnapshot && (savedTrialSnapshot.updatedAt || 0)>=(snapshot.updatedAt || 0)){return;}
 perishablesState={vegetal:[...(snapshot.perishablesState?.vegetal||[])],animal:[...(snapshot.perishablesState?.animal||[])],inventory:structuredClone(snapshot.perishablesState?.inventory||{vegetal:{},animal:{}})};

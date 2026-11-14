@@ -37,6 +37,9 @@ async function loadShared(){
   const saved=store.parts.length?await decodeStore(store.parts):{};
   const snapshot={...catalog,purchases:saved.purchases??[],purchaseOrders:saved.purchaseOrders??[],
     purchaseDraft:{header:[],rows:[],xmlDocument:null},legacyPurchaseDraft:saved.legacyPurchaseDraft??null,
+    legacyPriceHistory:(catalog.sales||[]).filter(sale=>!['annulled','cancelled','void'].includes(sale.status)).map(sale=>({
+      date:sale.date,lines:(sale.lines||[]).map(({barcode,code,price})=>({barcode,code,price}))
+    })),
     sales:[],cashOutContacts:[],cashOutEntries:[],cxpState:null,xmlInboxState:saved.xmlInboxState??undefined,
     updatedAt:Math.max(saved.updatedAt||0,catalog.updatedAt||0)};
   return {cediShared:true,cediTrial:snapshot};
