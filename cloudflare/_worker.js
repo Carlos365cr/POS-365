@@ -48,7 +48,7 @@ async function verify(token, nonce, failure = {}) {
 }
 function login() {
   const nonce = crypto.randomUUID();
-  return new Response(`<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ingresar a Facturación CEDI</title>
+  return new Response(`<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ingresar a POS 365</title>
 <style>
 *{box-sizing:border-box}body{margin:0;min-height:100svh;display:grid;place-items:center;padding:32px;background:#edf2ed;color:#142e28;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 main{width:min(100%,990px);display:grid;grid-template-columns:1.1fr 1fr;border-radius:24px;overflow:hidden;background:#fff;box-shadow:0 24px 80px #17362a20}
@@ -62,9 +62,9 @@ main{width:min(100%,990px);display:grid;grid-template-columns:1.1fr 1fr;border-r
 .entry{padding:clamp(28px,5vw,64px);align-self:center;min-width:0}.entry h2{margin:0;font-size:clamp(32px,4vw,44px);letter-spacing:-.05em}.entry p{line-height:1.55;color:#51665f}.entry #google{min-height:44px;margin-top:32px}.entry #status{color:#8a331d;font-size:14px}.entry #status:empty{display:none}
 @media(max-width:680px){body{padding:16px}main{grid-template-columns:1fr}.brand{min-height:202px;padding:26px}.art{position:absolute;right:4px;top:8px;transform:rotate(9deg) scale(.66);transform-origin:top right;margin:12px}.brand h1{font-size:32px}.brand p{font-size:14px}.entry{padding:32px 26px 40px}}
 </style>
-<main><section class="brand"><div class="wordmark"><i class="mark" aria-hidden="true"></i>CEDI</div>
-<div class="art" aria-hidden="true"><div class="paper"><b>CEDI</b><div class="lines"></div><div class="bars"></div></div></div>
-<div><h1>Facturación CEDI</h1><p>Ventas, compras e inventario</p></div></section>
+<main><section class="brand"><div class="wordmark"><i class="mark" aria-hidden="true"></i>POS 365</div>
+<div class="art" aria-hidden="true"><div class="paper"><b>POS 365</b><div class="lines"></div><div class="bars"></div></div></div>
+<div><h1>POS 365</h1><p>Ventas, compras e inventario</p></div></section>
 <section class="entry" aria-labelledby="welcome"><h2 id="welcome">Bienvenido</h2><p>Ingresá con tu cuenta de la empresa.</p><div id="google"></div><p id="status" role="status"></p><noscript>Activá JavaScript para iniciar sesión con Google.</noscript></section></main>
 <script nonce="${nonce}">function iniciar(){google.accounts.id.initialize({client_id:'${clientId}',nonce:'${nonce}',callback:async function(r){const status=document.getElementById('status');try{const result=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:r.credential,challenge:'${nonce}'})});if(result.ok){location.replace('/');return}const error=await result.json();status.textContent=error.error || 'Falló la verificación de Google. Volvé a intentarlo.'}catch{status.textContent='Falló la conexión. Intentá otra vez.'}}});google.accounts.id.renderButton(document.getElementById('google'),{type:'standard',locale:'es',size:'large',width:Math.min(360,document.getElementById('google').clientWidth)})}</script>
 <script src="https://accounts.google.com/gsi/client" async onload="iniciar()"></script></html>`,{headers:{'Content-Type':'text/html;charset=UTF-8','Cache-Control':'no-store','Set-Cookie':setCookie(nonceCookie+'_'+nonce,nonce,600),'Cross-Origin-Opener-Policy':'same-origin-allow-popups','Referrer-Policy':'strict-origin-when-cross-origin','X-Frame-Options':'DENY'}});
@@ -75,13 +75,13 @@ export default { async fetch(request, env) {
   if(url.pathname==='/login')return login();
   if(url.pathname==='/auth/login' && request.method==='POST'){
     const {token,challenge}=await request.json();
-    if(typeof challenge!=='string'||!/^[0-9a-f-]{36}$/.test(challenge))return json({error:'Recargá CEDI para actualizar la pantalla de ingreso.'},403);
+    if(typeof challenge!=='string'||!/^[0-9a-f-]{36}$/.test(challenge))return json({error:'Recargá POS 365 para actualizar la pantalla de ingreso.'},403);
     const nonce=cookie(request,nonceCookie+'_'+challenge);
     if(!nonce)return json({error:'La sesión de ingreso venció o el navegador bloqueó su cookie. Abrí la página directamente en Firefox y volvé a entrar.'},403);
     if(request.headers.get('Origin')!==url.origin || request.headers.get('Content-Type')!=='application/json')return json({},403);
     const failure={};
     const claims=await verify(token,nonce,failure);
-    if(!claims)return json({error:failure.message || 'CEDI no pudo verificar la firma o el origen de la identificación de Google.'},403);
+    if(!claims)return json({error:failure.message || 'POS 365 no pudo verificar la firma o el origen de la identificación de Google.'},403);
     const response=json({ok:true});
     response.headers.append('Set-Cookie',setCookie(sessionCookie,token,Math.floor(claims.exp-Date.now()/1000)));
     response.headers.append('Set-Cookie',setCookie(nonceCookie+'_'+challenge,'',0));
@@ -91,7 +91,7 @@ export default { async fetch(request, env) {
     return new Response(null,{status:303,headers:{Location:'/login','Cache-Control':'no-store','Set-Cookie':setCookie(sessionCookie,'',0)}});
   }
   const claims=await verify(cookie(request,sessionCookie));
-  if(!claims)return url.pathname.startsWith('/api/') ? json({error:'Ingresá a CEDI con Google.'},401) : new Response(null,{status:302,headers:{Location:'/login','Cache-Control':'no-store'}});
+  if(!claims)return url.pathname.startsWith('/api/') ? json({error:'Ingresá a POS 365 con Google.'},401) : new Response(null,{status:302,headers:{Location:'/login','Cache-Control':'no-store'}});
   const email=claims.email.toLowerCase();
   if(!url.pathname.startsWith('/api/')){
     const asset=await env.ASSETS.fetch(request);

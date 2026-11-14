@@ -3,7 +3,7 @@ const frame=document.getElementById('codex-visualization');
 async function loadShared(){
   for(let attempt=0;attempt<3;attempt++){
     const response=await fetch('/api/state',{cache:'no-store'});
-    if(!response.ok)throw Error('Se requiere iniciar sesión para abrir CEDI.');
+    if(!response.ok)throw Error('Se requiere iniciar sesión para abrir POS 365.');
     const head=await response.json(),parts=[];
     for(let start=0;start<head.parts;start+=8){
       const response=await fetch('/api/parts?revision='+encodeURIComponent(head.revision)+'&start='+start,{cache:'no-store'});

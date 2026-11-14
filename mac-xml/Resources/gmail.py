@@ -1,4 +1,4 @@
-"""Prueba local de lectura de XML de Gmail para Facturación CEDI."""
+"""Prueba local de lectura de XML de Gmail para POS 365."""
 import datetime as dt
 import email
 import subprocess

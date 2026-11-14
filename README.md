@@ -1,4 +1,4 @@
-# Facturación CEDI
+# POS 365
 
 La interfaz editable está en work/cedi-current-inner.html. Incluye Compras, Facturación POS, Artículos, Cargas XML y diseños. Desde esta carpeta ejecutá:
 
