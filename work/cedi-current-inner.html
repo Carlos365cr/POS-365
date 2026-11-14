@@ -5116,11 +5116,10 @@ const billing=billingLabel.querySelector('select');
 billing.onchange=()=>{
  const supplier=xmlPurchaseSupplier();
  if(!supplier||!currentPurchaseXml)return;
- supplier.xmlBillingUnit=billing.value;
  currentPurchaseXml.billingUnit=billing.value;
  for(const row of purchasesMain.querySelectorAll('tr[data-xml-index]'))applyXmlPurchasePresentation(row);
  const missing=purchasesMain.querySelectorAll('tr[data-xml-box-factor="0"]').length;
- status.textContent=missing?'Revisá la cantidad por caja en Artículos para '+missing+' líneas.':'Presentación aplicada al XML y guardada para '+supplier.name+'.';
+ status.textContent=missing?'Revisá la cantidad por caja en Artículos para '+missing+' líneas.':'Presentación aplicada a esta factura de '+supplier.name+'.';
  persistTrialSnapshot();
 };
 refreshXmlImportStatus=()=>{billing.disabled=!currentPurchaseXml?.supplierId;billing.value=currentPurchaseXml?.billingUnit||'unit';resolve.hidden=!currentPurchaseXml;originalDownload.disabled=!currentPurchaseXml?.originalXml;};
@@ -5136,7 +5135,7 @@ if(matches.length>1){const list=document.createElement('dialog');list.className=
 if(!product&&matches.length===0){const decision=allNew?'yes':await ask('¿Desea crear este producto nuevo?',line.providerCode+' · '+line.name+' · CABYS '+line.cabys,true);if(decision==='all'){allNew=true;}if(decision==='yes'||decision==='all'){product=createXmlPendingProduct(line,supplier.id);}}
 const key=product?xmlProductKey(product):null;data.mapping[index]=key;handled.set(line.providerCode,key);
 }}else{data.supplierId=null;}
-data.billingUnit=data.billingUnit||supplier?.xmlBillingUnit||'unit';loadRows();persistTrialSnapshot();
+data.billingUnit=data.billingUnit||'unit';loadRows();persistTrialSnapshot();
 }
 function loadRows(){const data=currentPurchaseXml;if(!data){return;}const set=(name,value)=>{purchasesMain.querySelector('[name='+name+']').value=value;};set('compraFactura',data.invoice);set('compraFacturaFecha',data.date.slice(0,10));set('compraElectronico',data.key);set('compraTipoCambio',data.exchange);set('compraMoneda','Colón');set('compraCredito',data.condition==='01'?'Contado':data.creditDays+' días');refreshPurchaseSystemDate();
 const body=purchasesMain.querySelector('.purchase-table tbody');body.replaceChildren();selectedPurchaseRow=null;for(const [index,source] of data.rows.entries()){const row=addPurchaseRow();row.dataset.xmlIndex=String(index);const put=(name,value)=>{formatPurchaseNumber(row.querySelector('[aria-label="'+name+'"]'),value);};put('Cantidad',source.quantity);put('Precio lista s/IVA',source.cost);put('Desc. 1 (%)',String(Number(source.discountPercentage)));put('Desc. 2 (%)','0');put('OC',source.originalOC||'0');row.dataset.quantitySource='units';populateXmlPurchaseRow(row);row.dataset.xmlInitialized='true';applyXmlPurchasePresentation(row);}addPurchaseRow();renumberPurchaseRows();updatePurchaseChargeTotal();const missing=data.mapping.filter(id=>!id).length;status.textContent=data.rows.length+' líneas XML cargadas para revisión. El XML se guarda solo al Procesar correctamente. '+(data.supplierId?'Proveedor vinculado.':'Proveedor pendiente: no se puede procesar.')+' '+missing+' líneas sin artículo vinculado. '+(data.rows.some(line=>line.taxDetails?.length>1)?'Las líneas con varios impuestos conservan los importes originales; no cambies su cantidad, costo, descuentos ni OC. ':'')+'Los artículos nuevos quedan en Propiedad artículo → Pendientes por XML.';refreshXmlImportStatus();}
