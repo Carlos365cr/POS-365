@@ -37,7 +37,7 @@ assert.equal((await stage({...edits,id:crypto.randomUUID()})).status,409);
 assert.equal((await stage({id:crypto.randomUUID(),base:current(),count:271,changes:0,finish:true})).status,409);
 
 const draftListeners={},pendingTimers=new Map();let saves=0;
-const draftContext={currentPurchaseXml:{},purchasesMain:{addEventListener:(name,fn)=>draftListeners[name]=fn},clearTimeout:id=>pendingTimers.delete(id),setTimeout:fn=>{pendingTimers.set(1,fn);return 1},persistTrialSnapshot:()=>saves++};
+const draftContext={purchaseModification:null,currentPurchaseXml:{},purchasesMain:{addEventListener:(name,fn)=>draftListeners[name]=fn},clearTimeout:id=>pendingTimers.delete(id),setTimeout:fn=>{pendingTimers.set(1,fn);return 1},persistTrialSnapshot:()=>saves++};
 vm.runInNewContext(inner.slice(inner.indexOf('let purchaseBackupTimer;'),inner.indexOf("window.addEventListener('openai:set_globals'",inner.indexOf('let purchaseBackupTimer;'))),draftContext);
 draftListeners.input();draftListeners.change();assert.equal(pendingTimers.size,0);
 draftContext.currentPurchaseXml=null;draftListeners.input();pendingTimers.get(1)();assert.equal(saves,1);
@@ -64,3 +64,5 @@ loaded=await vm.runInContext('loadShared()',loadContext);
 assert.equal(headReads,2);
 assert.equal(loaded.cediTrialGzip,Array.from({length:50},(_,i)=>i+',').join(''));
 console.log('PASS: three concurrent reads, ordered reconstruction, complete retry after snapshot changes');
+
+draftContext.currentPurchaseXml=null;draftContext.purchaseModification={record:{id:'saved-purchase'}};draftListeners.input();assert.equal(pendingTimers.size,0);assert.equal(saves,1);console.log('PASS: edits to registered purchases remain pending until Process');
