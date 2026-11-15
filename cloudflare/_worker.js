@@ -69,13 +69,6 @@ main{width:min(100%,990px);display:grid;grid-template-columns:1.1fr 1fr;border-r
 <script nonce="${nonce}">function iniciar(){google.accounts.id.initialize({client_id:'${clientId}',nonce:'${nonce}',callback:async function(r){const status=document.getElementById('status');try{const result=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:r.credential,challenge:'${nonce}'})});if(result.ok){location.replace('/');return}const error=await result.json();status.textContent=error.error || 'Falló la verificación de Google. Volvé a intentarlo.'}catch{status.textContent='Falló la conexión. Intentá otra vez.'}}});google.accounts.id.renderButton(document.getElementById('google'),{type:'standard',locale:'es',size:'large',width:Math.min(360,document.getElementById('google').clientWidth)})}</script>
 <script src="https://accounts.google.com/gsi/client" async onload="iniciar()"></script></html>`,{headers:{'Content-Type':'text/html;charset=UTF-8','Cache-Control':'no-store','Set-Cookie':setCookie(nonceCookie+'_'+nonce,nonce,600),'Cross-Origin-Opener-Policy':'same-origin-allow-popups','Referrer-Policy':'strict-origin-when-cross-origin','X-Frame-Options':'DENY'}});
 }
-// Incremental revisions retain the original block namespace across saves.
-function partNamespace(revision){
-  return revision.startsWith('delta:') ? revision.slice(revision.indexOf('|')+1) : revision;
-}
-function readParts(db,revision,start){
-  return db.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?) ORDER BY part LIMIT 8').bind(partNamespace(revision),start,revision).all();
-}
 function saveError(error){
       const kind=String(error.message||'').toLowerCase();
       const reason=/too large|too big|limit|quota/.test(kind)?'La base alcanzó un límite al guardar.':/busy|locked/.test(kind)?'La base estaba ocupada.':'El servicio de base de datos no pudo completar la escritura.';
@@ -99,7 +92,7 @@ async function prepareLegacyCatalog(primary,cache) {
   let offset=0;
   const stream=new ReadableStream({async pull(controller){
     if(offset>=current.parts){controller.close();return;}
-    const {results}=await readParts(primary,current.revision,offset);
+    const {results}=await primary.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? ORDER BY part LIMIT 8').bind(current.revision,offset).all();
     if(!results.length)throw Error('Cambió el catálogo');
     for(const row of results){
       if(row.part!==offset++)throw Error('Catálogo incompleto');
@@ -246,17 +239,16 @@ export default { async fetch(request, env) {
   if(url.pathname==='/api/parts' && request.method==='GET'){
     const start=Number(url.searchParams.get('start')),rev=url.searchParams.get('revision');
     if(!Number.isSafeInteger(start)||start<0||!rev)return json({},400);
-    const {results}=await readParts(db,rev,start);
+    const {results}=await db.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? ORDER BY part LIMIT 8').bind(rev,start).all();
     return json(results);
   }
   // Upload bounded batches first. Only the final transaction publishes a revision.
   if(url.pathname==='/api/save' && request.method==='POST'){
     if(request.headers.get('Origin')!==url.origin || request.headers.get('Content-Type')!=='application/json')return json({},403);
-    const {base,id,count,changes,finish,incremental}=await request.json();
+    const {base,id,count,changes,finish}=await request.json();
     if(typeof base!=='string'||typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id)||!Number.isInteger(count)||count<1||count>1600)return json({},400);
     try{
-      const basis=partNamespace(base);
-      const rev=incremental===true?'delta:'+id+'|'+basis:'save:'+id;
+      const rev='save:'+id;
       const head=await db.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();
       if(head?.revision===rev)return json({revision:rev});
       const conflict=()=>json({error:'La base cambió en otra sesión. Revisá la compra antes de repetirla.'},409);
@@ -270,36 +262,12 @@ export default { async fetch(request, env) {
         return json({staged:true});
       }
       if(!Number.isInteger(changes)||changes<0||changes>count)return json({},400);
-      if(incremental===true){
-        // Move the head only for a complete upload. Readers observe the new head
-        // and changed blocks together, or continue seeing the previous snapshot.
-        const result=await db.batch([
-          db.prepare(`UPDATE cedi_head SET revision=?,parts=?,author=?
-            WHERE id=1 AND revision=?
-              AND (SELECT COUNT(*) FROM cedi_stage WHERE id=?)=?
-              AND NOT EXISTS(SELECT 1 FROM cedi_stage WHERE id=? AND part>=?)
-              AND (SELECT COUNT(*) FROM cedi_parts WHERE revision=? AND part<?)
-                + (SELECT COUNT(*) FROM cedi_stage s WHERE s.id=? AND NOT EXISTS
-                  (SELECT 1 FROM cedi_parts p WHERE p.revision=? AND p.part=s.part))=?`)
-            .bind(rev,count,email,base,key,changes,key,count,basis,count,key,basis,count),
-          db.prepare(`INSERT OR REPLACE INTO cedi_parts SELECT ?,part,payload FROM cedi_stage
-            WHERE id=? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)`).bind(basis,key,rev),
-          db.prepare('DELETE FROM cedi_parts WHERE revision=? AND part>=? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(basis,count,rev),
-          db.prepare('DELETE FROM cedi_stage WHERE id=? OR created<unixepoch()-86400').bind(key)
-        ]);
-        if(!result[0].meta.changes){
-          const now=await db.prepare('SELECT revision FROM cedi_head WHERE id=1').first();
-          if(now?.revision!==rev)return conflict();
-        }
-        return json({revision:rev});
-      }
       // Both copies and the head switch run under the same D1 transaction.
       const results=await db.batch([
-        db.prepare('INSERT INTO cedi_parts SELECT ?,p.part,p.payload FROM cedi_parts p WHERE p.revision=? AND p.part<? AND NOT EXISTS(SELECT 1 FROM cedi_stage s WHERE s.id=? AND s.part=p.part) AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,basis,count,key,base),
+        db.prepare('INSERT INTO cedi_parts SELECT ?,p.part,p.payload FROM cedi_parts p WHERE p.revision=? AND p.part<? AND NOT EXISTS(SELECT 1 FROM cedi_stage s WHERE s.id=? AND s.part=p.part) AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,base,count,key,base),
         db.prepare('INSERT INTO cedi_parts SELECT ?,part,payload FROM cedi_stage WHERE id=? AND part<? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,key,count,base),
         db.prepare('UPDATE cedi_head SET revision=?,parts=?,author=? WHERE id=1 AND revision=? AND (SELECT COUNT(*) FROM cedi_parts WHERE revision=?)=? AND (SELECT COUNT(*) FROM cedi_stage WHERE id=?)=?').bind(rev,count,email,base,rev,count,key,changes),
-        db.prepare('DELETE FROM cedi_parts WHERE revision=? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(basis,rev),
-        db.prepare("DELETE FROM cedi_parts WHERE revision=? AND NOT EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND (revision=? OR (revision LIKE 'delta:%' AND substr(revision,instr(revision,'|')+1)=?)))").bind(rev,rev,rev),
+        db.prepare('DELETE FROM cedi_parts WHERE revision IN (?,?) AND revision<>(SELECT revision FROM cedi_head WHERE id=1)').bind(base,rev),
         db.prepare('DELETE FROM cedi_stage WHERE id=? OR created<unixepoch()-86400').bind(key)
       ]);
       if(!results[2].meta.changes){
@@ -333,7 +301,7 @@ export default { async fetch(request, env) {
     try{
       const statements=[];
       // Copy unchanged blocks inside D1. Each bound JSON array stays below 1 MB.
-      if(changes.length<count)statements.push(db.prepare('INSERT INTO cedi_parts SELECT ?,part,payload FROM cedi_parts WHERE revision=? AND part<? AND part NOT IN (SELECT value FROM json_each(?))').bind(rev,partNamespace(base),count,JSON.stringify([...seen])));
+      if(changes.length<count)statements.push(db.prepare('INSERT INTO cedi_parts SELECT ?,part,payload FROM cedi_parts WHERE revision=? AND part<? AND part NOT IN (SELECT value FROM json_each(?))').bind(rev,base,count,JSON.stringify([...seen])));
       for(let i=0;i<changes.length;i+=8){
         statements.push(db.prepare("INSERT INTO cedi_parts SELECT ?,json_extract(value,'$.part'),json_extract(value,'$.payload') FROM json_each(?)").bind(rev,JSON.stringify(changes.slice(i,i+8))));
       }
@@ -347,7 +315,7 @@ export default { async fetch(request, env) {
       return saveError(error);
     }
     // Cleanup failure must not turn a confirmed commit into an apparent failure.
-    await db.prepare('DELETE FROM cedi_parts WHERE revision=?').bind(partNamespace(base)).run().catch(()=>{});
+    await db.prepare('DELETE FROM cedi_parts WHERE revision=?').bind(base).run().catch(()=>{});
     return json({revision:rev});
   }
   return json({},404);

@@ -151,13 +151,12 @@ window.addEventListener('message',event=>{
     const parts=encoded.match(/.{1,64000}/g)||[];
     const changes=[];
     parts.forEach((payload,part)=>{if(payload!==confirmedParts[part])changes.push({part,payload});});
-    const save={incremental:true,id:crypto.randomUUID(),base:revision,count:parts.length};
+    const save={id:crypto.randomUUID(),base:revision,count:parts.length};
     for(let start=0;start<changes.length;start+=4){
       await sendSaveStep({...save,changes:changes.slice(start,start+4)});
     }
     const result=await sendSaveStep({...save,finish:true,changes:changes.length});
-    const basis=revision.startsWith('delta:')?revision.slice(revision.indexOf('|')+1):revision;
-    if(result.revision!=='delta:'+save.id+'|'+basis&&result.revision!=='save:'+save.id)throw Error('La confirmación del guardado no coincide con la operación.');
+    if(result.revision!=='save:'+save.id)throw Error('La confirmación del guardado no coincide con la operación.');
     revision=result.revision;confirmedParts=parts;latest=updatedAt;reply(true);
   }).catch(e=>{reply(false,e.message);if(!blocked)stop(e.message);});
 });

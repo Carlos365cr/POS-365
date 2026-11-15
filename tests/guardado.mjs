@@ -4,7 +4,7 @@ const worker=(await import('data:text/javascript;base64,'+Buffer.from(src).toStr
 const sql=new DatabaseSync(':memory:');sql.exec("CREATE TABLE cedi_parts(revision,part,payload,PRIMARY KEY(revision,part));CREATE TABLE cedi_head(id PRIMARY KEY,revision,parts,author);INSERT INTO cedi_head VALUES(1,'initial',268,'test')");
 const insert=sql.prepare("INSERT INTO cedi_parts VALUES('initial',?,'AAAA')");for(let i=0;i<268;i++)insert.run(i);
 let fail=false;
-const db={prepare(query){return {bind(...args){this.args=args;return this},first(){return sql.prepare(query).get(...this.args||[])},all(){return {results:sql.prepare(query).all(...this.args||[])}},async run(){return {meta:sql.prepare(query).run(...this.args||[])}}}},async batch(statements){sql.exec('BEGIN');try{if(fail)throw Error('database is locked');const results=[];for(const st of statements)results.push(await st.run());sql.exec('COMMIT');return results}catch(e){sql.exec('ROLLBACK');throw e}}};
+const db={prepare(query){return {bind(...args){this.args=args;return this},first(){return sql.prepare(query).get(...this.args||[])},async run(){return {meta:sql.prepare(query).run(...this.args||[])}}}},async batch(statements){sql.exec('BEGIN');try{if(fail)throw Error('database is locked');const results=[];for(const st of statements)results.push(await st.run());sql.exec('COMMIT');return results}catch(e){sql.exec('ROLLBACK');throw e}}};
 const put=body=>worker.fetch(new Request('https://cedi.test/api/state',{method:'PUT',headers:{Origin:'https://cedi.test','Content-Type':'application/json'},body:JSON.stringify(body)}),{DB:db});
 const body={base:'initial',count:269,changes:[{part:0,payload:'BBBB'},{part:268,payload:'CCCC'}]};
 let response=await put(body);assert.equal(response.status,200);const {revision}=await response.json();
@@ -66,30 +66,3 @@ assert.equal(loaded.cediTrialGzip,Array.from({length:50},(_,i)=>i+',').join(''))
 console.log('PASS: three concurrent reads, ordered reconstruction, complete retry after snapshot changes');
 
 draftContext.currentPurchaseXml=null;draftContext.purchaseModification={record:{id:'saved-purchase'}};draftListeners.input();assert.equal(pendingTimers.size,0);assert.equal(saves,1);console.log('PASS: edits to registered purchases remain pending until Process');
-
-
-const writeCount=()=>sql.prepare('SELECT total_changes() AS n').get().n;
-async function oneBlock(incremental){
-  const args={incremental,id:crypto.randomUUID(),base:current(),count:270};
-  const before=writeCount();
-  assert.equal((await stage({...args,changes:[{part:150,payload:incremental?'EEEE':'FFFF'}]})).status,200);
-  const finish={...args,changes:1,finish:true};
-  assert.equal((await stage(finish)).status,200);
-  const writes=writeCount()-before;
-  assert.equal((await stage(finish)).status,200);
-  return writes;
-}
-const oldWrites=await oneBlock(false), previous=current(), newWrites=await oneBlock(true);
-assert.equal(newWrites,4);
-assert.ok(oldWrites>500);
-const readPage=async(revision,start)=>(await worker.fetch(new Request('https://cedi.test/api/parts?'+new URLSearchParams({revision,start})),{DB:db})).json();
-assert.deepEqual(await readPage(previous,148),[]);
-assert.equal((await readPage(current(),148))[2].payload,'EEEE');
-const shrink={incremental:true,id:crypto.randomUUID(),base:current(),count:160,changes:0,finish:true};
-fail=true;assert.equal((await stage(shrink)).status,503);assert.equal(current(),shrink.base);
-fail=false;assert.equal((await stage(shrink)).status,200);assert.equal(sql.prepare('SELECT COUNT(*) n FROM cedi_parts').get().n,160);
-assert.equal((await stage({...shrink,id:crypto.randomUUID()})).status,409);
-assert.equal((await stage({...shrink,id:crypto.randomUUID(),base:current(),count:161})).status,409);
-assert.equal((await put({base:current(),count:160,changes:[{part:0,payload:'GGGG'}]})).status,200);
-assert.equal((await readPage(current(),0))[0].payload,'GGGG');
-console.log('Cambio de un bloque entre 270, filas modificadas en SQLite:',oldWrites,'antes,',newWrites,'ahora.');
