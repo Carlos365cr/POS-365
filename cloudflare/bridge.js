@@ -79,6 +79,26 @@ function stop(message){
   text.textContent=message;button.textContent='Volver a cargar';button.onclick=()=>location.reload();
   panel.append(text,button);document.body.append(panel);panel.showModal();panel.oncancel=e=>e.preventDefault();
 }
+let cachedPrintRevision,cachedPrintModels;
+window.addEventListener('message',async event=>{
+  if(event.source!==frame.contentWindow||event.data?.type!=='cedi-read-print-models')return;
+  const id=event.data.id;
+  const reply=data=>frame.contentWindow.postMessage({type:'cedi-print-models',id,...data},'*');
+  try{
+    await queue;
+    const response=await fetch('/api/state',{cache:'no-store'});
+    if(!response.ok)throw Error();
+    const head=await response.json();
+    if(storePrefix==='/api'&&head.revision===revision){reply({current:true});return;}
+    if(cachedPrintRevision!==head.revision){
+      const store=await readStore('/api');
+      const state=await decodeStore(store.parts);
+      cachedPrintModels=state.printDesigns?.printModels||{};
+      cachedPrintRevision=store.revision;
+    }
+    reply({models:cachedPrintModels});
+  }catch{reply({error:true});}
+});
 const pendingPrices=new Map();
 window.addEventListener('message',async event=>{
   if(storePrefix==='/api'||event.source!==frame.contentWindow||event.data?.type!=='cedi-legacy-price')return;
