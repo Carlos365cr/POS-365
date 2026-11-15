@@ -5738,7 +5738,11 @@ function installDesignFontSize(input,selectedItem,draw,persist){
   const item=selectedItem();
   if(input.disabled||!item||!Number.isFinite(size)||size<Number(input.min)||size>Number(input.max))return false;
   item.size=size;
-  if(item.key==='Nombre del producto')item.autoFit=false;
+  if(item.key==='Nombre del producto'){
+   item.autoFit=true;
+   item.maxFontPt=size;
+   item.minFontPt=Math.min(item.minFontPt??8,size);
+  }
   draw();persist();return true;
  }
  input.oninput=()=>{if(input.value!==''&&input.validity.valid)apply(input.valueAsNumber);};
