@@ -6363,17 +6363,60 @@ function installPriceLookup(){
  dialog.querySelector('[data-price-print-style]').onchange=focusPriceQuery;
  query.addEventListener('focus',()=>query.select());
  query.addEventListener('click',()=>query.select());
- query.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();event.stopPropagation();if(!event.repeat){search();}}});
- query.oninput=()=>{
+ let scanTimer=null,scanEdited=false;
+ function cancelScan(){
+  clearTimeout(scanTimer);scanTimer=null;scanEdited=false;
+ }
+ function listTypedMatches(){
   clearResult();matches=priceMatches(query.value.trim());page=0;matchesPanel.hidden=false;pickerQuery.value=query.value;renderMatches();
   status.textContent=matches.length?'Seleccioná un artículo de la lista.':'No se encontraron artículos.';
+ }
+ function finishScan(){
+  cancelScan();
+  const code=query.value.trim();
+  if(!code){openPricePicker();return;}
+  const exact=resolveArticleCodes(code);
+  if(exact.length===1){showProduct(exact[0]);return;}
+  listTypedMatches();
+  focusPriceQuery();
+ }
+ query.addEventListener('keydown',event=>{
+  if(event.isComposing||event.shiftKey||event.ctrlKey||event.metaKey||event.altKey)return;
+  const handheld=dialog.classList.contains('handheld-lookup');
+  if(event.key!=='Enter'&&!(handheld&&event.key==='Tab'&&scanEdited))return;
+  event.preventDefault();event.stopPropagation();
+  if(!event.repeat){if(handheld&&query.value.trim())finishScan();else search();}
+ });
+ query.oninput=()=>{
+  if(!dialog.classList.contains('handheld-lookup')){listTypedMatches();return;}
+  clearTimeout(scanTimer);scanEdited=true;
+  scanTimer=setTimeout(()=>{
+   scanTimer=null;
+   if(!dialog.open||document.activeElement!==query)return;
+   const code=query.value.trim();
+   const exact=code?resolveArticleCodes(code):[];
+   if(exact.length===1){showProduct(exact[0]);}
+   else{listTypedMatches();if(!matches.length&&code)query.select();}
+  },220);
  };
+ query.addEventListener('blur',cancelScan);
+ dialog.addEventListener('click',event=>{
+  if(dialog.classList.contains('handheld-lookup')&&!event.target.closest('input,textarea,select,button,label,summary,a,.price-label-preview-dialog,.price-print-outcome'))focusPriceQuery();
+ });
+ dialog.addEventListener('keydown',event=>{
+  if(!dialog.classList.contains('handheld-lookup')||event.defaultPrevented||event.isComposing||event.ctrlKey||event.altKey||event.metaKey||event.key.length!==1||event.key===' ')return;
+  if(event.target.closest('input,textarea,select,[contenteditable=true],.price-label-preview-dialog,.price-print-outcome'))return;
+  event.preventDefault();focusPriceQuery();query.value=event.key;query.oninput();
+ });
+ dialog.querySelector('[data-price-preview]').addEventListener('change',()=>{
+  if(dialog.classList.contains('handheld-lookup'))focusPriceQuery();
+ });
  dialog.querySelector('[data-price-prev]').onclick=()=>{page--;renderMatches();};dialog.querySelector('[data-price-next]').onclick=()=>{page++;renderMatches();};
  dialog.querySelector('[data-price-close]').onclick=()=>{if(printPending){status.textContent='Confirmá el resultado de la impresión para continuar.';return;}dialog.close();};
  dialog.addEventListener('cancel',event=>{event.preventDefault();if(!printPending)dialog.close();});
  dialog.addEventListener('keydown',event=>{if(event.target.closest('.price-label-preview-dialog,.price-print-outcome'))return;if(event.key==='F2'&&!event.altKey&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey){event.preventDefault();event.stopImmediatePropagation();if(!event.repeat){openPricePicker();}return;}if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();if(printPending)return;if(!matchesPanel.hidden){matchesPanel.hidden=true;focusPriceQuery();}else{dialog.close();}}},true);
  dialog.addEventListener('close',()=>{
-  clearResult();matchesPanel.hidden=true;
+  cancelScan();clearResult();matchesPanel.hidden=true;
   if(dialog.classList.contains('handheld-lookup'))homeMenu.click();
   if(returnFocus?.isConnected){returnFocus.focus();if(returnSelection&&typeof returnFocus.setSelectionRange==='function'){returnFocus.setSelectionRange(...returnSelection);}}
  });
