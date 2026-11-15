@@ -4788,8 +4788,8 @@ function setExitType(value){value=String(value || '');selectedExitType=value?{va
 function chooseType(item){setExitType(typeLabel(item));suppressTypeFocus=true;exitType.focus();suppressTypeFocus=false;exitType.select();}
 function renderType(){
 typeList.replaceChildren();typePanel.querySelector('[data-type-count]').textContent=typeMatches.length+' opciones';typePanel.querySelector('[data-type-empty]').hidden=typeMatches.length!==0;
-typeMatches.forEach((item,index)=>{const button=document.createElement('button');button.type='button';button.className='cursor-interaction';button.id='cash-type-option-'+index;button.setAttribute('role','option');button.setAttribute('aria-selected',String(index===typeIndex));const code=document.createElement('span');code.className='cash-type-code';code.textContent=item[0];const description=document.createElement('span');description.textContent=item[1];button.append(code,description);button.onclick=()=>chooseType(item);typeList.append(button);});
-typePanel.hidden=false;positionCashOutMatches(typePanel,exitType);exitType.setAttribute('aria-expanded','true');if(typeMatches.length){exitType.setAttribute('aria-activedescendant','cash-type-option-'+typeIndex);}else{exitType.removeAttribute('aria-activedescendant');}
+typeMatches.forEach((item,index)=>{const button=document.createElement('button');button.type='button';button.className='cursor-interaction';button.id='cash-type-option-'+index;button.setAttribute('role','option');button.setAttribute('aria-selected',String(index===typeIndex));const code=document.createElement('span');code.className='cash-type-code';code.textContent=item[0];const description=document.createElement('span');description.textContent=item[1];button.append(code,description);button.onmousedown=event=>{if(event.button===0)event.preventDefault();};button.onclick=()=>chooseType(item);typeList.append(button);});
+typePanel.hidden=false;positionCashOutMatches(typePanel,exitType);typePanel.scrollTop=0;exitType.setAttribute('aria-expanded','true');if(typeMatches.length){exitType.setAttribute('aria-activedescendant','cash-type-option-'+typeIndex);}else{exitType.removeAttribute('aria-activedescendant');}
 }
 function searchType(){const query=selectedExitType && exitType.value===selectedExitType.value?'':normalize(exitType.value);typeMatches=cashOutTypeCatalog.filter(item=>normalize(typeLabel(item)).includes(query));typeIndex=0;renderType();}
 exitType.addEventListener('focus',()=>{if(!exitType.readOnly && !suppressTypeFocus){searchType();}});
@@ -4798,7 +4798,16 @@ main.querySelector('[data-type-lookup]').addEventListener('focusout',()=>queueMi
 exitType.addEventListener('keydown',event=>{
 if(exitType.readOnly){return;}
 if(event.key==='Escape'){event.preventDefault();hideType();return;}
-if(['ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();if(typePanel.hidden){searchType();}else if(typeMatches.length){typeIndex=Math.max(0,Math.min(typeMatches.length-1,typeIndex+(event.key==='ArrowDown'?1:-1)));renderType();}return;}
+if(['ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();if(typePanel.hidden){searchType();}else if(typeMatches.length){const previous=typeList.children[typeIndex];
+previous.setAttribute('aria-selected','false');
+typeIndex=Math.max(0,Math.min(typeMatches.length-1,typeIndex+(event.key==='ArrowDown'?1:-1)));
+const option=typeList.children[typeIndex];
+option.setAttribute('aria-selected','true');
+exitType.setAttribute('aria-activedescendant',option.id);
+const bounds=option.getBoundingClientRect(),top=typePanel.getBoundingClientRect().top+typePanel.clientTop,bottom=top+typePanel.clientHeight;
+if(bounds.bottom>bottom)typePanel.scrollTop+=bounds.bottom-bottom;
+else if(bounds.top<top)typePanel.scrollTop-=top-bounds.top;
+}return;}
 if(event.key==='Enter'){
 event.preventDefault();event.stopPropagation();if(event.repeat){return;}
 if(typePanel.hidden && ((!exitType.value.trim()) || (selectedExitType && selectedExitType.value===exitType.value))){reference.focus();return;}
