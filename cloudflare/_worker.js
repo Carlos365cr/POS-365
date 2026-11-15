@@ -72,7 +72,7 @@ main{width:min(100%,990px);display:grid;grid-template-columns:1.1fr 1fr;border-r
 function saveError(error){
       const kind=String(error.message||'').toLowerCase();
       const reason=/too large|too big|limit|quota/.test(kind)?'La base alcanzó un límite al guardar.':/busy|locked/.test(kind)?'La base estaba ocupada.':'El servicio de base de datos no pudo completar la escritura.';
-      return json({error:reason+' Consultá Compras registradas antes de reintentar.'},503);
+      return json({error:reason+' Verificá el último registro guardado antes de reintentar.'},503);
 }
 // Derived read model. The primary snapshot remains authoritative. A generation
 // becomes visible only after every catalog part and price row has been written.
@@ -258,7 +258,7 @@ export default { async fetch(request, env) {
       const key=email+'|'+base+'|'+id;
       if(finish!==true){
         if(!Array.isArray(changes)||!changes.length||changes.length>4||changes.some(c=>!c||!Number.isInteger(c.part)||c.part<0||c.part>=count||typeof c.payload!=='string'||!c.payload.length||c.payload.length>64000||!/^[A-Za-z0-9+/]+=*$/.test(c.payload)))return json({},400);
-        await db.prepare("INSERT OR REPLACE INTO cedi_stage SELECT ?,json_extract(value,'$.part'),json_extract(value,'$.payload'),unixepoch() FROM json_each(?)").bind(key,JSON.stringify(changes)).run();
+        await db.batch(changes.map(({part,payload})=>db.prepare('INSERT OR REPLACE INTO cedi_stage (id,part,payload,created) VALUES (?,?,?,unixepoch())').bind(key,part,payload)));
         return json({staged:true});
       }
       if(!Number.isInteger(changes)||changes<0||changes>count)return json({},400);

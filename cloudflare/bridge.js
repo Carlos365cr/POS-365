@@ -126,11 +126,11 @@ async function sendSaveStep(body){
       response=await fetch(storePrefix+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       if(response.ok)return await response.json();
     }catch{
-      if(attempt===2)throw Error('Se perdió la conexión al guardar. Consultá Compras registradas antes de reintentar.');
+      if(attempt===2)throw Error('Se perdió la conexión al guardar. Verificá el último registro guardado antes de reintentar.');
     }
     if(response && (attempt===2 || ![429,500,502,503,504].includes(response.status))){
       const details=await response.json().catch(()=>({}));
-      throw Error(details.error || 'El servidor no confirmó el guardado. Consultá Compras registradas antes de reintentar.');
+      throw Error(details.error || 'El servidor no confirmó el guardado. Verificá el último registro guardado antes de reintentar.');
     }
     await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));
   }
