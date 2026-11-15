@@ -5645,14 +5645,20 @@ function installPrintDesigns(){
  let saveInProgress=false,saveCaller=null;
  function designSaveResult(success,message){saveResult.querySelector('h3').textContent=success===null?'Guardando diseño…':success?'Se ha guardado exitosamente':'No se pudo guardar';saveResult.querySelector('[data-design-save-message]').textContent=message;saveResult.querySelector('[data-design-save-return]').disabled=success===null;if(!saveResult.open)saveResult.showModal();if(success!==null)saveResult.querySelector('[data-design-save-return]').focus();}
  saveResult.querySelector('[data-design-save-return]').onclick=()=>saveResult.close();saveResult.addEventListener('cancel',event=>{if(saveInProgress)event.preventDefault();});saveResult.addEventListener('close',()=>{if(saveCaller?.isConnected)saveCaller.focus();});
+ let designDraftTimer;
+ function scheduleDesignDraftSave(){
+  clearTimeout(designDraftTimer);
+  designDraftTimer=setTimeout(()=>persistTrialSnapshot(),1500);
+ }
  function persistDesignAndConfirm(){
+  clearTimeout(designDraftTimer);
   if(window.parent===window){const stamp=persistTrialSnapshot(true);try{const local=JSON.parse(localStorage.getItem(trialStorageKey));if(local?.updatedAt===stamp)return Promise.resolve();}catch(error){}return Promise.reject(new Error('No se pudo confirmar el guardado local. Conservá una copia desde Respaldo.'));}
   return new Promise((resolve,reject)=>{let stamp;const finish=error=>{clearTimeout(timer);window.removeEventListener('message',listener);error?reject(error):resolve();};const listener=event=>{if(event.source!==window.parent||event.data?.type!=='cedi-trial-state-saved'||event.data.updatedAt!==stamp)return;finish(event.data.ok===true?null:new Error(event.data.reason||'No se pudo confirmar el guardado del diseño.'));};const timer=sharedPurchaseStorage?null:setTimeout(()=>finish(new Error('No se pudo confirmar el guardado. Revisá el almacenamiento del navegador y volvé a intentar.')),12000);window.addEventListener('message',listener);try{stamp=persistTrialSnapshot(true);}catch(error){finish(error);}});
  }
  const item=document.createElement('button');item.type='button';item.className='menu-item cursor-interaction';item.textContent='Diseños';menu.append(item);
  for(const other of menu.querySelectorAll('.menu-item')){if(other===item)continue;const previous=other.onclick;other.onclick=function(...args){main.hidden=true;item.classList.remove('selected');return previous?.apply(this,args);};}
  item.onclick=()=>{showConfiguration(false);for(const view of Array.from(root.children).filter(v=>v.tagName==='MAIN'))view.hidden=view!==main;menu.querySelectorAll('.menu-item').forEach(button=>{button.classList.remove('selected');button.removeAttribute('aria-current');});main.hidden=false;item.classList.add('selected');item.setAttribute('aria-current','page');};
- const designHost={get widgetState(){return {privateContent:{schema:'cedi-label-designs-v1',designs:printEditorDrafts,printModels:printActiveDesigns}};},setWidgetState(value){const data=value.privateContent;cediValidatePrintDesigns({version:1,designs:data.designs,printModels:data.printModels});persistTrialSnapshot();return Promise.resolve();}};
+ const designHost={get widgetState(){return {privateContent:{schema:'cedi-label-designs-v1',designs:printEditorDrafts,printModels:printActiveDesigns}};},setWidgetState(value){const data=value.privateContent;cediValidatePrintDesigns({version:1,designs:data.designs,printModels:data.printModels});scheduleDesignDraftSave();return Promise.resolve();}};
 
 for(const paper of ['label','handheld']){const root=document.getElementById('cedi-design-normal'+(paper==='handheld'?'-handheld':'')),q=s=>root.querySelector(s),canvas=q('#ds-canvas');
 const fields=[['Nombre del producto','CAFÉ MOLIDO 250 g'],['Precio','₡2 250,00'],['IVA %','IVA 13 %'],['Código de barras','7440000000014'],['Código interno','000125'],['Proveedor','Distribuidora Central'],['Fecha','Fecha: 11/11/2026'],['Texto libre','Oferta de la semana'],['Código proveedor','PROV-0125'],['Código CABYS','2391200000000'],['Volumen / contenido','250'],['Unidad de medida','g'],['Barras para escanear','7440000000014'],['Precio por unidad de medida','Precio X medida ₡9,00 g']];
