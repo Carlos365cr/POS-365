@@ -6093,14 +6093,10 @@ function installPriceLookup(){
  const formatMarker=document.createComment('Formato en F12');
  formatLabel.before(formatMarker);
  formatSelect.add(new Option('Handheld','Handheld'));
- let desktopFormat=formatSelect.value;
  function positionPrintActions(handheld){
-  if(handheld){
-   if(formatMarker.nextSibling===formatLabel)desktopFormat=formatSelect.value;
-   dialog.querySelector('[data-price-close]').after(formatLabel);formatSelect.value='Handheld';
-  }else if(formatMarker.nextSibling!==formatLabel){
-   formatMarker.after(formatLabel);formatSelect.value=desktopFormat;
-  }
+  if(handheld)dialog.querySelector('[data-price-close]').after(formatLabel);
+  else formatMarker.after(formatLabel);
+  formatSelect.value=handheld?'Handheld':'ETIQUETA';
   if(handheld)dialog.querySelector('.price-lookup-photo').after(handheldActions);
   for(const {control,marker} of printActions){
    if(handheld)handheldActions.append(control);
