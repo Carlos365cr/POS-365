@@ -6035,6 +6035,7 @@ function installPriceLookup(){
  #articulos-cedi .handheld-lookup > header h3{grid-column:1/-1}
  #articulos-cedi .handheld-lookup > header label{min-width:0}
  #articulos-cedi .handheld-lookup > header select{display:block}
+ #articulos-cedi .handheld-lookup [hidden]{display:none!important}
  #articulos-cedi .handheld-lookup .price-lookup-content{min-width:0}
  #articulos-cedi .handheld-lookup form.price-lookup-search,#articulos-cedi .handheld-lookup .price-lookup-print-controls{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch}
  #articulos-cedi .handheld-lookup .price-lookup-print-controls label{min-width:0}
@@ -6113,7 +6114,7 @@ function installPriceLookup(){
  previewCheck.onchange=()=>{printDesignService.setPreview(previewCheck.checked);};
  dialog.querySelector('[data-price-print]').onclick=()=>{
   if(!printList.size||printPending)return;
-  try{const batch=buildPrintBatch();if(previewCheck.checked){previewBatch=batch;printPreview.querySelector('iframe').srcdoc=cediPrintPreviewHtml(batch);printPreview.querySelector('[data-label-preview-count]').textContent=batch.count+' productos · '+dialog.querySelector('[data-price-print-style]').value;printPreview.showModal();printPreview.querySelector('[data-label-preview-close]').focus();}else{requestBatchPrint(batch);}}catch(error){status.textContent=error.message;}
+  try{const batch=buildPrintBatch();if(dialog.classList.contains('handheld-lookup')||previewCheck.checked){previewBatch=batch;printPreview.querySelector('iframe').srcdoc=cediPrintPreviewHtml(batch);printPreview.querySelector('[data-label-preview-count]').textContent=batch.count+' productos · '+dialog.querySelector('[data-price-print-style]').value;printPreview.showModal();printPreview.querySelector('[data-label-preview-close]').focus();}else{requestBatchPrint(batch);}}catch(error){status.textContent=error.message;}
  };
  printPreview.querySelector('[data-label-preview-close]').onclick=()=>printPreview.close();
  printPreview.querySelector('[data-label-preview-print]').onclick=()=>{const batch=previewBatch;printPreview.close();if(batch)requestBatchPrint(batch);};
@@ -6273,6 +6274,9 @@ function installPriceLookup(){
  function openLookup(fromPos,handheld=false){
   dialog.classList.toggle('handheld-lookup',handheld);
   positionPrintActions(handheld);
+  previewCheck.closest('label').hidden=handheld;
+  dialog.querySelector('[data-price-preview-note]').hidden=handheld;
+  printPreview.querySelector('footer').hidden=handheld;
   dialog.querySelector('#price-lookup-title').textContent=handheld?'Handheld · Consulta de precios':'Consulta de precios F12';
   returnFocus=handheld?handheldMenu:document.activeElement;if(!returnFocus||returnFocus===document.body){returnFocus=fromPos?posMain.querySelector('#cedi-pos-entry [name=codigo]'):homeMenu;}
   returnSelection=typeof returnFocus.selectionStart==='number'?[returnFocus.selectionStart,returnFocus.selectionEnd]:null;
