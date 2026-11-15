@@ -5986,7 +5986,7 @@ main.addEventListener('cedi:design-state',e=>{const incomingAll=e.detail?.global
   for(const key of Object.keys(printActiveDesigns))delete printActiveDesigns[key];Object.assign(printActiveDesigns,clone({...initialModels,...models}));previewEnabled=state?.previewEnabled!==false;closingPrinting=state?.closingDesign?.printing==='letter'?'letter':'label';closing.querySelector('[data-closing-print]').value=closingPrinting;
   main.dispatchEvent(new CustomEvent('cedi:design-state',{detail:{globals:{widgetState:designHost.widgetState}}}));
  };
- function renderBatch(products,printing){
+ function renderBatch(products,printing,handheldLabel=false){
   if(!products.length)throw new Error('La lista de impresión está vacía.');
   const holder=document.createElement('div'),rules=[],today=costaRicaDay();holder.className='cedi-label-batch';
   const measuring=document.createElement('div');measuring.style.cssText='position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none';root.append(measuring);
@@ -6017,6 +6017,19 @@ main.addEventListener('cedi:design-state',e=>{const incomingAll=e.detail?.global
     holder.append(sheet);
    }
    measuring.append(holder);for(const name of holder.querySelectorAll('[data-cedi-auto-fit]'))cediFitPrintedName(name);
+   if(handheldLabel && printing==='ETIQUETA'){
+    for(const design of [...holder.children]){
+     const width=parseFloat(design.style.width),height=parseFloat(design.style.height);
+     const scale=Math.min(80/width,45/height);
+     const label=document.createElement('section');
+     label.className='cedi-label-sheet';
+     label.style.cssText='position:relative;width:80mm;height:45mm;overflow:hidden;background:white;page:handheld-label;break-after:page';
+     design.replaceWith(label);label.append(design);
+     design.className='cedi-handheld-design';
+     Object.assign(design.style,{position:'absolute',left:(80-width*scale)/2+'mm',top:(45-height*scale)/2+'mm',transformOrigin:'top left',transform:'scale('+scale+')',page:'auto',breakAfter:'auto'});
+    }
+    rules.push('@page handheld-label{size:80mm 45mm;margin:0}');
+   }
    const css='html,body{margin:0;padding:0;background:#ffffff;color:#000000}.cedi-label-sheet{print-color-adjust:exact;-webkit-print-color-adjust:exact}.cedi-label-sheet:last-child{break-after:auto}'+[...new Set(rules)].join('');
    return {html:'<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Consulta de precios F12 · Impresión</title><style>'+css+'</style></head><body>'+holder.outerHTML+'</body></html>',markup:holder.outerHTML,css,count:products.length,barcodes:products.map(p=>articleRecordKey(p))};
   }finally{measuring.remove();}
@@ -6087,7 +6100,7 @@ function installPriceLookup(){
  const printStyle=document.createElement('style');printStyle.textContent='#articulos-cedi .price-label-preview-dialog{width:min(1100px,92vw);max-height:92dvh;overflow:auto}#articulos-cedi .price-label-preview-dialog iframe{display:block;width:100%;height:65dvh;min-width:0;max-width:100%;box-sizing:border-box;border:1px solid var(--line);background:white}#articulos-cedi .price-lookup-print-controls label.price-preview-check{display:flex;align-items:center;gap:7px;min-width:0}#articulos-cedi .price-preview-check input{width:auto}#articulos-cedi .price-label-preview-dialog header,#articulos-cedi .price-label-preview-dialog footer,#articulos-cedi .price-print-outcome footer{display:flex;justify-content:space-between;gap:10px;margin:12px 0}';root.append(printStyle);
  function buildPrintBatch(){
   const products=[...printList].map(barcode=>findArticleByKey(barcode));if(products.some(product=>!product))throw new Error('Un artículo de la lista ya no existe. Limpiá la lista y seleccioná nuevamente.');
-  return printDesignService.renderBatch(products,dialog.querySelector('[data-price-print-style]').value);
+  return printDesignService.renderBatch(products,dialog.querySelector('[data-price-print-style]').value,dialog.classList.contains('handheld-lookup'));
  }
  function printReturned(ok,error){
   clearTimeout(printBridgeTimer);if(!printPending)return;
