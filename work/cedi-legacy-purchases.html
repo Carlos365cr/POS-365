@@ -6228,11 +6228,12 @@ function installPriceLookup(){
   return {control,marker};
  });
  const formatLabel=dialog.querySelector('[data-price-print-style]').closest('label');
- const formatMarker=document.createComment('Formato de impresión en F12');
- formatLabel.before(formatMarker);
+ const handheldFormat=document.createElement('span');
+ handheldFormat.textContent='Impresión Handheld';
+ dialog.querySelector('[data-price-close]').after(handheldFormat);
  function positionPrintActions(handheld){
-  if(handheld)dialog.querySelector('[data-price-close]').after(formatLabel);
-  else formatMarker.after(formatLabel);
+  formatLabel.hidden=handheld;
+  handheldFormat.hidden=!handheld;
   if(handheld)dialog.querySelector('.price-lookup-photo').after(handheldActions);
   for(const {control,marker} of printActions){
    if(handheld)handheldActions.append(control);
@@ -6250,7 +6251,8 @@ function installPriceLookup(){
  const printStyle=document.createElement('style');printStyle.textContent='#articulos-cedi .price-label-preview-dialog{width:min(1100px,92vw);max-height:92dvh;overflow:auto}#articulos-cedi .price-label-preview-dialog iframe{display:block;width:100%;height:65dvh;min-width:0;max-width:100%;box-sizing:border-box;border:1px solid var(--line);background:white}#articulos-cedi .price-lookup-print-controls label.price-preview-check{display:flex;align-items:center;gap:7px;min-width:0}#articulos-cedi .price-preview-check input{width:auto}#articulos-cedi .price-label-preview-dialog header,#articulos-cedi .price-label-preview-dialog footer,#articulos-cedi .price-print-outcome footer{display:flex;justify-content:space-between;gap:10px;margin:12px 0}';root.append(printStyle);
  function buildPrintBatch(){
   const products=[...printList].map(barcode=>findArticleByKey(barcode));if(products.some(product=>!product))throw new Error('Un artículo de la lista ya no existe. Limpiá la lista y seleccioná nuevamente.');
-  return printDesignService.renderBatch(products,dialog.querySelector('[data-price-print-style]').value,dialog.classList.contains('handheld-lookup'));
+  const handheld=dialog.classList.contains('handheld-lookup');
+  return printDesignService.renderBatch(products,handheld?'ETIQUETA':dialog.querySelector('[data-price-print-style]').value,handheld);
  }
  function printReturned(ok,error){
   clearTimeout(printBridgeTimer);if(!printPending)return;
@@ -6277,7 +6279,7 @@ function installPriceLookup(){
  previewCheck.onchange=()=>{printDesignService.setPreview(previewCheck.checked);};
  dialog.querySelector('[data-price-print]').onclick=()=>{
   if(!printList.size||printPending)return;
-  try{const batch=buildPrintBatch();if(dialog.classList.contains('handheld-lookup')||previewCheck.checked){previewBatch=batch;printPreview.querySelector('iframe').srcdoc=cediPrintPreviewHtml(batch);printPreview.querySelector('[data-label-preview-count]').textContent=batch.count+' productos · '+dialog.querySelector('[data-price-print-style]').value;printPreview.showModal();printPreview.querySelector('[data-label-preview-close]').focus();}else{requestBatchPrint(batch);}}catch(error){status.textContent=error.message;}
+  try{const batch=buildPrintBatch();if(dialog.classList.contains('handheld-lookup')||previewCheck.checked){previewBatch=batch;printPreview.querySelector('iframe').srcdoc=cediPrintPreviewHtml(batch);printPreview.querySelector('[data-label-preview-count]').textContent=batch.count+' productos · '+(dialog.classList.contains('handheld-lookup')?handheldFormat.textContent:dialog.querySelector('[data-price-print-style]').value);printPreview.showModal();printPreview.querySelector('[data-label-preview-close]').focus();}else{requestBatchPrint(batch);}}catch(error){status.textContent=error.message;}
  };
  printPreview.querySelector('[data-label-preview-close]').onclick=()=>printPreview.close();
  printPreview.querySelector('[data-label-preview-print]').onclick=()=>{const batch=previewBatch;printPreview.close();if(batch)requestBatchPrint(batch);};
