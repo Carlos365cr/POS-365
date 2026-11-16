@@ -7071,22 +7071,16 @@ function installUserDirectory(panel){
  }
  const actions=document.createElement('div');actions.className='actions';actions.style.flexWrap='wrap';
  const buttons={};
- for(const label of ['Agregar','Modificar','Eliminar','Suspender']){
-  const button=document.createElement('button');button.type=label==='Agregar'?'submit':'button';button.textContent=label;buttons[label]=button;actions.append(button);
+ for(const label of ['Guardar','Modificar']){
+  const button=document.createElement('button');button.type=label==='Guardar'?'submit':'button';button.textContent=label;buttons[label]=button;actions.append(button);
  }
- const confirmDelete=document.createElement('dialog');
- confirmDelete.className='cabys-dialog';
- confirmDelete.innerHTML='<p></p><button type="button" data-cancel>Cancelar</button> <button type="button" data-delete>Eliminar</button>';
- panel.append(confirmDelete);
- confirmDelete.querySelector('[data-cancel]').onclick=()=>confirmDelete.close();
- confirmDelete.querySelector('[data-delete]').onclick=()=>{confirmDelete.close();apply('Eliminar');};
  const status=document.createElement('div');status.setAttribute('role','status');
  box.append(grid,actions,status);form.append(box);panel.append(form);
  function select(id){
   const user=userDirectory.find(record=>record.id===id);
   selector.value=user?.id||'';
   for(const [key] of fields)controls[key].value=user?.[key]||'';
-  buttons.Agregar.disabled=!!user;buttons.Modificar.disabled=buttons.Eliminar.disabled=!user;buttons.Suspender.disabled=!user||user.suspended;
+  buttons.Guardar.disabled=!!user;buttons.Modificar.disabled=!user;
  }
  refreshUserDirectory=()=>{
   const id=selector.value;
@@ -7099,32 +7093,22 @@ function installUserDirectory(panel){
   if(box.disabled)return;
   const previous=userDirectory;
   const id=selector.value,record=previous.find(user=>user.id===id);
-  if(action==='Agregar'?!!record:!record)return;
+  if(action==='Guardar'?!!record:!record)return;
   let nextId=id;
-  if(action==='Agregar'||action==='Modificar'){
-   for(const [key] of fields)controls[key].value=controls[key].value.trim();
-   if(!form.reportValidity())return;
-   const values=Object.fromEntries(fields.map(([key])=>[key,controls[key].value]));
-   if(previous.some(user=>user.id!==id&&user.email.toLowerCase()===values.email.toLowerCase())){status.textContent='Ya existe un usuario con ese correo.';return;}
-   nextId=record?.id||crypto.randomUUID();
-   const user={...values,id:nextId,suspended:record?.suspended||false};
-   userDirectory=record?previous.map(entry=>entry.id===id?user:entry):[...previous,user];
-  }else if(action==='Suspender'){
-   userDirectory=previous.map(user=>user.id===id?{...user,suspended:true}:user);
-  }else{
-   userDirectory=previous.filter(user=>user.id!==id);nextId='';
-  }
+  for(const [key] of fields)controls[key].value=controls[key].value.trim();
+  if(!form.reportValidity())return;
+  const values=Object.fromEntries(fields.map(([key])=>[key,controls[key].value]));
+  if(previous.some(user=>user.id!==id&&user.email.toLowerCase()===values.email.toLowerCase())){status.textContent='Ya existe un usuario con ese correo.';return;}
+  nextId=record?.id||crypto.randomUUID();
+  const user={...values,id:nextId,suspended:record?.suspended||false};
+  userDirectory=record?previous.map(entry=>entry.id===id?user:entry):[...previous,user];
   box.disabled=true;status.textContent='Guardando…';
   try{await persistPurchaseConfirmed();refreshUserDirectory();select(nextId);status.textContent='Cambio guardado.';}
   catch(error){userDirectory=previous;status.textContent=error.message;}
   finally{box.disabled=false;}
  }
- form.onsubmit=event=>{event.preventDefault();apply('Agregar');};
- for(const label of ['Modificar','Suspender'])buttons[label].onclick=()=>apply(label);
- buttons.Eliminar.onclick=()=>{
-  confirmDelete.querySelector('p').textContent='¿Eliminar a '+controls.firstName.value+' '+controls.lastName.value+' del registro de usuarios?';
-  confirmDelete.showModal();
- };
+ form.onsubmit=event=>{event.preventDefault();apply('Guardar');};
+ buttons.Modificar.onclick=()=>apply('Modificar');
  refreshUserDirectory();
 }
 
