@@ -6442,6 +6442,7 @@ function installPriceLookup(){
  function openLookup(fromPos,handheld=false){
   dialog.classList.toggle('handheld-lookup',handheld);
   dialog.querySelector('[data-price-warehouse-section]').hidden=handheld;
+  dialog.querySelector('[data-price-tax]').hidden=handheld;
   positionPrintActions(handheld);
   previewCheck.closest('label').hidden=handheld;
   dialog.querySelector('[data-price-preview-note]').hidden=handheld;
