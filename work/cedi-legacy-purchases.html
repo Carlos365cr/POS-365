@@ -6360,7 +6360,12 @@ function installPriceLookup(){
  const formatMarker=document.createComment('Formato en F12');
  formatLabel.before(formatMarker);
  formatSelect.add(new Option('Handheld','Handheld'));
+ const printQueue=dialog.querySelector('[data-price-queue]');
+ const queueMarker=document.createComment('Lista de impresión en F12');
+ printQueue.before(queueMarker);
  function positionPrintActions(handheld){
+  const queueAnchor=handheld?dialog.querySelector('[data-price-promotion]'):queueMarker;
+  queueAnchor.after(printQueue);
   if(handheld)dialog.querySelector('[data-price-close]').after(formatLabel);
   else formatMarker.after(formatLabel);
   formatSelect.value=handheld?'Handheld':'ETIQUETA';
