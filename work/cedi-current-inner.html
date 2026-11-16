@@ -2317,6 +2317,7 @@ event.preventDefault();event.stopPropagation();
 const form=root.querySelector('form');
 const message=root.querySelector('#art-mensaje');
 const savedTrialProducts=new Map();
+let profileDirectory=[],refreshProfileDirectory=()=>{};
 let userDirectory=[];
 let refreshUserDirectory=()=>{};
 let savedTrialSnapshot=null;
@@ -6961,6 +6962,43 @@ function installUserDirectory(panel){
  form.onsubmit=event=>{event.preventDefault();apply(selector.value?'Modificar':'Guardar');};
  buttons.Modificar.onclick=()=>{selectorLabel.hidden=false;selectorLabel.style.display='flex';selector.focus();};
  refreshUserDirectory();
+ const layout=document.createElement('div');
+ layout.style.cssText='display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start';
+ panel.append(layout);layout.append(form);
+ const profileForm=document.createElement('form');
+ profileForm.style.cssText='width:min(100%,19rem);box-sizing:border-box';
+ profileForm.innerHTML='<fieldset style="min-width:0;margin:0;padding:12px"><legend>Crear perfil</legend><label>Nombre perfil<input name="profileName" required></label><div class="actions" style="margin-top:8px"><button type="submit">Guardar</button><button type="button" data-edit>Modificar</button></div><label data-picker hidden>Perfil<select></select></label><div role="status"></div></fieldset>';
+ layout.append(profileForm);
+ const fieldset=profileForm.querySelector('fieldset'),nameInput=profileForm.elements.profileName;
+ const pickerLabel=profileForm.querySelector('[data-picker]'),picker=pickerLabel.querySelector('select');
+ const edit=profileForm.querySelector('[data-edit]'),feedback=profileForm.querySelector('[role=status]');
+ let editing='';
+ function closePicker(){pickerLabel.hidden=true;pickerLabel.style.display='none';}
+ refreshProfileDirectory=()=>{
+  editing='';nameInput.value='';closePicker();picker.replaceChildren(new Option('Seleccionar perfil',''));
+  for(const profile of profileDirectory)picker.add(new Option(profile.name,profile.id));
+  edit.disabled=!profileDirectory.length;
+ };
+ edit.onclick=()=>{pickerLabel.hidden=false;pickerLabel.style.display='flex';picker.focus();};
+ picker.onchange=()=>{
+  const profile=profileDirectory.find(p=>p.id===picker.value);
+  if(!profile)return;
+  editing=profile.id;nameInput.value=profile.name;closePicker();nameInput.focus();nameInput.select();
+  feedback.textContent='Edite el nombre y toque Guardar.';
+ };
+ profileForm.onsubmit=async event=>{
+  event.preventDefault();if(fieldset.disabled)return;
+  const name=nameInput.value.trim();nameInput.value=name;
+  if(!profileForm.reportValidity())return;
+  if(profileDirectory.some(p=>p.id!==editing&&p.name.toLocaleLowerCase('es')===name.toLocaleLowerCase('es'))){feedback.textContent='Ya existe un perfil con ese nombre.';return;}
+  const previous=profileDirectory;
+  profileDirectory=editing?previous.map(p=>p.id===editing?{...p,name}:p):[...previous,{id:crypto.randomUUID(),name}];
+  fieldset.disabled=true;feedback.textContent='Guardando…';
+  try{await persistPurchaseConfirmed();refreshProfileDirectory();feedback.textContent='Perfil guardado.';}
+  catch(error){profileDirectory=previous;feedback.textContent=error.message;}
+  finally{fieldset.disabled=false;}
+ };
+ refreshProfileDirectory();
 }
 
 function installEmptyModule(name,className,sections=[]){
@@ -7827,6 +7865,7 @@ fmgState:structuredClone(fmgState),
 xmlPendingArticles:xmlPendingArticles,
 xmlInboxState:xmlInboxState,
 printDesigns:capturePrintDesignState(),
+profileDirectory:structuredClone(profileDirectory),
 userDirectory:structuredClone(userDirectory),
 companyHeader:JSON.parse(JSON.stringify(companyHeaderState))
 };
@@ -8143,6 +8182,7 @@ updateScale();
 applyCabys();
 recalculatePrices();
 validateCompanyHeader(snapshot.companyHeader);companyHeaderState=snapshot.companyHeader?JSON.parse(JSON.stringify(snapshot.companyHeader)):emptyCompanyHeader();refreshCompanyHeaderForm();restorePrintDesignState(snapshot.printDesigns);printDesignService?.refreshHeader?.();refreshInventoryDashboard();
+profileDirectory=structuredClone(snapshot.profileDirectory||[]);refreshProfileDirectory();
 userDirectory=structuredClone(snapshot.userDirectory||[]);refreshUserDirectory();
 savedTrialSnapshot=snapshot;
 trialCompletedSales=Array.isArray(snapshot.sales)?JSON.parse(JSON.stringify(snapshot.sales)):[];
