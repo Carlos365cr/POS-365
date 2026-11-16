@@ -6923,12 +6923,26 @@ function installUserDirectory(panel){
   list.append(heading,table);row.append(form,list);directory.append(row);
   return {form,box,body:table.createTBody()};
  }
- const users=section('Registro de usuarios','Usuarios registrados',[...fields.map(f=>f[1]),'Estado','Acciones']);
- const profiles=section('Crear perfil','Perfiles registrados',['Nombre perfil','Acciones']);
+ const users=section('Registro de usuarios','Usuarios registrados',['ID usuario',...fields.map(f=>f[1]),'Estado','Acciones']);
+ const profiles=section('Crear perfil','Perfiles registrados',['ID perfil','Nombre perfil','Estado','Acciones']);
  const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px';users.box.append(grid);
  function field(parent,title,element){
   const label=document.createElement('label');label.textContent=title;element.style.cssText='width:100%;min-width:0;box-sizing:border-box';label.append(element);parent.append(label);
   return label;
+ }
+ const userCode=document.createElement('input'),profileCode=document.createElement('input');
+ userCode.readOnly=profileCode.readOnly=true;
+ field(grid,'ID usuario',userCode).style.gridColumn='1/-1';
+ field(profiles.box,'ID perfil',profileCode);
+ function nextNumber(records){return records.reduce((max,record)=>Math.max(max,record.number||0),0)+1;}
+ function numberOlderRecords(records){
+  let number=nextNumber(records);
+  for(const record of records)if(!record.number)record.number=number++;
+ }
+ function code(prefix,number){return prefix+'-'+String(number).padStart(4,'0');}
+ function showIds(){
+  userCode.value=code('ID usuario',userDirectory.find(u=>u.id===userId)?.number||nextNumber(userDirectory));
+  profileCode.value=code('ID perfil',profileDirectory.find(p=>p.id===profileId)?.number||nextNumber(profileDirectory));
  }
  const inputs={};
  for(const [key,title] of fields){
@@ -6958,29 +6972,35 @@ function installUserDirectory(panel){
  function assigned(user,profile){return user.profileId?user.profileId===profile.id:!!user.position&&user.position===profile.name;}
  function action(cell,label,run){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=run;cell.append(button);}
  function refresh(){
+  numberOlderRecords(userDirectory);numberOlderRecords(profileDirectory);showIds();
   const selected=inputs.position.value;
   inputs.position.replaceChildren(new Option('Seleccione el perfil',''));
-  for(const p of profileDirectory)inputs.position.add(new Option(p.name,p.id));
+  for(const p of profileDirectory)if(!p.deleted)inputs.position.add(new Option(p.name,p.id));
   inputs.position.value=profileDirectory.some(p=>p.id===selected)?selected:'';
   users.body.replaceChildren();profiles.body.replaceChildren();
   for(const u of userDirectory){
    const row=users.body.insertRow(),profile=profileDirectory.find(p=>assigned(u,p));
+   row.insertCell().textContent=code('ID usuario',u.number);
    for(const [key] of fields)row.insertCell().textContent=key==='position'?(profile?.name||u.position||'Sin asignar'):u[key];
-   row.insertCell().textContent=u.suspended?'Bloqueado':'Activo';
-   const cell=row.insertCell();action(cell,'Modificar',()=>{
-    userId=u.id;for(const [key] of fields)inputs[key].value=key==='position'?(profile?.id||''):(u[key]||'');inputs.firstName.focus();
+   row.insertCell().textContent=u.deleted?'Eliminado':u.suspended?'Bloqueado':'Activo';
+   const cell=row.insertCell();if(u.deleted)continue;action(cell,'Modificar',()=>{
+    userId=u.id;showIds();for(const [key] of fields)inputs[key].value=key==='position'?(profile?.id||''):(u[key]||'');inputs.firstName.focus();
    });
    if(!u.suspended)action(cell,'Bloquear',()=>{
     targetId=u.id;blockDialog.querySelector('p').textContent='¿Está seguro de que desea bloquear a '+u.firstName+' '+u.lastName+'?';
     blockDialog.showModal();yes.focus();
    });
+   action(cell,'Eliminar',async()=>{
+    const next=userDirectory.map(other=>other.id===u.id?{...other,deleted:true}:other);
+    if(await store(next,profileDirectory,u.email)&&userId===u.id){userId='';users.form.reset();showIds();}
+   });
   }
   for(const p of profileDirectory){
-   const row=profiles.body.insertRow();row.insertCell().textContent=p.name;const cell=row.insertCell();
-   action(cell,'Modificar',()=>{profileId=p.id;profileName.value=p.name;profileName.focus();profileName.select();});
+   const row=profiles.body.insertRow();row.insertCell().textContent=code('ID perfil',p.number);row.insertCell().textContent=p.name;row.insertCell().textContent=p.deleted?'Eliminado':'Activo';const cell=row.insertCell();if(p.deleted)continue;
+   action(cell,'Modificar',()=>{profileId=p.id;showIds();profileName.value=p.name;profileName.focus();profileName.select();});
    action(cell,'Eliminar',async()=>{
-    if(userDirectory.some(u=>assigned(u,p))){notice.showModal();return;}
-    if(await store(userDirectory,profileDirectory.filter(other=>other.id!==p.id))&&profileId===p.id){profileId='';profiles.form.reset();}
+    if(userDirectory.some(u=>!u.deleted&&assigned(u,p))){notice.showModal();return;}
+    if(await store(userDirectory,profileDirectory.map(other=>other.id===p.id?{...other,deleted:true}:other))&&profileId===p.id){profileId='';profiles.form.reset();showIds();}
    });
   }
  }
@@ -7001,19 +7021,19 @@ function installUserDirectory(panel){
   const email=inputs.email.value;
   if(userDirectory.some(u=>u.id!==userId&&u.email.toLowerCase()===email.toLowerCase())){status.textContent='Ya existe un usuario con ese correo.';return;}
   const previous=userDirectory.find(u=>u.id===userId);
-  const record={...previous,id:userId||crypto.randomUUID(),profileId:profile.id};
+  const record={...previous,id:userId||crypto.randomUUID(),number:previous?.number||nextNumber(userDirectory),profileId:profile.id};
   for(const [key] of fields)record[key]=key==='position'?profile.name:inputs[key].value;
   const blockEmail=previous?.suspended&&previous.email.toLowerCase()!==email.toLowerCase()?email:undefined;
-  if(await store(userId?userDirectory.map(u=>u.id===userId?record:u):[...userDirectory,record],profileDirectory,blockEmail)){userId='';users.form.reset();}
+  if(await store(userId?userDirectory.map(u=>u.id===userId?record:u):[...userDirectory,record],profileDirectory,blockEmail)){userId='';users.form.reset();showIds();}
  };
  profiles.form.onsubmit=async event=>{
   event.preventDefault();const name=profileName.value.trim();profileName.value=name;
   if(!profiles.form.reportValidity())return;
   if(profileDirectory.some(p=>p.id!==profileId&&p.name.toLowerCase()===name.toLowerCase())){status.textContent='Ya existe un perfil con ese nombre.';return;}
-  const previous=profileDirectory.find(p=>p.id===profileId),profile={id:previous?.id||crypto.randomUUID(),name};
+  const previous=profileDirectory.find(p=>p.id===profileId),profile={id:previous?.id||crypto.randomUUID(),number:previous?.number||nextNumber(profileDirectory),name};
   const next=previous?profileDirectory.map(p=>p.id===profile.id?profile:p):[...profileDirectory,profile];
   const nextUsers=previous?userDirectory.map(u=>assigned(u,previous)?{...u,profileId:profile.id,position:name}:u):userDirectory;
-  if(await store(nextUsers,next)){profileId='';profiles.form.reset();}
+  if(await store(nextUsers,next)){profileId='';profiles.form.reset();showIds();}
  };
  refreshUserDirectory=refreshProfileDirectory=refresh;refresh();
 }
