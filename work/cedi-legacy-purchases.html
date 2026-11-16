@@ -6347,8 +6347,11 @@ function installPriceLookup(){
  #articulos-cedi .handheld-lookup .price-lookup-queue{overflow:auto}
  #articulos-cedi .handheld-lookup [data-price-matches] thead{position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden}
  #articulos-cedi .handheld-lookup [data-price-matches] tbody,#articulos-cedi .handheld-lookup [data-price-matches] tr{display:block}
- #articulos-cedi .handheld-lookup [data-price-matches] tr{padding:8px 0;border-bottom:1px solid var(--line)}
- #articulos-cedi .handheld-lookup [data-price-matches] td{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border:0}
+ #articulos-cedi .handheld-lookup [data-price-matches] tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 8px;padding:6px 0;border-bottom:1px solid var(--line)}
+ #articulos-cedi .handheld-lookup [data-price-matches] td{display:grid;align-content:start;padding:2px 0;border:0}
+ #articulos-cedi .handheld-lookup [data-price-matches] td:nth-child(3){grid-column:1;grid-row:1}
+ #articulos-cedi .handheld-lookup [data-price-matches] td:nth-child(2){grid-column:2;grid-row:1}
+ #articulos-cedi .handheld-lookup [data-price-matches] td:last-child{grid-column:1/-1;justify-self:end}
  #articulos-cedi .handheld-lookup [data-price-matches] td[data-label]::before{content:attr(data-label);color:var(--muted)}
  `;
  const handheldActions=document.createElement('div');
@@ -6517,8 +6520,8 @@ function installPriceLookup(){
   focusPriceQuery();
  }
  function renderMatches(){
-  const body=matchesPanel.querySelector('tbody');body.replaceChildren();const pages=Math.max(1,Math.ceil(matches.length/5));page=Math.max(0,Math.min(page,pages-1));
-  for(const product of matches.slice(page*5,page*5+5)){
+  const body=matchesPanel.querySelector('tbody');body.replaceChildren();const perPage=dialog.classList.contains('handheld-lookup')?3:5;const pages=Math.max(1,Math.ceil(matches.length/perPage));page=Math.max(0,Math.min(page,pages-1));
+  for(const product of matches.slice(page*perPage,(page+1)*perPage)){
    const row=body.insertRow();for(const value of [product.code,product.barcode,general(product,'referencia')||'—',product.name,purchaseSupplierLabel(product),money(product.price,product.currency)]){const cell=row.insertCell();const header=matchesPanel.querySelector('thead tr').cells[cell.cellIndex];cell.dataset.label=header.textContent;cell.hidden=header.hidden;cell.textContent=value;}
    const button=document.createElement('button');button.type='button';button.textContent='Seleccionar';button.onclick=()=>showProduct(product);row.insertCell().append(button);
   }
@@ -6604,9 +6607,9 @@ function installPriceLookup(){
   dialog.querySelector('[data-price-warehouse-section]').hidden=handheld;
   dialog.querySelector('[data-price-tax]').hidden=handheld;
   const matchHeaders=matchesPanel.querySelector('thead tr').cells;
-  matchHeaders[2].hidden=handheld;
-  matchHeaders[3].hidden=handheld;
-  matchHeaders[4].textContent=handheld?'Nombre del proveedor':'Proveedor';
+  matchHeaders[0].hidden=handheld;
+  matchHeaders[4].hidden=handheld;
+  matchHeaders[2].textContent=handheld?'Código de proveedor':'Código proveedor';
   positionPrintActions(handheld);
   previewCheck.closest('label').hidden=handheld;
   dialog.querySelector('[data-price-preview-note]').hidden=handheld;
