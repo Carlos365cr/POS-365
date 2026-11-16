@@ -6905,14 +6905,14 @@ function installInternalInvoiceModule(){
 }
 
 function installUserDirectory(panel){
- const fields=[['firstName','Nombre','text'],['lastName','Apellido','text'],['position','Puesto','text'],['email','Correo','email'],['phone','Teléfono','tel']];
+ const fields=[['firstName','Nombre','text'],['lastName','Apellido','text'],['position','Nombre perfil','text'],['email','Correo','email'],['phone','Teléfono','tel']];
  const form=document.createElement('form');
  form.style.cssText='width:min(100%,32rem);box-sizing:border-box';
  const box=document.createElement('fieldset');
  box.style.cssText='min-width:0;margin:0;padding:12px';
  const legend=document.createElement('legend');legend.textContent='Registro de usuarios';box.append(legend);
  const selector=document.createElement('select');
- const selectorLabel=document.createElement('label');selectorLabel.textContent='Usuario';selectorLabel.append(selector);box.append(selectorLabel);
+ const selectorLabel=document.createElement('label');selectorLabel.textContent='Usuario';selectorLabel.append(selector);selectorLabel.hidden=true;selectorLabel.style.display='none';
  const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:6px 10px;margin-block:8px';
  const controls={};
  for(const [key,label,type] of fields){
@@ -6925,40 +6925,41 @@ function installUserDirectory(panel){
   const button=document.createElement('button');button.type=label==='Guardar'?'submit':'button';button.textContent=label;buttons[label]=button;actions.append(button);
  }
  const status=document.createElement('div');status.setAttribute('role','status');
- box.append(grid,actions,status);form.append(box);panel.append(form);
+ box.append(grid,actions,selectorLabel,status);form.append(box);panel.append(form);
  function select(id){
   const user=userDirectory.find(record=>record.id===id);
   selector.value=user?.id||'';
   for(const [key] of fields)controls[key].value=user?.[key]||'';
-  buttons.Guardar.disabled=!!user;buttons.Modificar.disabled=!user;
+  selectorLabel.hidden=true;selectorLabel.style.display='none';
+  buttons.Modificar.disabled=!userDirectory.length;
  }
  refreshUserDirectory=()=>{
   const id=selector.value;
-  selector.replaceChildren(new Option('Nuevo usuario',''));
+  selector.replaceChildren(new Option('Seleccionar usuario',''));
   for(const user of userDirectory)selector.add(new Option(user.firstName+' '+user.lastName+' · '+user.email+(user.suspended?' · Suspendido':''),user.id));
   select(id);
  };
- selector.onchange=()=>{status.textContent='';select(selector.value);};
+ selector.onchange=()=>{select(selector.value);status.textContent=selector.value?'Edite los datos y toque Guardar.':'';};
  async function apply(action){
   if(box.disabled)return;
   const previous=userDirectory;
   const id=selector.value,record=previous.find(user=>user.id===id);
   if(action==='Guardar'?!!record:!record)return;
-  let nextId=id;
+
   for(const [key] of fields)controls[key].value=controls[key].value.trim();
   if(!form.reportValidity())return;
   const values=Object.fromEntries(fields.map(([key])=>[key,controls[key].value]));
   if(previous.some(user=>user.id!==id&&user.email.toLowerCase()===values.email.toLowerCase())){status.textContent='Ya existe un usuario con ese correo.';return;}
-  nextId=record?.id||crypto.randomUUID();
+  const nextId=record?.id||crypto.randomUUID();
   const user={...values,id:nextId,suspended:record?.suspended||false};
   userDirectory=record?previous.map(entry=>entry.id===id?user:entry):[...previous,user];
   box.disabled=true;status.textContent='Guardando…';
-  try{await persistPurchaseConfirmed();refreshUserDirectory();select(nextId);status.textContent='Cambio guardado.';}
+  try{await persistPurchaseConfirmed();refreshUserDirectory();select('');status.textContent='Cambio guardado.';}
   catch(error){userDirectory=previous;status.textContent=error.message;}
   finally{box.disabled=false;}
  }
- form.onsubmit=event=>{event.preventDefault();apply('Guardar');};
- buttons.Modificar.onclick=()=>apply('Modificar');
+ form.onsubmit=event=>{event.preventDefault();apply(selector.value?'Modificar':'Guardar');};
+ buttons.Modificar.onclick=()=>{selectorLabel.hidden=false;selectorLabel.style.display='flex';selector.focus();};
  refreshUserDirectory();
 }
 
