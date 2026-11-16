@@ -6325,7 +6325,6 @@ function installPriceLookup(){
  #articulos-cedi .handheld-lookup > header select{display:block}
  #articulos-cedi .handheld-lookup [hidden]{display:none!important}
  #articulos-cedi .handheld-lookup .awaiting-product .price-lookup-yellow,
- #articulos-cedi .handheld-lookup .awaiting-product .price-lookup-details,
  #articulos-cedi .handheld-lookup .awaiting-product [data-price-promotion]{display:none}
  #articulos-cedi .handheld-lookup .price-lookup-content{min-width:0}
  #articulos-cedi .handheld-lookup form.price-lookup-search{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:6px}
@@ -6484,7 +6483,9 @@ function installPriceLookup(){
   const facts=dialog.querySelector('[data-price-facts]');facts.replaceChildren();
   for(const label of ['Cantidad por paquete','Cantidad por caja','Ubicación','Proveedor','Costo CRC','Costo USD']){
    if(dialog.classList.contains('handheld-lookup')&&(label==='Cantidad por paquete'||label==='Costo USD'))continue;
-   const term=document.createElement('dt'),value=document.createElement('dd');term.textContent=label;value.textContent='—';facts.append(term,value);
+   const term=document.createElement('dt'),value=document.createElement('dd');term.textContent=label;
+   const missing=label==='Proveedor'?'Sin asignar':'Sin registro';
+   value.textContent=dialog.classList.contains('handheld-lookup')?missing:'—';facts.append(term,value);
   }
  }
  function showProduct(selected){
