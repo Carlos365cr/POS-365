@@ -6324,6 +6324,10 @@ function installPriceLookup(){
  #articulos-cedi .handheld-lookup > header label{min-width:0}
  #articulos-cedi .handheld-lookup > header select{display:block}
  #articulos-cedi .handheld-lookup [hidden]{display:none!important}
+ #articulos-cedi .handheld-lookup .awaiting-product .price-lookup-yellow,
+ #articulos-cedi .handheld-lookup .awaiting-product .price-lookup-photo,
+ #articulos-cedi .handheld-lookup .awaiting-product .price-lookup-details,
+ #articulos-cedi .handheld-lookup .awaiting-product [data-price-promotion]{display:none}
  #articulos-cedi .handheld-lookup .price-lookup-content{min-width:0}
  #articulos-cedi .handheld-lookup form.price-lookup-search{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:6px}
  #articulos-cedi .handheld-lookup form.price-lookup-search label{min-width:0}
@@ -6452,14 +6456,16 @@ function installPriceLookup(){
   for(const barcode of printList){const product=findArticleByKey(barcode);const row=body.insertRow();for(const value of [product?.code||barcode,product?.name||'Artículo no disponible',product?money(product.price,product.currency):'Sin registro']){row.insertCell().textContent=value;}}
  }
  function priceMatches(value){
+  if(!value&&dialog.classList.contains('handheld-lookup'))return [];
   const products=allArticleRecords(),exact=resolveArticleCodes(value);
   const tokens=normalizeCabysText(value).split(/\s+/).filter(Boolean);
   return value&&exact.length?exact:products.filter(product=>{const text=normalizeCabysText([product.name,...articleCodeValues(product).filter(code=>code!==product.cabys),purchaseSupplierLabel(product)].join(' '));return tokens.every(token=>text.includes(token));});
  }
  function openPricePicker(){
-  pickerQuery.value='';matches=priceMatches('');page=0;matchesPanel.hidden=false;status.textContent='Seleccioná un artículo para consultar y añadir a la lista.';renderMatches();pickerQuery.focus();
+  pickerQuery.value='';matches=priceMatches('');page=0;matchesPanel.hidden=false;status.textContent=dialog.classList.contains('handheld-lookup')?'Escribí el nombre del artículo.':'Seleccioná un artículo para consultar y añadir a la lista.';renderMatches();pickerQuery.focus();
  }
  function clearResult(){
+  resultPanel.classList.add('awaiting-product');
   resultPanel.hidden=false;photo.removeAttribute('src');photo.hidden=true;placeholder.hidden=false;placeholder.textContent='Imagen del producto';
   dialog.querySelector('[data-price-code]').textContent='Código —';
   dialog.querySelector('[data-price-name]').textContent='Seleccioná un artículo';
@@ -6476,6 +6482,7 @@ function installPriceLookup(){
  }
  function showProduct(selected){
   const product=findArticleByKey(articleRecordKey(selected));if(!product){status.textContent='El artículo ya no está en el catálogo.';clearResult();return;}
+  resultPanel.classList.remove('awaiting-product');
   matchesPanel.hidden=true;resultPanel.hidden=false;status.textContent='';
   printList.add(articleRecordKey(product));renderPrintList();query.value=product.barcode||product.code;
   dialog.querySelector('[data-price-code]').textContent='Código '+product.code+' · Barras '+product.barcode;
@@ -6558,6 +6565,9 @@ function installPriceLookup(){
  });
  query.oninput=()=>{
   if(!dialog.classList.contains('handheld-lookup')){listTypedMatches();return;}
+  if(!query.value.trim()){
+   cancelScan();clearResult();matchesPanel.hidden=true;status.textContent='';return;
+  }
   clearTimeout(scanTimer);scanEdited=true;
   scanTimer=setTimeout(()=>{
    scanTimer=null;
