@@ -6470,6 +6470,7 @@ function installPriceLookup(){
   const stock=dialog.querySelector('[data-price-stock]');stock.replaceChildren();const row=stock.insertRow(),cell=row.insertCell();cell.colSpan=2;cell.textContent='Seleccioná un artículo para ver sus existencias.';
   const facts=dialog.querySelector('[data-price-facts]');facts.replaceChildren();
   for(const label of ['Cantidad por paquete','Cantidad por caja','Ubicación','Proveedor','Costo CRC','Costo USD']){
+   if(dialog.classList.contains('handheld-lookup')&&label==='Costo USD')continue;
    const term=document.createElement('dt'),value=document.createElement('dd');term.textContent=label;value.textContent='—';facts.append(term,value);
   }
  }
@@ -6497,6 +6498,7 @@ function installPriceLookup(){
   const cost=getProductCurrentCost(product,costBasis.value),usdRaw=product.details?.costs?.find(field=>field[0]==='usd_'+costBasis.value)?.[1];
   const usd=usdRaw===undefined||usdRaw===''?null:Number(usdRaw);
   for(const [label,value] of [['Cantidad por paquete',known(general(product,'paquete'))],['Cantidad por caja',known(general(product,'caja'))],['Ubicación',known(general(product,'ubicacion'))],['Proveedor',purchaseSupplierLabel(product)],['Costo CRC · '+costBasis.value,cost===null?'Sin registro':money(cost,'Colón')],['Costo USD · '+costBasis.value,usd===null||!Number.isFinite(usd)?'Sin registro':money(usd,'Dólar')]]){
+   if(dialog.classList.contains('handheld-lookup')&&label.startsWith('Costo USD'))continue;
    const term=document.createElement('dt'),description=document.createElement('dd');term.textContent=label;description.textContent=value;facts.append(term,description);
   }
   const promotion=getSalePromotion(product);let promotionText='Sin promoción vigente registrada.';
