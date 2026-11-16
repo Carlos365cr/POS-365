@@ -7234,7 +7234,14 @@ function installUserDirectory(panel){
 }
 
 function createModulePermissionList(panel,getNames){
- const choices=new Map();
+ const choices=new Set();
+ const style=document.createElement('style');
+ style.textContent=`
+ .module-permission-row button[role=switch]{display:inline-flex;align-items:center;gap:8px;min-width:8rem;min-height:36px;padding:2px 5px;border:0;background:transparent;color:inherit;font:inherit;text-align:left}
+ .module-permission-track{display:inline-flex;align-items:center;box-sizing:border-box;width:36px;height:21px;padding:3px;border-radius:20px;background:#78857c}
+ .module-permission-track::before{content:'';width:15px;height:15px;background:white;border-radius:50%}
+ .module-permission-row [aria-checked=true] .module-permission-track{background:#246747;justify-content:flex-end}`;
+ panel.append(style);
  const box=document.createElement('fieldset'),legend=document.createElement('legend');
  box.style.cssText='width:min(100%,22rem);box-sizing:border-box;margin:0;padding:8px';
  legend.textContent='Módulos del menú';box.append(legend);panel.append(box);
@@ -7243,15 +7250,15 @@ function createModulePermissionList(panel,getNames){
   list.replaceChildren();
   for(const name of new Set(getNames().filter(Boolean))){
    const row=document.createElement('div'),label=document.createElement('span');
-   row.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px;align-items:center;padding:3px 0';
+   row.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:center;padding:3px 0';
    row.setAttribute('role','group');row.setAttribute('aria-label',name);
    label.textContent=name;row.append(label);list.append(row);
-   for(const action of ['Activar','Desactivar']){
-    const button=document.createElement('button');button.type='button';button.textContent=action;button.style.padding='4px 6px';
-    button.setAttribute('aria-pressed',String(choices.get(name)===action));button.classList.toggle('primary',choices.get(name)===action);
-    button.onclick=()=>{choices.set(name,action);for(const item of row.querySelectorAll('button')){item.setAttribute('aria-pressed',String(item===button));item.classList.toggle('primary',item===button);}};
-    row.append(button);
-   }
+   row.className='module-permission-row';
+   const button=document.createElement('button'),track=document.createElement('span'),state=document.createElement('span');
+   button.type='button';button.setAttribute('role','switch');button.setAttribute('aria-label',name);
+   track.className='module-permission-track';track.setAttribute('aria-hidden','true');button.append(track,state);row.append(button);
+   function render(){const on=choices.has(name);button.setAttribute('aria-checked',String(on));state.textContent=on?'Activado':'Desactivado';}
+   button.onclick=()=>{if(choices.has(name))choices.delete(name);else choices.add(name);render();};render();
   }
  };
 }
