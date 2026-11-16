@@ -6175,7 +6175,10 @@ function installPriceLookup(){
  #articulos-cedi .handheld-lookup > header select{display:block}
  #articulos-cedi .handheld-lookup [hidden]{display:none!important}
  #articulos-cedi .handheld-lookup .price-lookup-content{min-width:0}
- #articulos-cedi .handheld-lookup form.price-lookup-search,#articulos-cedi .handheld-lookup .price-lookup-print-controls{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch}
+ #articulos-cedi .handheld-lookup form.price-lookup-search{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:6px}
+ #articulos-cedi .handheld-lookup form.price-lookup-search label{min-width:0}
+ #articulos-cedi .handheld-lookup [data-price-search]{white-space:nowrap}
+ #articulos-cedi .handheld-lookup .price-lookup-print-controls{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch}
  #articulos-cedi .handheld-lookup .price-lookup-print-controls label{min-width:0}
  #articulos-cedi .handheld-lookup button,#articulos-cedi .handheld-lookup input:not([type=checkbox]),#articulos-cedi .handheld-lookup select{min-height:44px;font-size:16px}
  #articulos-cedi .handheld-lookup input:not([type=checkbox]),#articulos-cedi .handheld-lookup select{width:100%;min-width:0;box-sizing:border-box}
