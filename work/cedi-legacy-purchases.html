@@ -7056,99 +7056,99 @@ function installInternalInvoiceModule(){
 }
 
 function installUserDirectory(panel){
- const fields=[['firstName','Nombre','text'],['lastName','Apellido','text'],['position','Nombre perfil','text'],['email','Correo','email'],['phone','Teléfono','tel']];
- const form=document.createElement('form');
- form.style.cssText='width:min(100%,32rem);box-sizing:border-box';
- const box=document.createElement('fieldset');
- box.style.cssText='min-width:0;margin:0;padding:12px';
- const legend=document.createElement('legend');legend.textContent='Registro de usuarios';box.append(legend);
- const selector=document.createElement('select');
- const selectorLabel=document.createElement('label');selectorLabel.textContent='Usuario';selectorLabel.append(selector);selectorLabel.hidden=true;selectorLabel.style.display='none';
- const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:6px 10px;margin-block:8px';
- const controls={};
- for(const [key,label,type] of fields){
-  const wrapper=document.createElement('label'),input=document.createElement('input');
-  wrapper.textContent=label;input.type=type;input.required=['firstName','lastName','email'].includes(key);input.style.cssText='width:100%;box-sizing:border-box';controls[key]=input;wrapper.append(input);grid.append(wrapper);
+ const fields=[['firstName','Nombre'],['lastName','Apellido'],['position','Nombre perfil'],['email','Correo'],['phone','Teléfono']];
+ const directory=document.createElement('div');
+ panel.append(directory);
+ function section(title,listTitle,headers){
+  const row=document.createElement('div');
+  row.style.cssText='display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px';
+  const form=document.createElement('form');
+  form.style.cssText='width:min(100%,20rem)';
+  const box=document.createElement('fieldset'),legend=document.createElement('legend');
+  box.style.cssText='margin:0;padding:10px';legend.textContent=title;box.append(legend);form.append(box);
+  const list=document.createElement('section');list.style.cssText='flex:1 1 27rem;min-width:0;overflow:auto';
+  const heading=document.createElement('h3');heading.textContent=listTitle;
+  const table=document.createElement('table'),head=table.createTHead().insertRow();
+  for(const text of headers){const th=document.createElement('th');th.textContent=text;head.append(th);}
+  list.append(heading,table);row.append(form,list);directory.append(row);
+  return {form,box,body:table.createTBody()};
  }
- const actions=document.createElement('div');actions.className='actions';actions.style.flexWrap='wrap';
- const buttons={};
- for(const label of ['Guardar','Modificar']){
-  const button=document.createElement('button');button.type=label==='Guardar'?'submit':'button';button.textContent=label;buttons[label]=button;actions.append(button);
+ const users=section('Registro de usuarios','Usuarios registrados',[...fields.map(f=>f[1]),'Estado','Acciones']);
+ const profiles=section('Crear perfil','Perfiles registrados',['Nombre perfil','Acciones']);
+ const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px';users.box.append(grid);
+ function field(parent,title,element){
+  const label=document.createElement('label');label.textContent=title;element.style.cssText='width:100%;min-width:0;box-sizing:border-box';label.append(element);parent.append(label);
+  return label;
  }
- const status=document.createElement('div');status.setAttribute('role','status');
- box.append(grid,actions,selectorLabel,status);form.append(box);panel.append(form);
- function select(id){
-  const user=userDirectory.find(record=>record.id===id);
-  selector.value=user?.id||'';
-  for(const [key] of fields)controls[key].value=user?.[key]||'';
-  selectorLabel.hidden=true;selectorLabel.style.display='none';
-  buttons.Modificar.disabled=!userDirectory.length;
+ const inputs={};
+ for(const [key,title] of fields){
+  const input=document.createElement(key==='position'?'select':'input');inputs[key]=input;
+  if(key==='email')input.type='email';if(key==='phone')input.type='tel';
+  input.required=key!=='phone';
+  const label=field(grid,title,input);
+  if(key==='position'||key==='email')label.style.gridColumn='1/-1';
  }
- refreshUserDirectory=()=>{
-  const id=selector.value;
-  selector.replaceChildren(new Option('Seleccionar usuario',''));
-  for(const user of userDirectory)selector.add(new Option(user.firstName+' '+user.lastName+' · '+user.email+(user.suspended?' · Suspendido':''),user.id));
-  select(id);
- };
- selector.onchange=()=>{select(selector.value);status.textContent=selector.value?'Edite los datos y toque Guardar.':'';};
- async function apply(action){
-  if(box.disabled)return;
-  const previous=userDirectory;
-  const id=selector.value,record=previous.find(user=>user.id===id);
-  if(action==='Guardar'?!!record:!record)return;
-
-  for(const [key] of fields)controls[key].value=controls[key].value.trim();
-  if(!form.reportValidity())return;
-  const values=Object.fromEntries(fields.map(([key])=>[key,controls[key].value]));
-  if(previous.some(user=>user.id!==id&&user.email.toLowerCase()===values.email.toLowerCase())){status.textContent='Ya existe un usuario con ese correo.';return;}
-  const nextId=record?.id||crypto.randomUUID();
-  const user={...values,id:nextId,suspended:record?.suspended||false};
-  userDirectory=record?previous.map(entry=>entry.id===id?user:entry):[...previous,user];
-  box.disabled=true;status.textContent='Guardando…';
-  try{await persistPurchaseConfirmed();refreshUserDirectory();select('');status.textContent='Cambio guardado.';}
-  catch(error){userDirectory=previous;status.textContent=error.message;}
-  finally{box.disabled=false;}
+ const profileName=document.createElement('input');profileName.required=true;field(profiles.box,'Nombre perfil',profileName);
+ const status=document.createElement('p');status.setAttribute('role','status');directory.append(status);
+ const notice=document.createElement('dialog');notice.className='cabys-dialog';notice.innerHTML='<p>Perfil en uso</p><button type="button">Regresar</button>';
+ notice.querySelector('button').onclick=()=>notice.close();directory.append(notice);
+ for(const section of [users,profiles]){const save=document.createElement('button');save.type='submit';save.textContent='Guardar';section.box.append(save);}
+ let userId='',profileId='',saving=false;
+ function assigned(user,profile){return user.profileId?user.profileId===profile.id:!!user.position&&user.position===profile.name;}
+ function action(cell,label,run){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=run;cell.append(button);}
+ function refresh(){
+  const selected=inputs.position.value;
+  inputs.position.replaceChildren(new Option('Seleccione el perfil',''));
+  for(const p of profileDirectory)inputs.position.add(new Option(p.name,p.id));
+  inputs.position.value=profileDirectory.some(p=>p.id===selected)?selected:'';
+  users.body.replaceChildren();profiles.body.replaceChildren();
+  for(const u of userDirectory){
+   const row=users.body.insertRow(),profile=profileDirectory.find(p=>assigned(u,p));
+   for(const [key] of fields)row.insertCell().textContent=key==='position'?(profile?.name||u.position||'Sin asignar'):u[key];
+   row.insertCell().textContent=u.suspended?'Bloqueado':'Activo';
+   const cell=row.insertCell();action(cell,'Modificar',()=>{
+    userId=u.id;for(const [key] of fields)inputs[key].value=key==='position'?(profile?.id||''):(u[key]||'');inputs.firstName.focus();
+   });
+  }
+  for(const p of profileDirectory){
+   const row=profiles.body.insertRow();row.insertCell().textContent=p.name;const cell=row.insertCell();
+   action(cell,'Modificar',()=>{profileId=p.id;profileName.value=p.name;profileName.focus();profileName.select();});
+   action(cell,'Eliminar',async()=>{
+    if(userDirectory.some(u=>assigned(u,p))){notice.showModal();return;}
+    if(await store(userDirectory,profileDirectory.filter(other=>other.id!==p.id))&&profileId===p.id){profileId='';profiles.form.reset();}
+   });
+  }
  }
- form.onsubmit=event=>{event.preventDefault();apply(selector.value?'Modificar':'Guardar');};
- buttons.Modificar.onclick=()=>{selectorLabel.hidden=false;selectorLabel.style.display='flex';selector.focus();};
- refreshUserDirectory();
- const layout=document.createElement('div');
- layout.style.cssText='display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start';
- panel.append(layout);layout.append(form);
- const profileForm=document.createElement('form');
- profileForm.style.cssText='width:min(100%,19rem);box-sizing:border-box';
- profileForm.innerHTML='<fieldset style="min-width:0;margin:0;padding:12px"><legend>Crear perfil</legend><label>Nombre perfil<input name="profileName" required></label><div class="actions" style="margin-top:8px"><button type="submit">Guardar</button><button type="button" data-edit>Modificar</button></div><label data-picker hidden>Perfil<select></select></label><div role="status"></div></fieldset>';
- layout.append(profileForm);
- const fieldset=profileForm.querySelector('fieldset'),nameInput=profileForm.elements.profileName;
- const pickerLabel=profileForm.querySelector('[data-picker]'),picker=pickerLabel.querySelector('select');
- const edit=profileForm.querySelector('[data-edit]'),feedback=profileForm.querySelector('[role=status]');
- let editing='';
- function closePicker(){pickerLabel.hidden=true;pickerLabel.style.display='none';}
- refreshProfileDirectory=()=>{
-  editing='';nameInput.value='';closePicker();picker.replaceChildren(new Option('Seleccionar perfil',''));
-  for(const profile of profileDirectory)picker.add(new Option(profile.name,profile.id));
-  edit.disabled=!profileDirectory.length;
- };
- edit.onclick=()=>{pickerLabel.hidden=false;pickerLabel.style.display='flex';picker.focus();};
- picker.onchange=()=>{
-  const profile=profileDirectory.find(p=>p.id===picker.value);
+ async function store(nextUsers,nextProfiles){
+  if(saving)return false;
+  const oldUsers=userDirectory,oldProfiles=profileDirectory;
+  saving=true;directory.inert=true;status.textContent='Guardando…';
+  userDirectory=nextUsers;profileDirectory=nextProfiles;
+  try{await persistPurchaseConfirmed();refresh();status.textContent='Cambio guardado.';return true;}
+  catch(error){userDirectory=oldUsers;profileDirectory=oldProfiles;status.textContent=error.message;return false;}
+  finally{saving=false;directory.inert=false;}
+ }
+ users.form.onsubmit=async event=>{
+  event.preventDefault();for(const [key] of fields)inputs[key].value=inputs[key].value.trim();
+  if(!users.form.reportValidity())return;
+  const profile=profileDirectory.find(p=>p.id===inputs.position.value);
   if(!profile)return;
-  editing=profile.id;nameInput.value=profile.name;closePicker();nameInput.focus();nameInput.select();
-  feedback.textContent='Edite el nombre y toque Guardar.';
+  const email=inputs.email.value;
+  if(userDirectory.some(u=>u.id!==userId&&u.email.toLowerCase()===email.toLowerCase())){status.textContent='Ya existe un usuario con ese correo.';return;}
+  const record={...userDirectory.find(u=>u.id===userId),id:userId||crypto.randomUUID(),profileId:profile.id};
+  for(const [key] of fields)record[key]=key==='position'?profile.name:inputs[key].value;
+  if(await store(userId?userDirectory.map(u=>u.id===userId?record:u):[...userDirectory,record],profileDirectory)){userId='';users.form.reset();}
  };
- profileForm.onsubmit=async event=>{
-  event.preventDefault();if(fieldset.disabled)return;
-  const name=nameInput.value.trim();nameInput.value=name;
-  if(!profileForm.reportValidity())return;
-  if(profileDirectory.some(p=>p.id!==editing&&p.name.toLocaleLowerCase('es')===name.toLocaleLowerCase('es'))){feedback.textContent='Ya existe un perfil con ese nombre.';return;}
-  const previous=profileDirectory;
-  profileDirectory=editing?previous.map(p=>p.id===editing?{...p,name}:p):[...previous,{id:crypto.randomUUID(),name}];
-  fieldset.disabled=true;feedback.textContent='Guardando…';
-  try{await persistPurchaseConfirmed();refreshProfileDirectory();feedback.textContent='Perfil guardado.';}
-  catch(error){profileDirectory=previous;feedback.textContent=error.message;}
-  finally{fieldset.disabled=false;}
+ profiles.form.onsubmit=async event=>{
+  event.preventDefault();const name=profileName.value.trim();profileName.value=name;
+  if(!profiles.form.reportValidity())return;
+  if(profileDirectory.some(p=>p.id!==profileId&&p.name.toLowerCase()===name.toLowerCase())){status.textContent='Ya existe un perfil con ese nombre.';return;}
+  const previous=profileDirectory.find(p=>p.id===profileId),profile={id:previous?.id||crypto.randomUUID(),name};
+  const next=previous?profileDirectory.map(p=>p.id===profile.id?profile:p):[...profileDirectory,profile];
+  const nextUsers=previous?userDirectory.map(u=>assigned(u,previous)?{...u,profileId:profile.id,position:name}:u):userDirectory;
+  if(await store(nextUsers,next)){profileId='';profiles.form.reset();}
  };
- refreshProfileDirectory();
+ refreshUserDirectory=refreshProfileDirectory=refresh;refresh();
 }
 
 function installEmptyModule(name,className,sections=[]){
