@@ -6325,7 +6325,6 @@ function installPriceLookup(){
  #articulos-cedi .handheld-lookup > header select{display:block}
  #articulos-cedi .handheld-lookup [hidden]{display:none!important}
  #articulos-cedi .handheld-lookup .awaiting-product .price-lookup-yellow,
- #articulos-cedi .handheld-lookup .awaiting-product .price-lookup-photo,
  #articulos-cedi .handheld-lookup .awaiting-product .price-lookup-details,
  #articulos-cedi .handheld-lookup .awaiting-product [data-price-promotion]{display:none}
  #articulos-cedi .handheld-lookup .price-lookup-content{min-width:0}
@@ -6467,9 +6466,14 @@ function installPriceLookup(){
  function openPricePicker(){
   pickerQuery.value=dialog.classList.contains('handheld-lookup')?query.value.trim():'';matches=priceMatches(pickerQuery.value);page=0;matchesPanel.hidden=false;status.textContent=dialog.classList.contains('handheld-lookup')&&!pickerQuery.value?'Escribí el nombre del artículo.':'Seleccioná un artículo para consultar y añadir a la lista.';renderMatches();pickerQuery.focus();
  }
+ photo.addEventListener('error',()=>{
+  if(photo.hidden)return;
+  photo.hidden=true;placeholder.hidden=false;
+  placeholder.textContent=dialog.classList.contains('handheld-lookup')?'Sin imagen':'Imagen no disponible';
+ });
  function clearResult(){
   resultPanel.classList.add('awaiting-product');
-  resultPanel.hidden=false;photo.removeAttribute('src');photo.hidden=true;placeholder.hidden=false;placeholder.textContent='Imagen del producto';
+  resultPanel.hidden=false;photo.removeAttribute('src');photo.hidden=true;placeholder.hidden=false;placeholder.textContent=dialog.classList.contains('handheld-lookup')?'Sin imagen':'Imagen del producto';
   dialog.querySelector('[data-price-code]').textContent='Código —';
   dialog.querySelector('[data-price-name]').textContent='Seleccioná un artículo';
   dialog.querySelector('[data-price-value]').textContent='—';
@@ -6497,8 +6501,8 @@ function installPriceLookup(){
   const includesVAT=typeof product.includesVAT==='boolean'?product.includesVAT:storedVatOption?storedVatOption[2]===true:true;
   dialog.querySelector('[data-price-tax]').textContent=vatText+' · '+(includesVAT?'Precio guardado con IVA':'Precio guardado sin IVA');
   photo.removeAttribute('src');photo.hidden=true;placeholder.hidden=false;
-  placeholder.textContent=product.photoSuspended?'Imagen suspendida':'Sin imagen registrada';
-  if(product.photo&&!product.photoSuspended){try{validateArticlePhoto(product.photo);photo.src=product.photo.dataUrl;photo.hidden=false;placeholder.hidden=true;}catch(error){placeholder.textContent='Imagen no disponible';}}
+  placeholder.textContent=dialog.classList.contains('handheld-lookup')?'Sin imagen':product.photoSuspended?'Imagen suspendida':'Sin imagen registrada';
+  if(product.photo&&!product.photoSuspended){try{validateArticlePhoto(product.photo);photo.src=product.photo.dataUrl;photo.hidden=false;placeholder.hidden=true;}catch(error){placeholder.textContent=dialog.classList.contains('handheld-lookup')?'Sin imagen':'Imagen no disponible';}}
   const stockBody=dialog.querySelector('[data-price-stock]');stockBody.replaceChildren();
   const warehouses=(product.details?.general||[]).filter(field=>field[0]==='bodega'&&field[2]===true).map(field=>field[1]);
   for(const warehouse of warehouses){const row=stockBody.insertRow();row.insertCell().textContent=warehouse;row.insertCell().textContent='Sin registro';}
