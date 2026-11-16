@@ -7069,9 +7069,52 @@ function installUserDirectory(panel){
   const list=document.createElement('section');list.style.cssText='flex:1 1 27rem;min-width:0;overflow:auto';
   const heading=document.createElement('h3');heading.textContent=listTitle;
   const table=document.createElement('table'),head=table.createTHead().insertRow();
-  for(const text of headers){const th=document.createElement('th');th.textContent=text;head.append(th);}
-  list.append(heading,table);row.append(form,list);directory.append(row);
-  return {form,box,body:table.createTBody()};
+  const scroll=document.createElement('div');
+  scroll.style.cssText='max-width:100%;max-height:15rem;overflow:auto';
+  table.style.cssText='table-layout:fixed;border-collapse:separate;border-spacing:0';
+  const widths=headers.map(text=>text==='Acciones'?235:text==='Correo'?190:128);
+  const columns=document.createElement('colgroup');table.prepend(columns);
+  let page=0,sortIndex=0,ascending=true;
+  const collator=new Intl.Collator('es',{numeric:true,sensitivity:'base'});
+  function resize(){
+   table.style.width=widths.reduce((sum,width)=>sum+width,0)+'px';
+   Array.from(columns.children).forEach((col,i)=>col.style.width=widths[i]+'px');
+  }
+  const sortButtons=[];
+  headers.forEach((text,i)=>{
+   columns.append(document.createElement('col'));
+   const th=document.createElement('th');th.scope='col';th.style.cssText='position:sticky;top:0;background:var(--soft,#eff5ef);padding-right:12px;z-index:1';head.append(th);
+   if(text!=='Acciones'){
+    const button=document.createElement('button');button.type='button';
+    button.onclick=()=>{ascending=i===sortIndex?!ascending:true;sortIndex=i;page=0;refresh();scroll.scrollTop=0;};
+    th.append(button);sortButtons.push({button,th,text,i});
+   }else th.textContent=text;
+   const grip=document.createElement('span');grip.tabIndex=0;grip.setAttribute('role','separator');grip.setAttribute('aria-orientation','vertical');grip.setAttribute('aria-label','Ancho de '+text);grip.setAttribute('aria-valuemin','64');grip.setAttribute('aria-valuenow',String(widths[i]));
+   grip.style.cssText='position:absolute;right:0;top:0;bottom:0;width:10px;border-right:2px solid #a9bbae;cursor:col-resize;touch-action:none;user-select:none';
+   function setWidth(width){widths[i]=Math.max(64,Math.round(width));grip.setAttribute('aria-valuenow',String(widths[i]));resize();}
+   grip.onpointerdown=event=>{if(event.button!==0)return;event.preventDefault();const start=event.clientX,initial=widths[i];grip.setPointerCapture(event.pointerId);grip.onpointermove=e=>setWidth(initial+e.clientX-start);};
+   grip.onlostpointercapture=()=>{grip.onpointermove=null;};
+   grip.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();setWidth(widths[i]+(e.key==='ArrowLeft'?-12:12));}};
+   th.append(grip);
+  });
+  resize();scroll.append(table);
+  const nav=document.createElement('div');nav.className='actions';nav.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  const prev=document.createElement('button'),next=document.createElement('button'),count=document.createElement('span');
+  prev.type=next.type='button';prev.textContent='Anterior';next.textContent='Siguiente';count.setAttribute('aria-live','polite');
+  prev.onclick=()=>{page--;refresh();scroll.scrollTop=0;};next.onclick=()=>{page++;refresh();scroll.scrollTop=0;};
+  nav.append(prev,count,next);list.append(heading,scroll,nav);row.append(form,list);directory.append(row);
+  function visible(records,values){
+   const pages=Math.max(1,Math.ceil(records.length/5));page=Math.max(0,Math.min(page,pages-1));
+   prev.disabled=page===0;next.disabled=page===pages-1;count.textContent='Página '+(page+1)+' de '+pages;
+   for(const {button,th,text,i} of sortButtons){
+    button.textContent=text+' '+(i!==sortIndex?'↕':ascending?'↑':'↓');
+    th.setAttribute('aria-sort',i!==sortIndex?'none':ascending?'ascending':'descending');
+   }
+   const sorted=records.map(record=>({record,key:values(record)[sortIndex]??''}));
+   sorted.sort((a,b)=>(ascending?1:-1)*collator.compare(a.key,b.key));
+   return sorted.slice(page*5,page*5+5).map(item=>item.record);
+  }
+  return {form,box,body:table.createTBody(),visible};
  }
  const users=section('Registro de usuarios','Usuarios registrados',['ID usuario',...fields.map(f=>f[1]),'Estado','Acciones']);
  const profiles=section('Crear perfil','Perfiles registrados',['ID perfil','Nombre perfil','Estado','Acciones']);
@@ -7128,11 +7171,13 @@ function installUserDirectory(panel){
   for(const p of profileDirectory)if(!p.deleted)inputs.position.add(new Option(p.name,p.id));
   inputs.position.value=profileDirectory.some(p=>p.id===selected)?selected:'';
   users.body.replaceChildren();profiles.body.replaceChildren();
-  for(const u of userDirectory){
-   const row=users.body.insertRow(),profile=profileDirectory.find(p=>assigned(u,p));
+  const stateOf=r=>r.deleted?'Eliminado':r.suspended?'Bloqueado':'Activo';
+  const profileOf=u=>profileDirectory.find(p=>assigned(u,p));
+  for(const u of users.visible(userDirectory,u=>[u.number,u.firstName,u.lastName,profileOf(u)?.name||u.position||'Sin asignar',u.email,u.phone,stateOf(u)])){
+   const row=users.body.insertRow(),profile=profileOf(u);
    row.insertCell().textContent=code('ID usuario',u.number);
    for(const [key] of fields)row.insertCell().textContent=key==='position'?(profile?.name||u.position||'Sin asignar'):u[key];
-   row.insertCell().textContent=u.deleted?'Eliminado':u.suspended?'Bloqueado':'Activo';
+   row.insertCell().textContent=stateOf(u);
    const cell=row.insertCell();if(u.deleted)continue;action(cell,'Modificar',()=>{
     userId=u.id;showIds();for(const [key] of fields)inputs[key].value=key==='position'?(profile?.id||''):(u[key]||'');inputs.firstName.focus();
    });
@@ -7145,7 +7190,7 @@ function installUserDirectory(panel){
     if(await store(next,profileDirectory,u.email)&&userId===u.id){userId='';users.form.reset();showIds();}
    });
   }
-  for(const p of profileDirectory){
+  for(const p of profiles.visible(profileDirectory,p=>[p.number,p.name,stateOf(p)])){
    const row=profiles.body.insertRow();row.insertCell().textContent=code('ID perfil',p.number);row.insertCell().textContent=p.name;row.insertCell().textContent=p.deleted?'Eliminado':'Activo';const cell=row.insertCell();if(p.deleted)continue;
    action(cell,'Modificar',()=>{profileId=p.id;showIds();profileName.value=p.name;profileName.focus();profileName.select();});
    action(cell,'Eliminar',async()=>{
