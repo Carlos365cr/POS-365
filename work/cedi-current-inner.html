@@ -7097,7 +7097,7 @@ function createModulePermissionList(panel,getNames){
  legend.textContent='Módulos del menú';box.append(legend);
  const layout=document.createElement('div');layout.style.cssText='display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start';panel.append(layout);
  const details=document.createElement('fieldset'),title=document.createElement('legend'),moduleName=document.createElement('span');
- title.textContent='Permisos';moduleName.setAttribute('aria-live','polite');details.append(title,moduleName);details.hidden=true;
+ title.textContent='Seleccione el permiso';moduleName.setAttribute('aria-live','polite');details.append(title,moduleName);details.hidden=true;
  details.style.cssText='min-width:min(12rem,100%);margin:0;padding:8px;box-sizing:border-box';layout.append(box,details);
  const list=document.createElement('div');list.style.cssText='max-height:min(52vh,24rem);overflow:auto';box.append(list);
  return ()=>{
