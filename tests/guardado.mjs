@@ -66,3 +66,26 @@ assert.equal(loaded.cediTrialGzip,Array.from({length:50},(_,i)=>i+',').join(''))
 console.log('PASS: three concurrent reads, ordered reconstruction, complete retry after snapshot changes');
 
 draftContext.currentPurchaseXml=null;draftContext.purchaseModification={record:{id:'saved-purchase'}};draftListeners.input();assert.equal(pendingTimers.size,0);assert.equal(saves,1);console.log('PASS: edits to registered purchases remain pending until Process');
+
+
+const adminEnv={DB:db,USER_ADMIN_EMAILS:'qa@example.test'};
+const blockId=crypto.randomUUID(),blockBase=current();
+const commitBlock=env=>worker.fetch(new Request('https://cedi.test/api/save',{method:'POST',headers:{Origin:'https://cedi.test','Content-Type':'application/json'},body:JSON.stringify({base:blockBase,id:blockId,count:270,finish:true,changes:0,blockEmail:'target@example.test'})}),env);
+assert.equal((await commitBlock({DB:db})).status,403);
+fail=true;assert.equal((await commitBlock(adminEnv)).status,503);
+assert.equal(sql.prepare('SELECT COUNT(*) n FROM cedi_blocked_accounts').get().n,0);
+fail=false;assert.equal((await commitBlock(adminEnv)).status,200);
+const blockedAt=sql.prepare('SELECT blocked_at FROM cedi_blocked_accounts').get().blocked_at;
+const targetSource=src.replaceAll('qa@example.test','target@example.test').replace('await verify(token,nonce,failure)',"({email:'target@example.test'})");
+const targetWorker=(await import('data:text/javascript;base64,'+Buffer.from(targetSource).toString('base64'))).default;
+const challenge=crypto.randomUUID();
+const login=await targetWorker.fetch(new Request('https://cedi.test/auth/login',{method:'POST',headers:{Origin:'https://cedi.test','Content-Type':'application/json',Cookie:'__Host-cedi_nonce_'+challenge+'='+challenge},body:JSON.stringify({token:'test',challenge})}),adminEnv);
+assert.equal(login.status,403);
+const before=Date.now;try{
+ Date.now=()=>blockedAt+599999;
+ const access=await targetWorker.fetch(new Request('https://cedi.test/api/session-access'),adminEnv);assert.equal((await access.json()).remaining,1);
+ Date.now=()=>blockedAt+600000;
+ for(const path of ['/api/state','/api/legacy-purchases/state','/api/save'])assert.equal((await targetWorker.fetch(new Request('https://cedi.test'+path),adminEnv)).status,403);
+ assert.equal((await targetWorker.fetch(new Request('https://cedi.test/'),adminEnv)).status,302);
+}finally{Date.now=before;}
+console.log('PASS: administrative permission, block rollback, immediate login denial and ten-minute session deadline');

@@ -6940,6 +6940,17 @@ function installUserDirectory(panel){
  }
  const profileName=document.createElement('input');profileName.required=true;field(profiles.box,'Nombre perfil',profileName);
  const status=document.createElement('p');status.setAttribute('role','status');directory.append(status);
+ const blockDialog=document.createElement('dialog');blockDialog.className='cabys-dialog';
+ blockDialog.innerHTML='<p></p><button type="button" autofocus>Sí</button> <button type="button">No</button>';
+ directory.append(blockDialog);let targetId;
+ const [yes,no]=blockDialog.querySelectorAll('button');
+ no.onclick=()=>blockDialog.close();
+ yes.onclick=async()=>{
+  const user=userDirectory.find(u=>u.id===targetId);blockDialog.close();
+  if(!user||user.suspended)return;
+  const updated=userDirectory.map(u=>u.id===user.id?{...u,suspended:true}:u);
+  if(await store(updated,profileDirectory,user.email))status.textContent='Usuario bloqueado.';
+ };
  const notice=document.createElement('dialog');notice.className='cabys-dialog';notice.innerHTML='<p>Perfil en uso</p><button type="button">Regresar</button>';
  notice.querySelector('button').onclick=()=>notice.close();directory.append(notice);
  for(const section of [users,profiles]){const save=document.createElement('button');save.type='submit';save.textContent='Guardar';section.box.append(save);}
@@ -6959,6 +6970,10 @@ function installUserDirectory(panel){
    const cell=row.insertCell();action(cell,'Modificar',()=>{
     userId=u.id;for(const [key] of fields)inputs[key].value=key==='position'?(profile?.id||''):(u[key]||'');inputs.firstName.focus();
    });
+   if(!u.suspended)action(cell,'Bloquear',()=>{
+    targetId=u.id;blockDialog.querySelector('p').textContent='¿Está seguro de que desea bloquear a '+u.firstName+' '+u.lastName+'?';
+    blockDialog.showModal();yes.focus();
+   });
   }
   for(const p of profileDirectory){
    const row=profiles.body.insertRow();row.insertCell().textContent=p.name;const cell=row.insertCell();
@@ -6969,12 +6984,12 @@ function installUserDirectory(panel){
    });
   }
  }
- async function store(nextUsers,nextProfiles){
+ async function store(nextUsers,nextProfiles,blockEmail){
   if(saving)return false;
   const oldUsers=userDirectory,oldProfiles=profileDirectory;
   saving=true;directory.inert=true;status.textContent='Guardando…';
   userDirectory=nextUsers;profileDirectory=nextProfiles;
-  try{await persistPurchaseConfirmed();refresh();status.textContent='Cambio guardado.';return true;}
+  try{await persistPurchaseConfirmed(blockEmail);refresh();status.textContent='Cambio guardado.';return true;}
   catch(error){userDirectory=oldUsers;profileDirectory=oldProfiles;status.textContent=error.message;return false;}
   finally{saving=false;directory.inert=false;}
  }
@@ -6985,9 +7000,11 @@ function installUserDirectory(panel){
   if(!profile)return;
   const email=inputs.email.value;
   if(userDirectory.some(u=>u.id!==userId&&u.email.toLowerCase()===email.toLowerCase())){status.textContent='Ya existe un usuario con ese correo.';return;}
-  const record={...userDirectory.find(u=>u.id===userId),id:userId||crypto.randomUUID(),profileId:profile.id};
+  const previous=userDirectory.find(u=>u.id===userId);
+  const record={...previous,id:userId||crypto.randomUUID(),profileId:profile.id};
   for(const [key] of fields)record[key]=key==='position'?profile.name:inputs[key].value;
-  if(await store(userId?userDirectory.map(u=>u.id===userId?record:u):[...userDirectory,record],profileDirectory)){userId='';users.form.reset();}
+  const blockEmail=previous?.suspended&&previous.email.toLowerCase()!==email.toLowerCase()?email:undefined;
+  if(await store(userId?userDirectory.map(u=>u.id===userId?record:u):[...userDirectory,record],profileDirectory,blockEmail)){userId='';users.form.reset();}
  };
  profiles.form.onsubmit=async event=>{
   event.preventDefault();const name=profileName.value.trim();profileName.value=name;
@@ -7839,7 +7856,7 @@ return Array.from(target.elements).filter(input=>input.name).map(input=>[
 input.name,purchaseInputRaw(input),['checkbox','radio'].includes(input.type)?input.checked:null
 ]);
 }
-function persistTrialSnapshot(requireConfirmation=false){
+function persistTrialSnapshot(requireConfirmation=false,blockEmail){
 refreshContactLinks();
 savedTrialSnapshot={
 version:1,
@@ -7873,10 +7890,10 @@ refreshDynamics();
 refreshPurchaseProducts();refreshArticleProperties();refreshInventoryDashboard();
 try{localStorage.setItem(trialStorageKey,JSON.stringify(savedTrialSnapshot));}catch(error){}
 const submitted=savedTrialSnapshot;
-persistHostTrialSnapshot(submitted,requireConfirmation).catch(()=>{if(requireConfirmation&&window.parent!==window)window.dispatchEvent(new MessageEvent('message',{source:window.parent,data:{type:'cedi-trial-state-saved',updatedAt:submitted.updatedAt,ok:false,reason:'No se pudo preparar la compra para enviarla.'}}));});
+persistHostTrialSnapshot(submitted,requireConfirmation,blockEmail).catch(()=>{if(requireConfirmation&&window.parent!==window)window.dispatchEvent(new MessageEvent('message',{source:window.parent,data:{type:'cedi-trial-state-saved',updatedAt:submitted.updatedAt,ok:false,reason:'No se pudo preparar la compra para enviarla.'}}));});
 return savedTrialSnapshot.updatedAt;
 }
-async function persistHostTrialSnapshot(snapshot,requireConfirmation){
+async function persistHostTrialSnapshot(snapshot,requireConfirmation,blockEmail){
 if(!window.openai?.setWidgetState){return;}
 // Compress the large XML archive first so ordinary edits preserve its compressed prefix.
 const serialized=JSON.stringify(sharedPurchaseStorage?{xmlInboxState:snapshot.xmlInboxState,...snapshot}:snapshot);
@@ -7889,7 +7906,7 @@ privateContent={cediTrialGzip:encoded};
 }
 if(savedTrialSnapshot!==snapshot&&!requireConfirmation){return;}
 // The hosted wrapper stores larger trial snapshots locally without expanding iframe permissions.
-if(window.parent!==window){window.parent.postMessage({type:'cedi-trial-state-save',updatedAt:snapshot.updatedAt,content:privateContent},'*');}
+if(window.parent!==window){window.parent.postMessage({type:'cedi-trial-state-save',updatedAt:snapshot.updatedAt,content:privateContent,blockEmail},'*');}
 if(JSON.stringify(privateContent).length>=14000){return;}
 await window.openai.setWidgetState({
 modelContent:{savedTrialArticles:snapshot.products.length+(snapshot.xmlPendingArticles?.length||0),savedContacts:snapshot.contactsState?.records?.length || 0,savedCashOutEntries:snapshot.cashOutEntries?.length || 0},
@@ -8967,7 +8984,7 @@ const exact=result.raw?Number(xmlFixed(result.raw.net)+xmlFixed(result.raw.oc))/
 const subtotalCents=result.raw?xmlCents(xmlScaledText(xmlFixed(result.raw.net)+xmlFixed(result.raw.oc))):(result.netCents??result.subtotalCents-result.discountCents)+result.otherChargesCents;
 return {subtotalCents,unitCost:(exact??subtotalCents/100)/Number(quantity)};
 }
-function persistPurchaseConfirmed(){
+function persistPurchaseConfirmed(blockEmail){
 if(window.parent===window){const stamp=persistTrialSnapshot();try{if(JSON.parse(localStorage.getItem(trialStorageKey))?.updatedAt===stamp)return Promise.resolve();}catch(error){}return Promise.reject(new Error('No se pudo guardar la compra. El XML sigue en revisión.'));}
 const shared=sharedPurchaseStorage===true;
 return new Promise((resolve,reject)=>{
@@ -8979,7 +8996,7 @@ return new Promise((resolve,reject)=>{
  };
  window.addEventListener('message',listener);
  if(!shared)timer=setTimeout(()=>finish(new Error('No se recibió confirmación del guardado. Revisá Compras registradas.')),12000);
- try{stamp=persistTrialSnapshot(true);}catch(error){finish(error);}
+ try{stamp=persistTrialSnapshot(true,blockEmail);}catch(error){finish(error);}
 });
 }
 function calculatePurchaseLine(quantity,cost,discount1,discount2,tax,otherCharges=0){

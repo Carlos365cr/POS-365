@@ -8,7 +8,7 @@ function binding(){
   return {prepare(query){return {bind(...args){this.args=args;return this},first(){return sql.prepare(query).get(...this.args||[])},run(){return {meta:sql.prepare(query).run(...this.args||[])}}}},async batch(statements){return statements.map(s=>s.run())}};
 }
 const legacy=binding();
-const primary=new Proxy({}, {get(){throw Error('Unexpected access to operational database')}});
+const primary={prepare(sql){assert.equal(sql,'SELECT blocked_at FROM cedi_blocked_accounts WHERE email=?');return {bind(){return {first:()=>null}}};}};
 const env={DB:primary,LEGACY_PURCHASES_DB:legacy};
 const request=(path,body)=>new Request('https://cedi.test/api/legacy-purchases/'+path,body?{method:'POST',headers:{Origin:'https://cedi.test','Content-Type':'application/json'},body:JSON.stringify(body)}:{});
 const head=await (await worker.fetch(request('state'),env)).json();

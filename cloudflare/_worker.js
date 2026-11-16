@@ -166,6 +166,16 @@ async function prepareLegacyCatalog(primary,cache) {
   }catch(error){await clean(generation);throw error;}
 }
 
+async function accountBlock(db,email){
+  try{return await db.prepare('SELECT blocked_at FROM cedi_blocked_accounts WHERE email=?').bind(email).first();}
+  catch(error){
+    if(/no such table: (?:main\.)?cedi_blocked_accounts\b/i.test(String(error.message)))return null;
+    throw error;
+  }
+}
+function mayBlock(env,email){
+  return (env.USER_ADMIN_EMAILS||'').split(',').some(value=>value.trim().toLowerCase()===email);
+}
 export default { async fetch(request, env) {
   const url=new URL(request.url);
   if(url.pathname==='/assets/pos-365-logo.png' && request.method==='GET')return env.ASSETS.fetch(request);
@@ -180,6 +190,7 @@ export default { async fetch(request, env) {
     const failure={};
     const claims=await verify(token,nonce,failure);
     if(!claims)return json({error:failure.message || 'POS 365 no pudo verificar la firma o el origen de la identificación de Google.'},403);
+    if(await accountBlock(env.DB,claims.email.toLowerCase()))return json({error:'Su usuario está bloqueado.'},403);
     const response=json({ok:true});
     response.headers.append('Set-Cookie',setCookie(sessionCookie,token,Math.floor(claims.exp-Date.now()/1000)));
     response.headers.append('Set-Cookie',setCookie(nonceCookie+'_'+challenge,'',0));
@@ -191,6 +202,13 @@ export default { async fetch(request, env) {
   const claims=await verify(cookie(request,sessionCookie));
   if(!claims)return url.pathname.startsWith('/api/') ? json({error:'Ingresá a POS 365 con Google.'},401) : new Response(null,{status:302,headers:{Location:'/login','Cache-Control':'no-store'}});
   const email=claims.email.toLowerCase();
+  const block=await accountBlock(env.DB,email);
+  const remaining=block?Math.max(0,block.blocked_at+600000-Date.now()):null;
+  if(remaining===0||(block&&claims.iat*1000>block.blocked_at)){
+    const denied=url.pathname.startsWith('/api/')?json({error:'Su usuario está bloqueado.'},403):new Response(null,{status:302,headers:{Location:'/login','Cache-Control':'no-store'}});
+    denied.headers.append('Set-Cookie',setCookie(sessionCookie,'',0));return denied;
+  }
+  if(url.pathname==='/api/session-access')return json({remaining,mayBlock:!block&&mayBlock(env,email)});
   if(!url.pathname.startsWith('/api/')){
     const asset=await env.ASSETS.fetch(request);
     const response=new Response(asset.body,asset);
@@ -245,7 +263,9 @@ export default { async fetch(request, env) {
   // Upload bounded batches first. Only the final transaction publishes a revision.
   if(url.pathname==='/api/save' && request.method==='POST'){
     if(request.headers.get('Origin')!==url.origin || request.headers.get('Content-Type')!=='application/json')return json({},403);
-    const {base,id,count,changes,finish}=await request.json();
+    const {base,id,count,changes,finish,blockEmail}=await request.json();
+    if(blockEmail!==undefined&&(legacy||finish!==true||block||!mayBlock(env,email)))return json({error:'Se requiere permiso para bloquear usuarios.'},403);
+    if(blockEmail!==undefined&&(typeof blockEmail!=='string'||!/^\S+@\S+\.\S+$/.test(blockEmail)||blockEmail.length>254))return json({},400);
     if(typeof base!=='string'||typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id)||!Number.isInteger(count)||count<1||count>1600)return json({},400);
     try{
       const rev='save:'+id;
@@ -262,13 +282,19 @@ export default { async fetch(request, env) {
         return json({staged:true});
       }
       if(!Number.isInteger(changes)||changes<0||changes>count)return json({},400);
+      const accessWrites=[];
+      if(blockEmail!==undefined){
+        await db.prepare('CREATE TABLE IF NOT EXISTS cedi_blocked_accounts(email TEXT PRIMARY KEY, blocked_at INTEGER NOT NULL)').run();
+        accessWrites.push(db.prepare('INSERT OR IGNORE INTO cedi_blocked_accounts SELECT ?,? WHERE EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(blockEmail.trim().toLowerCase(),Date.now(),rev));
+      }
       // Both copies and the head switch run under the same D1 transaction.
       const results=await db.batch([
         db.prepare('INSERT INTO cedi_parts SELECT ?,p.part,p.payload FROM cedi_parts p WHERE p.revision=? AND p.part<? AND NOT EXISTS(SELECT 1 FROM cedi_stage s WHERE s.id=? AND s.part=p.part) AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,base,count,key,base),
         db.prepare('INSERT INTO cedi_parts SELECT ?,part,payload FROM cedi_stage WHERE id=? AND part<? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,key,count,base),
         db.prepare('UPDATE cedi_head SET revision=?,parts=?,author=? WHERE id=1 AND revision=? AND (SELECT COUNT(*) FROM cedi_parts WHERE revision=?)=? AND (SELECT COUNT(*) FROM cedi_stage WHERE id=?)=?').bind(rev,count,email,base,rev,count,key,changes),
         db.prepare('DELETE FROM cedi_parts WHERE revision IN (?,?) AND revision<>(SELECT revision FROM cedi_head WHERE id=1)').bind(base,rev),
-        db.prepare('DELETE FROM cedi_stage WHERE id=? OR created<unixepoch()-86400').bind(key)
+        db.prepare('DELETE FROM cedi_stage WHERE id=? OR created<unixepoch()-86400').bind(key),
+        ...accessWrites
       ]);
       if(!results[2].meta.changes){
         const now=await db.prepare('SELECT revision FROM cedi_head WHERE id=1').first();

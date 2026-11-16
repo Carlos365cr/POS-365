@@ -79,6 +79,32 @@ function stop(message){
   text.textContent=message;button.textContent='Volver a cargar';button.onclick=()=>location.reload();
   panel.append(text,button);document.body.append(panel);panel.showModal();panel.oncancel=e=>e.preventDefault();
 }
+let logoutTimer,accessCheck;
+function checkSessionAccess(){
+  if(accessCheck)return accessCheck;
+  accessCheck=fetch('/api/session-access',{cache:'no-store'}).then(async response=>{
+    if(response.status===401||response.status===403){location.replace('/login');return {};}
+    if(!response.ok)throw Error('No se pudo comprobar el permiso.');
+    const access=await response.json();
+    if(Number.isFinite(access.remaining)){
+      let warning=document.getElementById('cedi-session-warning');
+      if(!warning){
+        warning=document.createElement('div');warning.id='cedi-session-warning';warning.setAttribute('role','alert');
+        warning.style.cssText='position:fixed;inset:0 0 auto;z-index:2147483647;background:#fff2ce;color:#362900;padding:8px;text-align:center';
+        document.body.append(warning);
+      }
+      warning.textContent='Su usuario fue bloqueado. La sesión se cerrará en '+Math.ceil(access.remaining/60000)+' min.';
+      clearTimeout(logoutTimer);
+      logoutTimer=setTimeout(()=>location.replace('/login'),access.remaining);
+    }
+    return access;
+  }).finally(()=>{accessCheck=null;});
+  return accessCheck;
+}
+function checkActiveSession(){checkSessionAccess().catch(()=>{});}
+checkActiveSession();setInterval(checkActiveSession,60000);
+window.addEventListener('focus',checkActiveSession);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkActiveSession();});
 let cachedPrintRevision,cachedPrintModels;
 window.addEventListener('message',async event=>{
   if(event.source!==frame.contentWindow||event.data?.type!=='cedi-read-print-models')return;
@@ -137,11 +163,15 @@ async function sendSaveStep(body){
 }
 window.addEventListener('message',event=>{
   if(event.source!==frame.contentWindow||event.data?.type!=='cedi-trial-state-save')return;
-  const {content,updatedAt}=event.data;
+  const {content,updatedAt,blockEmail}=event.data;
   const reply=(ok,reason)=>frame.contentWindow.postMessage({type:'cedi-trial-state-saved',updatedAt,ok,reason},'*');
   queue=queue.then(async()=>{
     if(blocked||!revision){reply(false,"La sesión tiene un guardado sin confirmar. Revisá Compras registradas.");return;}
     if(updatedAt<=latest){reply(false,"Se recibió una versión más reciente. Consultá Compras registradas.");return;}
+    if(blockEmail!==undefined){
+      const access=await checkSessionAccess().catch(()=>null);
+      if(!access?.mayBlock){reply(false,'La cuenta requiere permiso de administración para bloquear usuarios.');return;}
+    }
     let encoded=content.cediTrialGzip;
     if(!encoded){
       const zipped=new Blob([JSON.stringify(content.cediTrial)]).stream().pipeThrough(new CompressionStream('gzip'));
@@ -155,7 +185,7 @@ window.addEventListener('message',event=>{
     for(let start=0;start<changes.length;start+=4){
       await sendSaveStep({...save,changes:changes.slice(start,start+4)});
     }
-    const result=await sendSaveStep({...save,finish:true,changes:changes.length});
+    const result=await sendSaveStep({...save,finish:true,changes:changes.length,blockEmail});
     if(result.revision!=='save:'+save.id)throw Error('La confirmación del guardado no coincide con la operación.');
     revision=result.revision;confirmedParts=parts;latest=updatedAt;reply(true);
   }).catch(e=>{reply(false,e.message);if(!blocked)stop(e.message);});
