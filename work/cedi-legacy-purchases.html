@@ -7233,6 +7233,29 @@ function installUserDirectory(panel){
  refreshUserDirectory=refreshProfileDirectory=refresh;refresh();
 }
 
+function createModulePermissionList(panel,getNames){
+ const choices=new Map();
+ const box=document.createElement('fieldset'),legend=document.createElement('legend');
+ box.style.cssText='width:min(100%,22rem);box-sizing:border-box;margin:0;padding:8px';
+ legend.textContent='Módulos del menú';box.append(legend);panel.append(box);
+ const list=document.createElement('div');list.style.cssText='max-height:min(52vh,24rem);overflow:auto';box.append(list);
+ return ()=>{
+  list.replaceChildren();
+  for(const name of new Set(getNames().filter(Boolean))){
+   const row=document.createElement('div'),label=document.createElement('span');
+   row.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px;align-items:center;padding:3px 0';
+   row.setAttribute('role','group');row.setAttribute('aria-label',name);
+   label.textContent=name;row.append(label);list.append(row);
+   for(const action of ['Activar','Desactivar']){
+    const button=document.createElement('button');button.type='button';button.textContent=action;button.style.padding='4px 6px';
+    button.setAttribute('aria-pressed',String(choices.get(name)===action));button.classList.toggle('primary',choices.get(name)===action);
+    button.onclick=()=>{choices.set(name,action);for(const item of row.querySelectorAll('button')){item.setAttribute('aria-pressed',String(item===button));item.classList.toggle('primary',item===button);}};
+    row.append(button);
+   }
+  }
+ };
+}
+
 function installEmptyModule(name,className,sections=[]){
  const button=document.createElement('button');button.type='button';button.className='menu-item cursor-interaction';button.textContent=name;const placeholder=[...menu.children].find(item=>item.textContent.trim()===name);if(placeholder)placeholder.replaceWith(button);else menu.append(button);
  const main=document.createElement('main');main.hidden=true;main.className=className;const title=document.createElement('h2');title.textContent=name;main.append(title);root.append(main);
@@ -7245,7 +7268,8 @@ function installEmptyModule(name,className,sections=[]){
    const panel=document.createElement('section');panel.id=className+'-panel-'+index;panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',tab.id);tab.setAttribute('aria-controls',panel.id);
    tabs.append(tab);main.append(panel);return {tab,panel};
   });
-  const select=index=>entries.forEach((entry,i)=>{entry.tab.setAttribute('aria-selected',String(i===index));entry.tab.classList.toggle('primary',i===index);entry.tab.tabIndex=i===index?0:-1;entry.panel.hidden=i!==index;});
+  const refreshPermissions=className==='users-permissions-view'?createModulePermissionList(entries[1].panel,()=>Array.from(menu.querySelectorAll('.menu-item'),item=>item.textContent.trim())):null;
+  const select=index=>{if(index===1&&refreshPermissions)refreshPermissions();entries.forEach((entry,i)=>{entry.tab.setAttribute('aria-selected',String(i===index));entry.tab.classList.toggle('primary',i===index);entry.tab.tabIndex=i===index?0:-1;entry.panel.hidden=i!==index;});};
   if(className==='users-permissions-view')installUserDirectory(entries[0].panel);
   if(className==='perishables-view'){installVegetableProducts(entries[0].panel);installPerishableProducts(entries[1].panel,'animal');}
   entries.forEach((entry,index)=>{entry.tab.onclick=()=>select(index);entry.tab.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?entries.length-1:(index+(event.key==='ArrowRight'?1:-1)+entries.length)%entries.length;select(next);entries[next].tab.focus();};});select(0);
