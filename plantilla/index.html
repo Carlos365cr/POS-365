@@ -4,15 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; manifest-src 'self'; worker-src blob:; connect-src 'self' blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="apple-mobile-web-app-title" content="POS 365">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/pos365-inicio-192.png">
+<link rel="manifest" href="/pos365.webmanifest">
 <title>POS 365</title>
 <style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{box-sizing:border-box;padding:0;background:inherit}iframe{display:block;width:100%;max-width:none;height:100vh!important;height:100dvh!important;margin:0;border:0}</style>
 
 </head>
 <body>
 <iframe id="codex-visualization" sandbox="allow-scripts" scrolling="no" referrerpolicy="no-referrer" title="articulos-cedi.html" data-srcdoc="__CEDI_UI__"></iframe>
-
-<script>(() => {
+<script>__CEDI_BRIDGE__</script>
+<script>(async () => {
   const frame = document.getElementById("codex-visualization");
   if (!(frame instanceof HTMLIFrameElement)) {
     return;
@@ -102,7 +106,7 @@
     globalThis.addEventListener("pagehide", persistSize);
   }
   const initialGlobals = {
-    widgetState: state,
+    widgetState: {privateContent: await loadShared()}, entryModule: new URLSearchParams(location.search).get('modulo'),
     statePersistence: storage == null ? "none" : "local",
   };
 
@@ -288,7 +292,7 @@
   }
   frame.srcdoc = frameHtml;
   delete frame.dataset.srcdoc;
-})();
+})().catch(error=>stop(error.message));
 </script>
 
 <script>
@@ -351,65 +355,12 @@ try{const binary=atob(content);if(binary.length>2000000){return;}const bytes=Uin
 </script>
 
 <script>
-// Origin-local backups, including article images. No server upload.
-(()=>{
-const storageKey='cedi:trial-with-xml:v1',maxSize=128*1024*1024;
-let databasePromise=null,queue=Promise.resolve();
-function database(){
- if(!databasePromise){databasePromise=new Promise((resolve,reject)=>{
-  const request=indexedDB.open('cedi-local-trial',1);
-  request.onupgradeneeded=()=>request.result.createObjectStore('state');
-  request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
- });}
- return databasePromise;
-}
-function legacy(){
- try{const text=localStorage.getItem(storageKey);return text&&text.length<=maxSize?JSON.parse(text):null;}catch(error){return null;}
-}
-async function read(){
- const old=legacy();
- try{
-  const db=await database();
-  const stored=await new Promise((resolve,reject)=>{const request=db.transaction('state').objectStore('state').get(storageKey);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
-  return stored&&(!old||stored.updatedAt>=old.updatedAt)?stored:old;
- }catch(error){return old;}
-}
-async function save(value){
- try{
-  const db=await database();
-  await new Promise((resolve,reject)=>{
-   const transaction=db.transaction('state','readwrite'),store=transaction.objectStore('state'),request=store.get(storageKey);
-   request.onsuccess=()=>{if(!request.result||request.result.updatedAt<=value.updatedAt){store.put(value,storageKey);}};
-   transaction.oncomplete=resolve;transaction.onabort=()=>reject(transaction.error);transaction.onerror=()=>reject(transaction.error);
-  });
- }catch(error){
-  const old=legacy();if(!old||old.updatedAt<=value.updatedAt){localStorage.setItem(storageKey,JSON.stringify(value));}
- }
-}
-window.addEventListener('message',event=>{
- const frame=document.getElementById('codex-visualization');
- if(event.source!==frame?.contentWindow){return;}
- const data=event.data;if(!data||!['cedi-trial-state-save','cedi-trial-state-read'].includes(data.type)){return;}
- const reply=value=>frame.contentWindow.postMessage(value,'*');
- queue=queue.then(async()=>{
-  if(data.type==='cedi-trial-state-read'){const saved=await read();if(saved){reply({type:'cedi-trial-state-loaded',content:saved.content});}return;}
-  if(!Number.isSafeInteger(data.updatedAt)||data.updatedAt<0||!data.content||typeof data.content!=='object'||Array.isArray(data.content)){return;}
-  const content=data.content;
-  if(!(content.cediTrial?.version===1||typeof content.cediTrialGzip==='string'&&/^[A-Za-z0-9+/]*={0,2}$/.test(content.cediTrialGzip))){return;}
-  const value={updatedAt:data.updatedAt,content};
-  if(JSON.stringify(value).length>maxSize){throw new Error('Storage limit');}
-  const previous=await read();if(!previous||previous.updatedAt<=value.updatedAt){await save(value);}
-  reply({type:'cedi-trial-state-saved',ok:true,updatedAt:data.updatedAt});
- }).catch(()=>reply({type:'cedi-trial-state-saved',ok:false,updatedAt:data.updatedAt}));
-});
-})();
-
 </script>
 <script>
 // Data-only Excel and PDF exports from this application's sandbox.
 window.addEventListener('message',event=>{
 const frame=document.getElementById('codex-visualization');if(event.source!==frame?.contentWindow||event.data?.type!=='cedi-cash-export'){return;}
-const {filename,mime,content}=event.data;if(typeof filename!=='string'||!/^CEDI-salidas-(sistema|pago)-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.(xlsx|pdf)$/.test(filename)||typeof content!=='string'||content.length>20*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(content)){return;}
+const {filename,mime,content}=event.data;if(typeof filename!=='string'||filename!=='CEDI-compras-lineas.xlsx'&&!/^CEDI-salidas-(sistema|pago)-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.(xlsx|pdf)$/.test(filename)||typeof content!=='string'||content.length>20*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(content)){return;}
 try{const decoded=atob(content);if(mime==='application/pdf'){if(!filename.endsWith('.pdf')||!decoded.startsWith('%PDF-1.4')){return;}}else if(mime==='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'){if(!filename.endsWith('.xlsx')||!decoded.startsWith('PK\x03\x04')){return;}}else{return;}
 const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:mime})),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }catch(error){}
@@ -466,5 +417,28 @@ const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0)),url=URL.createObjectURL(
 
 </script>
 <!-- /cedi-price-print-bridge -->
+<script>
+window.addEventListener('message',async event=>{
+ const frame=document.getElementById('codex-visualization'),port=event.ports[0];
+ if(frame&&event.source===frame.contentWindow&&event.data?.type==='pos365-process-invoice'&&port){
+  try{const response=await fetch('/api/internal-invoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event.data.data)});port.postMessage(await response.json());}
+  catch{port.postMessage({error:'Revise la conexión y vuelva a intentar.'});}finally{port.close();}return;
+ }
+ if(frame&&event.source===frame.contentWindow&&event.data?.type==='pos365-invoice-number'&&port){
+  try{
+   const response=await fetch('/api/internal-invoice-number',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({draft:event.data.draft})});
+   port.postMessage(response.ok?await response.json():{});
+  }catch{port.postMessage({});}
+  finally{port.close();}
+  return;
+ }
+ if(!frame||event.source!==frame.contentWindow||event.data?.type!=='pos365-gmail'||!port)return;
+ try{
+  const response=await fetch('/api/gmail-xml',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event.data.data)});
+  port.postMessage(await response.json());
+ }catch{port.postMessage({error:'No se pudo comunicar con el servicio de Cargas XML.'});}
+ finally{port.close();}
+});
+</script>
 </body>
 </html>

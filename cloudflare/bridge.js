@@ -1,16 +1,22 @@
 let queue=Promise.resolve(),revision,latest=0,blocked=false,confirmedParts=[];
 const frame=document.getElementById('codex-visualization');
+async function storeReadError(response,stage){
+  const problem=await response.json().catch(()=>null);
+  const detail=typeof problem?.error==='string'?problem.error:'';
+  if(response.status===401)return Error('La sesión de POS 365 venció. Volvé a ingresar con Google.');
+  return Error(stage+' (HTTP '+response.status+'). '+(detail||'Volvé a intentarlo.'));
+}
 async function readStore(prefix,catalog=false){
   for(let attempt=0;attempt<3;attempt++){
     const response=await fetch(prefix+(catalog?'/catalog':'/state'),{cache:'no-store'});
     if(catalog&&response.status===503&&attempt<2)continue;
-    if(!response.ok)throw Error(response.status===401?'Se requiere iniciar sesión para abrir POS 365.':'No se pudo cargar el catálogo o la base de datos. Volvé a intentarlo.');
+    if(!response.ok)throw await storeReadError(response,catalog?'Error al abrir el catálogo':'Error al abrir la base de compras');
     const head=await response.json(),parts=[];
     for(let start=0;start<head.parts;start+=24){
       const starts=[start,start+8,start+16].filter(offset=>offset<head.parts);
       const pages=await Promise.all(starts.map(async offset=>{
         const response=await fetch(prefix+(catalog?'/catalog-parts?generation='+encodeURIComponent(head.generation):'/parts?revision='+encodeURIComponent(head.revision))+'&start='+offset,{cache:'no-store'});
-        if(!response.ok)throw Error('No se pudo leer la base compartida.');
+        if(!response.ok)throw await storeReadError(response,catalog?'Error al leer el detalle del catálogo':'Error al leer los datos guardados');
         const page=await response.json();
         if(!Array.isArray(page)||page.length!==Math.min(8,head.parts-offset)||
             page.some((row,i)=>row.part!==offset+i||typeof row.payload!=='string'))return null;
@@ -86,6 +92,7 @@ function checkSessionAccess(){
     if(response.status===401||response.status===403){location.replace('/login');return {};}
     if(!response.ok)throw Error('No se pudo comprobar el permiso.');
     const access=await response.json();
+    if(access.email)frame.contentWindow?.postMessage({type:'pos365-billing-user',email:access.email,name:access.name},'*');
     if(Number.isFinite(access.remaining)){
       let warning=document.getElementById('cedi-session-warning');
       if(!warning){
@@ -101,6 +108,9 @@ function checkSessionAccess(){
   }).finally(()=>{accessCheck=null;});
   return accessCheck;
 }
+window.addEventListener('message',event=>{
+  if(event.source===frame.contentWindow&&event.data?.type==='pos365-read-billing-user')checkActiveSession();
+});
 function checkActiveSession(){checkSessionAccess().catch(()=>{});}
 checkActiveSession();setInterval(checkActiveSession,60000);
 window.addEventListener('focus',checkActiveSession);
