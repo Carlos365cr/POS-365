@@ -8279,7 +8279,21 @@ function installUserDirectory(panel){
  };
  const notice=document.createElement('dialog');notice.className='cabys-dialog';notice.innerHTML='<p>Perfil en uso</p><button type="button">Regresar</button>';
  notice.querySelector('button').onclick=()=>notice.close();directory.append(notice);
- for(const section of [users,profiles]){const save=document.createElement('button');save.type='submit';save.textContent='Guardar';section.box.append(save);}
+ for(const section of [users,profiles]){
+  const save=document.createElement('button');save.type='button';save.textContent='Guardar';
+  const feedback=document.createElement('p');feedback.setAttribute('role','status');
+  section.box.append(save,feedback);
+  const run=event=>{
+   event.preventDefault();event.stopPropagation();
+   if(saving)return;
+   directory.append(status);feedback.replaceChildren(status);
+   section.form.onsubmit(event);
+  };
+  save.onclick=run;
+  section.form.addEventListener('keydown',event=>{
+   if(event.key==='Enter'&&event.target.tagName==='INPUT'&&!event.repeat)run(event);
+  });
+ }
  let userId='',profileId='',saving=false;
  function assigned(user,profile){return user.profileId?user.profileId===profile.id:!!user.position&&user.position===profile.name;}
  function action(cell,label,run){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=run;cell.append(button);}
@@ -8333,7 +8347,7 @@ function installUserDirectory(panel){
  };
  users.form.onsubmit=async event=>{
   event.preventDefault();for(const [key] of fields)inputs[key].value=inputs[key].value.trim();
-  if(!users.form.reportValidity())return;
+  if(!users.form.reportValidity()){status.textContent='Complete nombre, apellido, perfil y un correo válido para guardar el usuario.';return;}
   const profile=profileDirectory.find(p=>p.id===inputs.position.value);
   if(!profile)return;
   const email=inputs.email.value;
@@ -8346,7 +8360,7 @@ function installUserDirectory(panel){
  };
  profiles.form.onsubmit=async event=>{
   event.preventDefault();const name=profileName.value.trim();profileName.value=name;
-  if(!profiles.form.reportValidity())return;
+  if(!profiles.form.reportValidity()){status.textContent='Escriba el nombre del perfil para guardarlo.';return;}
   if(profileDirectory.some(p=>p.id!==profileId&&p.name.toLowerCase()===name.toLowerCase())){status.textContent='Ya existe un perfil con ese nombre.';return;}
   const previous=profileDirectory.find(p=>p.id===profileId),profile={...previous,id:previous?.id||crypto.randomUUID(),number:previous?.number||nextNumber(profileDirectory),name};
   const next=previous?profileDirectory.map(p=>p.id===profile.id?profile:p):[...profileDirectory,profile];
