@@ -8114,6 +8114,30 @@ function installUserDirectory(panel){
   const label=field(grid,title,input);
   if(key==='position'||key==='email')label.style.gridColumn='1/-1';
  }
+ const password=document.createElement('input');
+ password.type='password';password.autocomplete='new-password';password.minLength=12;password.maxLength=128;
+ password.disabled=true;
+ window.addEventListener('message',event=>{
+  if(event.source===window.parent&&event.data?.type==='pos365-billing-user')password.disabled=event.data.master!==true;
+ });
+ window.parent.postMessage({type:'pos365-read-billing-user'},new URL(document.baseURI).origin);
+
+ password.placeholder='Nueva clave o vacío para conservar';
+ field(grid,'Clave',password);
+ const username=document.createElement('input');username.maxLength=64;username.autocomplete='off';
+ field(grid,'Usuario de acceso',username).style.gridColumn='1/-1';
+ const credentialNote=document.createElement('small');credentialNote.textContent='La cuenta máster puede crear o cambiar la clave. Mínimo 12 caracteres.';grid.append(credentialNote);
+ function savePassword(userId,secret){
+  return new Promise((resolve,reject)=>{
+   const id=crypto.randomUUID();
+   const timer=setTimeout(()=>finish(Error('No se confirmó la clave. Vuelva a guardarla.')),20000);
+   const listener=e=>{if(e.source!==window.parent||e.data?.type!=='pos365-credential-result'||e.data.id!==id)return;finish(e.data.ok?null:Error(e.data.error));};
+   function finish(error){clearTimeout(timer);window.removeEventListener('message',listener);error?reject(error):resolve();}
+   window.addEventListener('message',listener);
+   window.parent.postMessage({type:'pos365-save-credential',id,userId,password:secret},new URL(document.baseURI).origin);
+  });
+ }
+
  const profileName=document.createElement('input');profileName.required=true;field(profiles.box,'Nombre perfil',profileName);
  const status=document.createElement('p');status.setAttribute('role','status');directory.append(status);
  const blockDialog=document.createElement('dialog');blockDialog.className='cabys-dialog';
@@ -8131,13 +8155,13 @@ function installUserDirectory(panel){
  notice.querySelector('button').onclick=()=>notice.close();directory.append(notice);
  for(const section of [users,profiles]){
   const save=document.createElement('button');save.type='button';save.textContent='Guardar';
-  const feedback=document.createElement('p');feedback.setAttribute('role','status');
+  const feedback=document.createElement('div');feedback.setAttribute('role','status');
   section.box.append(save,feedback);
   const run=event=>{
    event.preventDefault();event.stopPropagation();
    if(saving)return;
    directory.append(status);feedback.replaceChildren(status);
-   section.form.onsubmit(event);
+   Promise.resolve(section.form.onsubmit(event)).catch(error=>{status.textContent=error.message||'No se pudo guardar.';});
   };
   save.onclick=run;
   section.form.addEventListener('keydown',event=>{
@@ -8162,7 +8186,7 @@ function installUserDirectory(panel){
    for(const [key] of fields)row.insertCell().textContent=key==='position'?(profile?.name||u.position||'Sin asignar'):u[key];
    row.insertCell().textContent=stateOf(u);
    const cell=row.insertCell();if(u.deleted)continue;action(cell,'Modificar',()=>{
-    userId=u.id;showIds();for(const [key] of fields)inputs[key].value=key==='position'?(profile?.id||''):(u[key]||'');inputs.firstName.focus();
+    userId=u.id;username.value=u.username||'';password.value='';showIds();for(const [key] of fields)inputs[key].value=key==='position'?(profile?.id||''):(u[key]||'');inputs.firstName.focus();
    });
    if(!u.suspended)action(cell,'Bloquear',()=>{
     targetId=u.id;blockDialog.querySelector('p').textContent='¿Está seguro de que desea bloquear a '+u.firstName+' '+u.lastName+'?';
@@ -8201,12 +8225,26 @@ function installUserDirectory(panel){
   const profile=profileDirectory.find(p=>p.id===inputs.position.value);
   if(!profile)return;
   const email=inputs.email.value;
+  const loginName=username.value.trim().toLowerCase();
+  if(loginName&&!/^[a-z0-9._-]{3,64}$/.test(loginName)){status.textContent='Usuario de acceso: use de 3 a 64 letras, números, puntos, guiones o guiones bajos.';return;}
+  if(loginName&&userDirectory.some(u=>u.id!==userId&&u.username?.toLowerCase()===loginName)){status.textContent='Ya existe ese usuario de acceso.';return;}
+
   if(userDirectory.some(u=>u.id!==userId&&u.email.toLowerCase()===email.toLowerCase())){status.textContent='Ya existe un usuario con ese correo.';return;}
   const previous=userDirectory.find(u=>u.id===userId);
   const record={...previous,id:userId||crypto.randomUUID(),number:previous?.number||nextNumber(userDirectory),profileId:profile.id};
   for(const [key] of fields)record[key]=key==='position'?profile.name:inputs[key].value;
+  record.username=loginName;
   const blockEmail=previous?.suspended&&previous.email.toLowerCase()!==email.toLowerCase()?email:undefined;
-  if(await store(userId?userDirectory.map(u=>u.id===userId?record:u):[...userDirectory,record],profileDirectory,blockEmail)){userId='';users.form.reset();showIds();}
+  if(await store(userId?userDirectory.map(u=>u.id===userId?record:u):[...userDirectory,record],profileDirectory,blockEmail)){
+   userId=record.id;
+   if(password.value){
+    const secret=password.value;password.value='';saving=true;directory.inert=true;
+    try{await savePassword(record.id,secret);status.textContent='Usuario y clave guardados.';}
+    catch(error){status.textContent='Usuario guardado. Clave pendiente: '+error.message;return;}
+    finally{saving=false;directory.inert=false;}
+   }
+   userId='';users.form.reset();showIds();
+  }
  };
  profiles.form.onsubmit=async event=>{
   event.preventDefault();const name=profileName.value.trim();profileName.value=name;
@@ -9663,6 +9701,14 @@ installPrintDesigns();
 const handheldMenu=installEmptyModule('Handheld','handheld-view');
 installReceipts();
 const homeMenu=installHomeModule();
+const designsMenu=[...menu.children].find(item=>item.textContent.trim()==='Diseños');
+if(designsMenu){
+ const logout=document.createElement('button');logout.type='button';logout.className='menu-item cursor-interaction';logout.textContent='Cerrar sesión';
+ designsMenu.after(logout);
+ logout.onclick=()=>{logout.disabled=true;window.parent.postMessage({type:'pos365-logout'},new URL(document.baseURI).origin);};
+ window.addEventListener('message',event=>{if(event.source===window.parent&&event.data?.type==='pos365-logout-result'){logout.disabled=false;logout.textContent=event.data.error;}});
+}
+
 homeMenu.after(handheldMenu);
 const categoryMenu=installEmptyModule('Categorías','categories-view');
 const warehouseMenu=installEmptyModule('Bodegas','warehouses-view');

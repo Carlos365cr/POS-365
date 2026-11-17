@@ -92,7 +92,7 @@ function checkSessionAccess(){
     if(response.status===401||response.status===403){location.replace('/login');return {};}
     if(!response.ok)throw Error('No se pudo comprobar el permiso.');
     const access=await response.json();
-    if(access.email)frame.contentWindow?.postMessage({type:'pos365-billing-user',email:access.email,name:access.name},'*');
+    if(access.email)frame.contentWindow?.postMessage({type:'pos365-billing-user',email:access.email,name:access.name,master:access.master},'*');
     if(Number.isFinite(access.remaining)){
       let warning=document.getElementById('cedi-session-warning');
       if(!warning){
@@ -206,4 +206,21 @@ window.addEventListener('message', event=>{
   const destination=event.data.destination;
   if(destination==='legacy')location.assign('/compras-formato-viejo.html');
   if(destination==='current')location.assign('/?modulo='+encodeURIComponent(event.data.moduleName||'Compras'));
+});
+window.addEventListener('message',async event=>{
+ if(event.source!==frame.contentWindow)return;
+ if(event.data?.type==='pos365-logout'){
+  try{
+   const response=await fetch('/auth/logout',{method:'POST'});
+   if(!response.ok)throw Error();
+   location.replace('/login');
+  }catch{frame.contentWindow.postMessage({type:'pos365-logout-result',error:'No se pudo cerrar sesión. Intente de nuevo.'},'*');}
+ }
+ if(event.data?.type!=='pos365-save-credential')return;
+ const {id,userId,password}=event.data;
+ try{
+  const response=await fetch('/api/user-credential',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,password})});
+  const result=await response.json();
+  frame.contentWindow.postMessage({type:'pos365-credential-result',id,ok:response.ok,error:result.error},'*');
+ }catch{frame.contentWindow.postMessage({type:'pos365-credential-result',id,ok:false,error:'No se confirmó la clave. Puede volver a guardarla.'},'*');}
 });

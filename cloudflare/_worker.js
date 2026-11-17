@@ -2957,6 +2957,94 @@ async function verify(token, nonce, failure = {}) {
     return claims;
   } catch { return null; }
 }
+const masterEmail='carlosxu@dcasa-cr.com';
+const passwordCookie='__Host-cedi_password';
+const authHex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
+const randomAuth=()=>authHex(crypto.getRandomValues(new Uint8Array(32)));
+const authDigest=async text=>authHex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)));
+async function passwordHash(password,salt){
+ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);
+ return authHex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-512',salt:new TextEncoder().encode(salt),iterations:100000},key,256));
+}
+async function authTables(db){
+ await db.batch([
+  db.prepare('CREATE TABLE IF NOT EXISTS pos_credentials (user_id TEXT PRIMARY KEY, email TEXT NOT NULL, salt TEXT NOT NULL, hash TEXT NOT NULL, version TEXT NOT NULL)'),
+  db.prepare('CREATE TABLE IF NOT EXISTS pos_sessions (token TEXT PRIMARY KEY,user_id TEXT NOT NULL,version TEXT NOT NULL,expires INTEGER NOT NULL,issued INTEGER NOT NULL)'),
+  db.prepare('CREATE TABLE IF NOT EXISTS pos_login_attempts (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL)')
+ ]);
+}
+let authDirectoryCache;
+async function authDirectory(db){
+ const head=await db.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();
+ if(!head)return [];
+ if(authDirectoryCache?.db===db&&authDirectoryCache.revision===head.revision)return authDirectoryCache.users;
+ let offset=0;
+ const stream=new ReadableStream({async pull(controller){
+  if(offset>=head.parts){controller.close();return;}
+  const {results}=await db.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? ORDER BY part LIMIT 8').bind(head.revision,offset).all();
+  if(!results.length)throw Error('La base cambió; intente de nuevo.');
+  for(const row of results){if(row.part!==offset++)throw Error('Directorio incompleto');controller.enqueue(Uint8Array.from(atob(row.payload),c=>c.charCodeAt(0)));}
+ }});
+ const snapshot=await new Response(stream.pipeThrough(new DecompressionStream('gzip'))).json();
+ const users=Array.isArray(snapshot.userDirectory)?snapshot.userDirectory:[];
+ authDirectoryCache={db,revision:head.revision,users};
+ return users;
+}
+function credentialUser(users,id){return users.find(u=>u.id===id&&!u.deleted&&!u.suspended);}
+async function passwordSession(request,env){
+ const token=cookie(request,passwordCookie);
+ if(!token||!/^[0-9a-f]{64}$/.test(token))return null;
+ await authTables(env.DB);
+ const row=await env.DB.prepare('SELECT s.*,c.email AS credential_email FROM pos_sessions s JOIN pos_credentials c ON c.user_id=s.user_id AND c.version=s.version WHERE token=? AND expires>?').bind(await authDigest(token),Date.now()).first();
+ if(!row)return null;
+ const user=credentialUser(await authDirectory(env.DB),row.user_id);
+ if(!user||user.email.toLowerCase()!==row.credential_email)return null;
+ return {email:user.email,name:[user.firstName,user.lastName].filter(Boolean).join(' '),iat:row.issued/1000,exp:row.expires/1000};
+}
+async function saveCredential(request,env,email){
+ if(email!==masterEmail)return json({error:'Solo la cuenta máster puede cambiar claves.'},403);
+ if(request.method!=='POST'||request.headers.get('Origin')!==new URL(request.url).origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
+ const body=await request.json().catch(()=>null);
+ if(!body||typeof body.userId!=='string'||typeof body.password!=='string'||body.password.length<12||body.password.length>128)return json({error:'Use una clave de 12 a 128 caracteres.'},400);
+ const user=credentialUser(await authDirectory(env.DB),body.userId);
+ if(!user)return json({error:'Primero guarde un usuario activo.'},400);
+ await authTables(env.DB);
+ const salt=randomAuth(),hash=await passwordHash(body.password,salt);
+ await env.DB.batch([
+  env.DB.prepare('INSERT INTO pos_credentials(user_id,email,salt,hash,version) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET email=excluded.email,salt=excluded.salt,hash=excluded.hash,version=excluded.version').bind(user.id,user.email.toLowerCase(),salt,hash,randomAuth()),
+  env.DB.prepare('DELETE FROM pos_sessions WHERE user_id=?').bind(user.id)
+ ]);
+ return json({ok:true});
+}
+async function passwordLogin(request,env){
+ if(request.method!=='POST'||request.headers.get('Origin')!==new URL(request.url).origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
+ const body=await request.json().catch(()=>null);
+ if(!body||typeof body.identifier!=='string'||typeof body.password!=='string'||body.identifier.length>254||body.password.length>128)return json({error:'Revise el usuario y la clave.'},400);
+ await authTables(env.DB);
+ const identifier=body.identifier.trim().toLowerCase(),now=Date.now();
+ const bucket=await authDigest((request.headers.get('CF-Connecting-IP')||'local')+'|'+Math.floor(now/900000));
+ const attempts=await env.DB.prepare('INSERT INTO pos_login_attempts(key,count,expires) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1 RETURNING count').bind(bucket,now+900000).first();
+ if(attempts.count>30)return json({error:'Demasiados intentos. Espere 15 minutos.'},429);
+ const users=await authDirectory(env.DB);
+ const matches=users.filter(u=>!u.deleted&&!u.suspended&&[u.email,u.username].some(v=>typeof v==='string'&&v.toLowerCase()===identifier));
+ const user=matches.length===1?matches[0]:null;
+ const stored=user?await env.DB.prepare('SELECT * FROM pos_credentials WHERE user_id=?').bind(user.id).first():null;
+ const hash=await passwordHash(body.password,stored?.salt||'invalid-login-salt');
+ let diff=0;const expected=stored?.hash||'0'.repeat(64);
+ for(let i=0;i<64;i++)diff|=hash.charCodeAt(i)^expected.charCodeAt(i);
+ if(!stored||stored.email!==user.email.toLowerCase()||diff||await accountBlock(env.DB,user.email.toLowerCase()))return json({error:'Usuario o clave incorrectos, o cuenta bloqueada.'},401);
+ const token=randomAuth(),expires=now+8*3600000;
+ await env.DB.batch([
+  env.DB.prepare('INSERT INTO pos_sessions(token,user_id,version,expires,issued) VALUES(?,?,?,?,?)').bind(await authDigest(token),user.id,stored.version,expires,now),
+  env.DB.prepare('DELETE FROM pos_sessions WHERE expires<?').bind(now),
+  env.DB.prepare('DELETE FROM pos_login_attempts WHERE expires<?').bind(now)
+ ]);
+ const response=json({ok:true});
+ response.headers.append('Set-Cookie',setCookie(passwordCookie,token,8*3600));
+ response.headers.append('Set-Cookie',setCookie(sessionCookie,'',0));
+ return response;
+}
+
 function login() {
   const nonce = crypto.randomUUID();
   return new Response(`<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="apple-mobile-web-app-title" content="POS 365">
@@ -2974,14 +3062,14 @@ main{width:min(100%,990px);display:grid;grid-template-columns:1.1fr 1fr;border-r
 .paper{height:100%;background:#edf7d5;padding:24px 20px;color:#275541;clip-path:polygon(0 0,100% 0,100% 100%,90% 95%,80% 100%,70% 95%,60% 100%,50% 95%,40% 100%,30% 95%,20% 100%,10% 95%,0 100%)}
 .paper b{font-size:18px;letter-spacing:-1px}.lines{height:42px;margin:12px 0;border-block:2px dashed #88a68a;background:repeating-linear-gradient(0deg,transparent 0 7px,#88a68a 7px 9px,transparent 9px 14px);background-size:65% 100%;background-repeat:no-repeat}.bars{height:24px;background:repeating-linear-gradient(90deg,#275541 0 2px,transparent 2px 5px,#275541 5px 9px,transparent 9px 11px)}
 .brand h1{margin:0;font-size:clamp(34px,5vw,56px);line-height:1;letter-spacing:-.055em}.brand p{margin:12px 0 0;color:#cfdfd5;line-height:1.5}
-.entry{padding:clamp(28px,5vw,64px);align-self:center;min-width:0}.entry h2{margin:0;font-size:clamp(32px,4vw,44px);letter-spacing:-.05em}.entry p{line-height:1.55;color:#51665f}.entry #google{min-height:44px;margin-top:32px}.entry #status{color:#8a331d;font-size:14px}.entry #status:empty{display:none}
+.entry{padding:clamp(28px,5vw,64px);align-self:center;min-width:0}.entry h2{margin:0;font-size:clamp(32px,4vw,44px);letter-spacing:-.05em}.entry p{line-height:1.55;color:#51665f}.entry form{display:grid;gap:16px;margin-top:24px}.entry label{display:grid;gap:6px}.entry input,.entry button{font:inherit;padding:12px;width:100%;border:1px solid #afc3b7;border-radius:6px}.entry button{background:#195e45;color:white;cursor:pointer}.entry #google{min-height:44px;margin-top:32px}.entry #status{color:#8a331d;font-size:14px}.entry #status:empty{display:none}
 @media(max-width:680px){body{padding:16px}main{grid-template-columns:1fr}.brand{min-height:202px;padding:26px}.art{position:absolute;right:4px;top:8px;transform:rotate(9deg) scale(.66);transform-origin:top right;margin:12px}.brand h1{font-size:32px}.brand p{font-size:14px}.entry{padding:32px 26px 40px}}
 </style>
 <main><section class="brand"><div class="wordmark"><img src="/assets/pos-365-logo.png" alt="POS 365 · Sistema de facturación" style="width:min(100%,320px);height:auto;background:#edf2ed;padding:12px;border-radius:12px"></div>
 <div class="art" aria-hidden="true"><div class="paper"><b>POS 365</b><div class="lines"></div><div class="bars"></div></div></div>
 <div><h1>POS 365</h1><p>Ventas, compras e inventario</p></div></section>
-<section class="entry" aria-labelledby="welcome"><h2 id="welcome">Bienvenido</h2><p>Ingresá con tu cuenta de Google autorizada.</p><div id="google"></div><p id="status" role="status"></p><noscript>Activá JavaScript para iniciar sesión con Google.</noscript></section></main>
-<script nonce="${nonce}">function iniciar(){google.accounts.id.initialize({client_id:'${clientId}',nonce:'${nonce}',callback:async function(r){const status=document.getElementById('status');try{const result=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:r.credential,challenge:'${nonce}'})});if(result.ok){location.replace('/');return}const error=await result.json();status.textContent=error.error || 'Falló la verificación de Google. Volvé a intentarlo.'}catch{status.textContent='Falló la conexión. Intentá otra vez.'}}});google.accounts.id.renderButton(document.getElementById('google'),{type:'standard',locale:'es',size:'large',width:Math.min(360,document.getElementById('google').clientWidth)})}</script>
+<section class="entry" aria-labelledby="welcome"><h2 id="welcome">Bienvenido</h2><form id="password-login"><label>Usuario o correo<input name="identifier" autocomplete="username" required maxlength="254"></label><label>Clave<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label><button>Ingresar</button></form><p>También puede ingresar con Google</p><div id="google"></div><p id="status" role="status"></p><noscript>Activá JavaScript para iniciar sesión con Google.</noscript></section></main>
+<script nonce="${nonce}">document.getElementById('password-login').onsubmit=async e=>{e.preventDefault();const f=e.target,b=f.querySelector('button'),status=document.getElementById('status');b.disabled=true;status.textContent='Ingresando…';try{const r=await fetch('/auth/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier:f.elements.identifier.value,password:f.elements.password.value})});const data=await r.json();if(!r.ok)throw Error(data.error||'No se pudo ingresar.');location.replace('/');}catch(error){status.textContent=error.message;}finally{b.disabled=false;f.elements.password.value='';}};function iniciar(){google.accounts.id.initialize({client_id:'${clientId}',nonce:'${nonce}',callback:async function(r){const status=document.getElementById('status');try{const result=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:r.credential,challenge:'${nonce}'})});if(result.ok){location.replace('/');return}const error=await result.json();status.textContent=error.error || 'Falló la verificación de Google. Volvé a intentarlo.'}catch{status.textContent='Falló la conexión. Intentá otra vez.'}}});google.accounts.id.renderButton(document.getElementById('google'),{type:'standard',locale:'es',size:'large',width:Math.min(360,document.getElementById('google').clientWidth)})}</script>
 <script src="https://accounts.google.com/gsi/client" async onload="iniciar()"></script></html>`,{headers:{'Content-Type':'text/html;charset=UTF-8','Cache-Control':'no-store','Set-Cookie':setCookie(nonceCookie+'_'+nonce,nonce,600),'Cross-Origin-Opener-Policy':'same-origin-allow-popups','Referrer-Policy':'strict-origin-when-cross-origin','X-Frame-Options':'DENY'}});
 }
 function saveError(error){
@@ -3089,7 +3177,7 @@ async function accountBlock(db,email){
   }
 }
 function mayBlock(env,email){
-  return (env.USER_ADMIN_EMAILS||'').split(',').some(value=>value.trim().toLowerCase()===email);
+  return email===masterEmail||(env.USER_ADMIN_EMAILS||'').split(',').some(value=>value.trim().toLowerCase()===email);
 }
 export default { async fetch(request, env) {
   const url=new URL(request.url);
@@ -3099,6 +3187,7 @@ export default { async fetch(request, env) {
   }
   if(url.pathname==='/favicon.ico')return Response.redirect(new URL('/assets/pos365-inicio-192.png',url),302);
   if(url.pathname==='/login')return login();
+  if(url.pathname==='/auth/password'){try{return await passwordLogin(request,env);}catch{return json({error:'No se pudo comprobar el acceso. Intente de nuevo.'},503);}}
   if(url.pathname==='/auth/login' && request.method==='POST'){
     const {token,challenge}=await request.json();
     if(typeof challenge!=='string'||!/^[0-9a-f-]{36}$/.test(challenge))return json({error:'Recargá POS 365 para actualizar la pantalla de ingreso.'},403);
@@ -3115,10 +3204,15 @@ export default { async fetch(request, env) {
     return response;
   }
   if(url.pathname==='/auth/logout' && request.method==='POST' && request.headers.get('Origin')===url.origin){
-    return new Response(null,{status:303,headers:{Location:'/login','Cache-Control':'no-store','Set-Cookie':setCookie(sessionCookie,'',0)}});
+    const token=cookie(request,passwordCookie);
+    if(token){await authTables(env.DB);await env.DB.prepare('DELETE FROM pos_sessions WHERE token=?').bind(await authDigest(token)).run();}
+    const response=new Response(null,{status:303,headers:{Location:'/login','Cache-Control':'no-store'}});
+    response.headers.append('Set-Cookie',setCookie(sessionCookie,'',0));
+    response.headers.append('Set-Cookie',setCookie(passwordCookie,'',0));
+    return response;
   }
   if(url.pathname==='/api/reloj-xml')return autoTick(request,env);
-  const claims=await verify(cookie(request,sessionCookie));
+  const claims=await passwordSession(request,env)||await verify(cookie(request,sessionCookie));
   if(!claims)return url.pathname.startsWith('/api/') ? json({error:'Ingresá a POS 365 con Google.'},401) : new Response(null,{status:302,headers:{Location:'/login','Cache-Control':'no-store'}});
   const email=claims.email.toLowerCase();
   const block=await accountBlock(env.DB,email);
@@ -3164,7 +3258,8 @@ export default { async fetch(request, env) {
     return json({number:String(read.results[0].number).padStart(8,'0')});
   }
   if(url.pathname==='/api/gmail-xml')return gmailRequest(request,env);
-  if(url.pathname==='/api/session-access')return json({remaining,mayBlock:!block&&mayBlock(env,email),email,name:claims.name||''});
+  if(url.pathname==='/api/user-credential'){try{return await saveCredential(request,env,email);}catch{return json({error:'No se confirmó el cambio de clave. Intente de nuevo.'},503);}}
+  if(url.pathname==='/api/session-access')return json({master:email===masterEmail,remaining,mayBlock:!block&&mayBlock(env,email),email,name:claims.name||''});
   if(!url.pathname.startsWith('/api/')){
     const asset=await env.ASSETS.fetch(request);
     const response=new Response(asset.body,asset);
