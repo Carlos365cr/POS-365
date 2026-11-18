@@ -2064,23 +2064,34 @@ html>body{padding:0}
 #articulos-cedi .purchase-product-search{width:min(1050px,calc(100% - 24px))}
 #articulos-cedi .purchase-product-search table{table-layout:auto;font-size:12px}
 #articulos-cedi .purchase-product-search tr[data-selected="true"]{background:var(--soft)}
-#articulos-cedi .pos-payment-layout{display:grid;grid-template-columns:minmax(250px,.8fr) minmax(0,1.4fr);gap:24px;margin-top:12px;max-width:1200px}
+#articulos-cedi .pos-payment-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(400px,.85fr);gap:32px;margin-top:12px;width:100%;max-width:none;align-items:start}
 #articulos-cedi .pos-payment-methods{display:grid;gap:10px;align-content:start}
 #articulos-cedi .pos-payment-methods h3{margin:0 0 3px;font-size:16px;font-weight:500}
 #articulos-cedi .pos-payment-methods label{display:grid;grid-template-columns:110px minmax(0,1fr);align-items:center;gap:8px}
 #articulos-cedi .pos-payment-methods input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
 #articulos-cedi .pos-payment-reference{display:grid;gap:5px}
 #articulos-cedi .pos-payment-reference label:not(:first-child){color:light-dark(#52675b,#b8c8bd)}
-#articulos-cedi .pos-payment-summary{display:grid;align-content:start;gap:14px}
+#articulos-cedi .pos-payment-summary{display:grid;align-content:start;gap:14px;min-width:0}
 #articulos-cedi .pos-payment-big{display:grid;grid-template-columns:90px minmax(0,1fr);gap:10px;align-items:center;font-size:22px}
 #articulos-cedi .pos-payment-big output{display:block;text-align:right;font-size:clamp(30px,4vw,54px);font-variant-numeric:tabular-nums;background:var(--soft);padding:8px 12px;border-radius:6px}
 #articulos-cedi .pos-payment-big input{font-size:clamp(30px,4vw,54px);text-align:right;font-variant-numeric:tabular-nums;padding:8px 12px}
 #articulos-cedi .pos-payment-summary .actions{flex-wrap:wrap}
+#articulos-cedi .pos-payment-method-dialog{width:min(760px,94vw);max-width:94vw;max-height:90vh;overflow:auto;padding:28px;font-size:24px}
+#articulos-cedi .pos-payment-method-dialog header{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+#articulos-cedi .pos-payment-method-dialog h3{font-size:clamp(32px,4vw,42px);line-height:1.2;margin:0}
+#articulos-cedi .pos-payment-method-dialog [data-summary]{font-size:24px;line-height:1.5;margin:24px 0}
+#articulos-cedi .pos-payment-method-dialog .actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+#articulos-cedi .pos-payment-method-dialog button{font-size:26px;min-height:68px;padding:14px 18px;white-space:normal}
+#articulos-cedi .pos-payment-method-dialog [data-method]{min-height:104px;font-size:30px}
+#articulos-cedi .pos-payment-method-dialog [data-method]:focus{background:var(--ink);color:var(--paper);outline:3px solid var(--ink);outline-offset:3px}
+#articulos-cedi .pos-payment-method-dialog [data-error]:empty{display:none}
+@media(max-width:600px){#articulos-cedi .pos-payment-method-dialog{padding:20px}#articulos-cedi .pos-payment-method-dialog .actions{grid-template-columns:1fr}#articulos-cedi .pos-payment-method-dialog [data-method]{min-height:72px}#articulos-cedi .pos-payment-method-dialog [data-summary]{font-size:22px}}
+
 #articulos-cedi .pos-payment-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px}
 #articulos-cedi .pos-payment-details output{font-variant-numeric:tabular-nums;font-size:18px}
 #articulos-cedi .pos-payment-status{margin:0;min-height:22px;font-weight:500}
-#articulos-cedi .pos-scale-notices{display:grid;gap:14px;align-content:start}
-#articulos-cedi .pos-scale-notices h3{margin:0;font-size:17px;font-weight:500}
+#articulos-cedi .pos-scale-notices{display:grid;gap:24px;align-content:start;min-width:0;font-size:42px;line-height:1.3;overflow-wrap:anywhere}
+#articulos-cedi .pos-scale-notices h3{margin:0;font-size:51px;font-weight:500}
 #articulos-cedi .pos-scale-notice{display:grid;gap:5px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 #articulos-cedi .pos-scale-notice p{margin:0}
 #articulos-cedi .pos-scale-notice .promotion-alert{color:light-dark(#b42318,#ffb4ab);font-weight:500}
@@ -2184,7 +2195,7 @@ html>body{padding:0}
 @media(max-width:700px){#articulos-cedi .purchase-view:not([hidden]){height:auto;min-height:0;overflow:visible}#articulos-cedi .purchase-view .purchase-detail{flex:none;min-height:180px}#articulos-cedi .purchase-bottom{grid-template-columns:1fr 1fr}#articulos-cedi .purchase-bottom .purchase-totals{grid-column:1/-1}}
 @media(max-width:800px){#articulos-cedi .purchase-top{grid-template-columns:1fr}#articulos-cedi .purchase-bottom{grid-template-columns:1fr 1fr}#articulos-cedi .purchase-totals{grid-column:1/-1}}
 @media(max-width:480px){#articulos-cedi .purchase-fields{grid-template-columns:repeat(2,minmax(0,1fr))}#articulos-cedi .purchase-bottom{grid-template-columns:1fr}}
-@media(max-width:650px){#articulos-cedi .pos-payment-layout{grid-template-columns:minmax(0,1fr);gap:18px}#articulos-cedi .pos-payment-big{grid-template-columns:70px minmax(0,1fr)}}
+@media(max-width:900px){#articulos-cedi .pos-payment-layout{grid-template-columns:minmax(0,1fr);gap:18px}#articulos-cedi .pos-payment-big{grid-template-columns:70px minmax(0,1fr)}}
 #articulos-cedi .pos-window>main{padding:8px 12px}
 #articulos-cedi .pos-window .pos-heading h2{font-size:16px;margin:0}
 #articulos-cedi .pos-window .pos-heading small{font-size:11px}
@@ -2198,6 +2209,9 @@ html>body{padding:0}
 #articulos-cedi .pos-window .pos-header>div:first-child>.grid>label{flex-direction:row;align-items:center}
 #articulos-cedi .pos-window .pos-header fieldset{border:0;padding:0;margin:4px 0 0}
 #articulos-cedi .pos-window .pos-header fieldset legend{float:left;padding:0;margin-right:8px;font-size:11px}
+#articulos-cedi .pos-window .pos-header fieldset.pos-condition-inline{margin:0;min-width:0;align-self:center}
+#articulos-cedi .pos-window .pos-header .pos-condition-inline .checks{flex-wrap:wrap;gap:4px 8px}
+#articulos-cedi .pos-window .pos-header input[name="posFecha"]{min-width:0;max-width:100%}
 #articulos-cedi .pos-window .pos-header .checks{gap:5px 10px}
 #articulos-cedi .pos-window .pos-client-fields{grid-template-columns:repeat(3,minmax(0,1fr))}
 #articulos-cedi .pos-window .pos-client-fields>label.wide{grid-column:span 2;flex-direction:row;align-items:center}
@@ -3458,7 +3472,7 @@ posMenu.textContent='Facturación POS';
 menu.querySelector('span').after(posMenu);
 const posMain=document.createElement('main');
 posMain.hidden=true;
-posMain.innerHTML='<div class="pos-heading"><h2>Facturación POS</h2><small>Supermercados · Vista de prueba</small></div><nav class="tabs" aria-label="Pantallas del POS" style="margin-top:10px"><button type="button" class="active" data-pos-tab="invoice" aria-pressed="true">Facturación</button><button type="button" data-pos-tab="payment" aria-pressed="false">Paga con</button></nav><section data-pos-panel="invoice"><div class="pos-header"><div><div class="grid"><label class="wide">Bodega<select name="posBodega"><option>Bodega principal</option></select></label><label>Fecha<input type="date" name="posFecha"></label><div class="wide" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(90px,1fr);gap:10px"><label>Número documento interno<input name="posFacturaInterna" aria-label="Número documento interno" readonly></label><label>Caja<input name="posCaja" aria-label="Caja de ejemplo" value="Caja-01" readonly></label></div></div><fieldset><legend>Forma de pago</legend><div class="checks"><label class="check"><input type="radio" name="posCondicion" value="contado" checked>Contado</label><label class="check"><input type="radio" name="posCondicion" value="credito">Crédito</label></div></fieldset></div><div><label class="check"><input type="checkbox" name="posFrecuente">Cliente frecuente</label><div class="grid" style="margin-top:8px"><label>Tipo de identificación<select><option>Física</option><option>Jurídica</option><option>DIMEX</option><option>NITE</option></select></label><label>Identificación<input name="posIdentificacion"></label><label class="wide">Cliente<input name="posCliente" value="Cliente de contado"></label></div><button type="button" disabled style="margin-top:8px">Cliente factura electrónica</button></div></div><div class="pos-table-wrap"><table class="pos-table"><colgroup><col style="width:10%"><col style="width:17%"><col style="width:37%"><col style="width:17%"><col style="width:19%"></colgroup><thead><tr><th scope="col">Cant.</th><th scope="col">Código</th><th scope="col">Descripción</th><th scope="col" class="number">Precio</th><th scope="col" class="number">Total</th></tr></thead><tbody></tbody></table></div><form id="cedi-pos-entry"><label>Código<input name="codigo" autocomplete="off" placeholder="Escanear o digitar"></label><label>Cantidad<input name="cantidad" type="number" value="1" min="0.000001" step="any" required></label></form><div class="pos-total"><strong>Total <output data-pos-total>₡0,00</output></strong></div><div class="pos-actions"><div><button type="button" data-pos-remove>Borrar línea</button><button type="button" data-pos-clear>Borrar todo</button><button type="button" disabled>Cliente</button></div><div><button type="button" class="primary" data-pos-pay>Pagar</button></div></div><div class="pos-state"><label class="check"><input type="radio" name="posOperacion" value="inclusion" checked>Inclusión</label><label class="check"><input type="radio" name="posOperacion" value="consulta">Consulta</label><label class="check"><input type="radio" name="posOperacion" value="nota">Nota de crédito o débito</label></div><div style="margin-top:8px"><button type="button" data-pos-refund>Devolución</button></div><p data-pos-message aria-live="polite"></p></section><section data-pos-panel="payment" hidden><h3 style="margin-top:16px">Paga con</h3><div class="pos-total"><span>Total</span><strong data-pos-pay-total>₡0,00</strong></div><p>Detalle de cobro pendiente de definir.</p></section>';
+posMain.innerHTML='<div class="pos-heading"><h2>Facturación POS</h2><small>Supermercados · Vista de prueba</small></div><nav class="tabs" aria-label="Pantallas del POS" style="margin-top:10px"><button type="button" class="active" data-pos-tab="invoice" aria-pressed="true">Facturación</button><button type="button" data-pos-tab="payment" aria-pressed="false">Paga con</button></nav><section data-pos-panel="invoice"><div class="pos-header"><div><div class="grid"><label class="wide">Bodega<select name="posBodega"><option>Bodega principal</option></select></label><label>Fecha<input type="date" name="posFecha"></label><div class="wide" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(90px,1fr);gap:10px"><label>Número documento interno<input name="posFacturaInterna" aria-label="Número documento interno" readonly></label><label>Caja<input name="posCaja" aria-label="Caja de ejemplo" value="Caja-01" readonly></label></div></div><fieldset><legend>Forma de pago</legend><div class="checks"><label class="check"><input type="radio" name="posCondicion" value="contado" checked>Contado</label><label class="check"><input type="radio" name="posCondicion" value="credito">Crédito</label></div></fieldset></div><div><label class="check"><input type="checkbox" name="posFrecuente">Cliente frecuente</label><div class="grid" style="margin-top:8px"><label>Tipo de identificación<select><option>Física</option><option>Jurídica</option><option>DIMEX</option><option>NITE</option></select></label><label>Identificación<input name="posIdentificacion"></label><label class="wide">Cliente<input name="posCliente" value="Cliente de contado"></label></div><button type="button" disabled style="margin-top:8px">Cliente factura electrónica</button></div></div><div class="pos-table-wrap"><table class="pos-table"><colgroup><col style="width:10%"><col style="width:17%"><col style="width:37%"><col style="width:17%"><col style="width:19%"></colgroup><thead><tr><th scope="col">Cant.</th><th scope="col">Código</th><th scope="col">Descripción</th><th scope="col" class="number">Precio</th><th scope="col" class="number">Total</th></tr></thead><tbody></tbody></table></div><form id="cedi-pos-entry"><label>Código<input name="codigo" autocomplete="off" placeholder="Escanear o digitar"></label><label>Cantidad<input name="cantidad" type="number" value="1" min="0.000001" step="any" required></label></form><div class="pos-total"><strong><span data-pos-invoice-total-label>Total </span><output data-pos-total>₡0,00</output></strong></div><div class="pos-actions"><div><button type="button" data-pos-remove>Borrar línea</button><button type="button" data-pos-clear>Borrar todo</button><button type="button" disabled>Cliente</button></div><div><button type="button" class="primary" data-pos-pay>Pagar</button></div></div><div class="pos-state"><label class="check"><input type="radio" name="posOperacion" value="inclusion" checked>Inclusión</label><label class="check"><input type="radio" name="posOperacion" value="consulta">Consulta</label><label class="check"><input type="radio" name="posOperacion" value="nota">Nota de crédito o débito</label></div><div style="margin-top:8px"><button type="button" data-pos-refund>Devolución</button></div><p data-pos-message aria-live="polite"></p></section><section data-pos-panel="payment" hidden><h3 style="margin-top:16px">Paga con</h3><div class="pos-total"><span>Total</span><strong data-pos-pay-total>₡0,00</strong></div><p>Detalle de cobro pendiente de definir.</p></section>';
 root.append(posMain);
 posMain.querySelector('[name="posBodega"]').closest('label').remove();
 const posWindow=document.createElement('dialog');
@@ -10383,9 +10397,20 @@ function installPosReturns(getSaleLines,focusSale){
  return ()=>{trigger.disabled=getSaleLines().length>0;};
 }
 
+function renderPosVoucherTotals(main,exactCents,totalCents,voucher,format){
+ const credit=voucher?.cents||0,due=Math.max(0,totalCents-credit);
+ main.querySelector('[data-pos-total]').textContent=format((voucher?due:exactCents)/100);
+ main.querySelector('[data-pos-pay-total]').textContent=format(due/100);
+ main.querySelector('[data-pos-invoice-total-label]').textContent=voucher?'Total por pagar ':'Total ';
+ main.querySelector('[data-pos-payment-total-label]').textContent=voucher?'Total por pagar':'Total';
+ return due;
+}
 function initializePos(){
 let refreshReturnAvailability=()=>{};
 const saleDate=posMain.querySelector('[name="posFecha"]');
+const paymentCondition=posMain.querySelector('[name="posCondicion"]').closest('fieldset');
+paymentCondition.classList.add('pos-condition-inline');
+saleDate.closest('label').after(paymentCondition);
 saleDate.required=true;
 saleDate.value=costaRicaDay();
 refreshPosInvoiceNumber();
@@ -10399,9 +10424,9 @@ paymentPanel.innerHTML=`<div class="pos-payment-layout"><section class="pos-paym
 <label>Cupón<input type="number" min="0" step="0.01" name="pagoCupon" value="0"></label>
 <label class="check"><span>Cliente frecuente</span><input type="checkbox" name="pagoFrecuente"></label><input aria-label="Cliente" readonly value="Cliente de Contado">
 <label>Tipo de cambio<input type="number" min="0" step="0.01" name="pagoTipoCambio" placeholder="₡ por US$"></label></section>
-<section class="pos-payment-summary" aria-label="Resumen de pago"><div class="pos-payment-big"><span>Total</span><output data-pos-pay-total>₡0,00</output></div><label class="pos-payment-big"><span>Pago (₡)</span><input type="text" inputmode="decimal" name="pagoRecibido" data-pos-paid value="0.00" autocomplete="off"></label><p class="pos-payment-status" data-pos-balance aria-live="polite"></p>
+<section class="pos-payment-summary" aria-label="Resumen de pago"><div class="pos-payment-big"><span data-pos-payment-total-label>Total</span><output data-pos-pay-total>₡0,00</output></div><label class="pos-payment-big"><span>Pago (₡)</span><input type="text" inputmode="decimal" name="pagoRecibido" data-pos-paid value="0.00" autocomplete="off"></label><p class="pos-payment-status" data-pos-balance aria-live="polite"></p>
 <div class="actions"><button type="button" disabled>Pendiente</button><button type="button" data-pos-save>Guardar</button><button type="button" data-pos-cash>Efectivo</button><button type="button" data-pos-return aria-keyshortcuts="+">Regresar +</button></div>
-<div class="pos-payment-details"><label>Dólares<input type="number" min="0" step="0.01" name="pagoDolares" value="0"></label><label>Total en dólares<output data-pos-usd>—</output></label><label>Subtotal s/IVA<output data-payment-subtotal>₡0,00</output></label><label>Descuentos de la facturación<output data-payment-discounts>₡0,00</output></label><label>IVA<output data-payment-vat>₡0,00</output></label><label>Descuento adicional<output data-payment-extra-discount>₡0,00</output></label><label>Redondeo<output data-payment-rounding>₡0,00</output></label></div><small>Venta de prueba · Sin cobro bancario ni emisión electrónica.</small></section></div>`;
+<div class="pos-payment-details"><label>Dólares<input type="number" min="0" step="0.01" name="pagoDolares" value="0"></label><label>Total en dólares<output data-pos-usd>—</output></label><label>Subtotal s/IVA<output data-payment-subtotal>₡0,00</output></label><label>Descuentos de la facturación<output data-payment-discounts>₡0,00</output></label><label>IVA<output data-payment-vat>₡0,00</output></label><label>Descuento adicional<output data-payment-extra-discount>₡0,00</output></label><label>Redondeo<output data-payment-rounding>₡0,00</output></label><label>Nota comercial<output data-payment-voucher>₡0,00</output></label></div><small>Venta de prueba · Sin cobro bancario ni emisión electrónica.</small></section></div>`;
 const paymentMethods=paymentPanel.querySelector('.pos-payment-methods');
 const paymentBlank=document.createElement('div');
 paymentMethods.before(paymentBlank);
@@ -10434,7 +10459,7 @@ article.append(name,bought,alert);scaleNotices.append(article);
 const totals=posMain.querySelector('.pos-total');
 const amounts=document.createElement('div');
 amounts.className='pos-amounts';
-amounts.innerHTML='<span>Descuentos de la facturación<output data-pos-discounts data-tooltip="Descuentos de productos y promociones con IVA incluido">₡0,00</output></span><span>Subtotal s/IVA<output data-pos-subtotal>₡0,00</output></span><span>IVA<output data-pos-vat>₡0,00</output></span>';
+amounts.innerHTML='<span>Nota comercial<output data-pos-voucher-amount>₡0,00</output></span><span>Descuentos de la facturación<output data-pos-discounts data-tooltip="Descuentos de productos y promociones con IVA incluido">₡0,00</output></span><span>Subtotal s/IVA<output data-pos-subtotal>₡0,00</output></span><span>IVA<output data-pos-vat>₡0,00</output></span>';
 const totalAmount=totals.querySelector('strong');
 totalAmount.before(amounts);
 amounts.append(totalAmount);
@@ -10445,6 +10470,7 @@ const entryRow=document.createElement('div');
 entryRow.className='pos-entry-row';
 entryRow.append(entry,posMain.querySelector('.pos-state'));
 bottom.append(entryRow,totals,posMain.querySelector('.pos-actions'));
+posMain.querySelector('[data-pos-remove]').before(posMain.querySelector('[data-pos-refund]'));
 const clientHeader=posMain.querySelector('.pos-header').children[1];
 const clientFields=clientHeader.querySelector('.grid');
 clientFields.classList.add('pos-client-fields');
@@ -10665,7 +10691,7 @@ let paymentTotalCents=0;
 let saleExactTotalCents=0;
 const paymentNames=['pagoEfectivo','pagoCheque','pagoTarjeta','pagoSinpe','pagoCupon'];
 const voucherStatus=document.createElement('div');voucherStatus.setAttribute('role','status');const voucherLabel=document.createElement('span'),removeVoucher=document.createElement('button');removeVoucher.type='button';removeVoucher.textContent='Quitar nota';removeVoucher.onclick=()=>{activePosVoucher=null;render();};voucherStatus.append(voucherLabel,removeVoucher);totals.append(voucherStatus);
-const voucherPaymentStatus=document.createElement('p');paymentPanel.prepend(voucherPaymentStatus);
+const voucherPaymentStatus=document.createElement('p');paymentPanel.querySelector('.pos-payment-summary').prepend(voucherPaymentStatus);
 function posCashDue(){return Math.max(0,paymentTotalCents-(activePosVoucher?.cents||0));}
 const discountButton=document.createElement('button');
 discountButton.type='button';
@@ -10704,7 +10730,7 @@ const result=calculatePosPayment(posCashDue(),paymentNames.map(value),value('pag
 const paidInput=paymentPanel.querySelector('[data-pos-paid]');
 if(document.activeElement!==paidInput){paidInput.value=(result.paidCents/100).toFixed(2);}
 paymentPanel.querySelector('[data-pos-balance]').textContent=result.invalid?'Revisá los montos ingresados.':result.needsRate?'Ingresá el tipo de cambio para el pago en dólares.':result.balanceCents>0?'Falta: '+format(result.balanceCents/100):result.balanceCents<0?'Vuelto: '+format(-result.balanceCents/100):'Pago completo';
-paymentPanel.querySelector('[data-pos-usd]').textContent=result.rate>0?new Intl.NumberFormat('es-CR',{style:'currency',currency:'USD'}).format(paymentTotalCents/100/result.rate):'—';
+paymentPanel.querySelector('[data-pos-usd]').textContent=result.rate>0?new Intl.NumberFormat('es-CR',{style:'currency',currency:'USD'}).format(posCashDue()/100/result.rate):'—';
 }
 paymentPanel.addEventListener('input',event=>{
 if(event.target.matches('[data-pos-paid]')){
@@ -10732,7 +10758,7 @@ showPosPanel('invoice');
 }
 paymentPanel.querySelector('[data-pos-return]').onclick=returnToPosInvoice;
 const paymentMethodDialog=document.createElement('dialog');
-paymentMethodDialog.className='cabys-dialog';
+paymentMethodDialog.className='cabys-dialog pos-payment-method-dialog';
 paymentMethodDialog.setAttribute('aria-labelledby','pos-payment-method-title');
 paymentMethodDialog.innerHTML='<header><h3 id="pos-payment-method-title">Se pagó con</h3><button type="button" data-cancel aria-keyshortcuts="+">Regresar +</button></header><p data-summary></p><div class="actions"><button type="button" data-method="1">1 · Efectivo</button><button type="button" data-method="2">2 · Tarjeta</button><button type="button" data-method="3">3 · SINPE Móvil</button></div><p role="alert" data-error></p>';
 posMain.append(paymentMethodDialog);
@@ -10844,7 +10870,7 @@ if(!posMain.querySelector('dialog[open]')){showPosPanel('payment');}
 });
 posMain.querySelectorAll('[data-pos-tab]').forEach(button=>{button.onclick=()=>showPosPanel(button.dataset.posTab);});
 function render(){
-voucherStatus.hidden=!activePosVoucher;voucherLabel.textContent=activePosVoucher?'Nota comercial: '+format(activePosVoucher.cents/100)+' · ':'';voucherPaymentStatus.textContent=activePosVoucher?'Nota aplicada: '+format(activePosVoucher.cents/100)+'. El campo Pago corresponde al resto por cobrar.':'';
+voucherStatus.hidden=!activePosVoucher;
 refreshReturnAvailability();
 body.replaceChildren();
 let total=0;
@@ -10898,13 +10924,18 @@ cell.colSpan=4;
 cell.textContent='Agregá un artículo para iniciar la venta de prueba.';
 row.append(cell);body.append(row);
 }
-posMain.querySelector('[data-pos-total]').textContent=format(total/100);
-posMain.querySelector('[data-pos-pay-total]').textContent=format((roundingEnabled?Math.round(total/500)*500:total)/100);
+
 posMain.querySelector('[data-pos-discounts]').textContent=format((discountTotal-saleDiscountCents)/100);
 posMain.querySelector('[data-pos-subtotal]').textContent=format(subtotal/100);
 posMain.querySelector('[data-pos-vat]').textContent=format(vatTotal/100);
 saleExactTotalCents=total;
 paymentTotalCents=roundingEnabled?Math.round(total/500)*500:total;
+renderPosVoucherTotals(posMain,saleExactTotalCents,paymentTotalCents,activePosVoucher,format);
+posMain.querySelector('[data-pos-voucher-amount]').textContent=(activePosVoucher?'−':'')+format((activePosVoucher?.cents||0)/100);
+paymentPanel.querySelector('[data-payment-voucher]').textContent=(activePosVoucher?'−':'')+format((activePosVoucher?.cents||0)/100);
+voucherLabel.textContent=activePosVoucher?'Total venta: '+format(paymentTotalCents/100)+' · ':'';
+voucherPaymentStatus.textContent=activePosVoucher?'Total venta: '+format(paymentTotalCents/100)+' · Nota comercial aplicada: −'+format(activePosVoucher.cents/100)+(activePosVoucher.cents>paymentTotalCents?' · Agregue productos o quite la nota: debe utilizarse completa.':''):'';
+
 paymentPanel.querySelector('[data-payment-rounding]').textContent=(paymentTotalCents>total?'+':'')+format((paymentTotalCents-total)/100);
 paymentPanel.querySelector('[data-payment-subtotal]').textContent=format(subtotal/100);
 paymentPanel.querySelector('[data-payment-discounts]').textContent=format((discountTotal-saleDiscountCents)/100);
@@ -10919,7 +10950,7 @@ posMain.querySelector('[data-pos-pay]').disabled=lines.length===0;
 entry.onsubmit=event=>{
 event.preventDefault();
 const code=entry.elements.codigo.value.trim();
-if(/^NC[0-9A-F]{24}$/i.test(code)){if(voucherLookupBusy)return;voucherLookupBusy=true;posVoucherLookup(code.toUpperCase()).then(voucher=>{activePosVoucher=voucher;entry.elements.codigo.value='';render();feedback.textContent='Nota aplicada: '+format(voucher.cents/100)+'. Uso único por el monto completo; no genera vuelto.';}).catch(error=>{feedback.textContent=error.message;}).finally(()=>{voucherLookupBusy=false;focusPosCode();});return;}
+if(/^NC[0-9A-F]{24}$/i.test(code)){if(voucherLookupBusy)return;voucherLookupBusy=true;posVoucherLookup(code.toUpperCase()).then(voucher=>{activePosVoucher=voucher;entry.elements.codigo.value='';render();feedback.textContent='Nota aplicada: '+format(voucher.cents/100)+' · Total por pagar: '+format(posCashDue()/100)+'.';}).catch(error=>{feedback.textContent=error.message;}).finally(()=>{voucherLookupBusy=false;focusPosCode();});return;}
 const articleCodes=[form.elements.codigo.value.trim(),form.elements.barras.value.trim(),...Array.from(root.querySelectorAll('#art-codigos input')).map(input=>input.value.trim())];
 const name=form.elements.nombre.value.trim();
 const price=priceForm.elements.lista0_precio;
