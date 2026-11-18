@@ -2265,6 +2265,16 @@ html>body{padding:0}
 #articulos-cedi .pos-window .pos-bottom .pos-total{justify-content:flex-end;justify-self:end;width:100%}
 #articulos-cedi .pos-window .pos-bottom .pos-total .pos-amounts{display:flex;flex:0 1 auto;justify-content:flex-end;align-items:flex-end;gap:14px;margin-left:auto;text-align:right}
 #articulos-cedi .pos-window .pos-bottom .pos-total .pos-amounts>span{align-items:flex-end}
+@media(min-width:1000px){
+#articulos-cedi .pos-window .pos-bottom{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:4px 12px;align-items:center}
+#articulos-cedi .pos-window .pos-bottom .pos-entry-row{grid-column:1;grid-row:1 / span 2;gap:6px}
+#articulos-cedi .pos-window .pos-bottom .pos-centered-total{grid-column:2;grid-row:1 / span 2;padding:0;align-self:center}
+#articulos-cedi .pos-window .pos-bottom .pos-total{grid-column:3;grid-row:1}
+#articulos-cedi .pos-window .pos-bottom .pos-actions{grid-column:3;grid-row:2}
+#articulos-cedi .pos-window .pos-bottom .pos-amounts{gap:5px 10px}
+}
+#articulos-cedi .pos-window .pos-bottom .pos-centered-total{padding-top:0;padding-bottom:0}
+
 
 
 @media(max-width:800px){#articulos-cedi .pos-bottom{grid-template-columns:minmax(0,1fr)}#articulos-cedi .pos-bottom .pos-entry-row,#articulos-cedi .pos-bottom .pos-total,#articulos-cedi .pos-bottom .pos-actions{grid-column:1;grid-row:auto}#articulos-cedi .pos-bottom .pos-amounts{justify-content:space-between;flex:1;gap:8px}}
