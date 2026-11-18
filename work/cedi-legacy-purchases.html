@@ -2054,11 +2054,12 @@ html>body{padding:0}
 #articulos-cedi .pos-window .pos-actions{justify-content:flex-end}
 #articulos-cedi .pos-window #cedi-pos-entry{max-width:740px;flex:none}
 #articulos-cedi .pos-window .pos-heading button{font-size:12px}
-#articulos-cedi .pos-error-dialog{width:min(460px,calc(100% - 24px));box-sizing:border-box;border:2px solid light-dark(#b42318,#ff9b91);border-radius:12px;padding:22px;background:light-dark(#b42318,#731d18);color:#fff}
+#articulos-cedi .pos-error-dialog{width:min(720px,calc(100% - 32px));max-height:90dvh;overflow:auto;box-sizing:border-box;border:2px solid light-dark(#b42318,#ff9b91);border-radius:12px;padding:clamp(24px,4vw,40px);background:light-dark(#b42318,#731d18);color:#fff;text-align:center}
 #articulos-cedi .pos-error-dialog::backdrop{background:#0007}
-#articulos-cedi .pos-error-dialog h3{font-size:25px;font-weight:500;margin:0 0 12px}
-#articulos-cedi .pos-error-dialog p{margin:0 0 18px;overflow-wrap:anywhere}
-#articulos-cedi .pos-error-dialog button{background:#fff;color:#7b2018;border-color:transparent}
+#articulos-cedi .pos-error-dialog h3{font-size:clamp(32px,4vw,44px);line-height:1.15;font-weight:700;margin:0 0 20px}
+#articulos-cedi .pos-error-dialog p{font-size:clamp(22px,2.8vw,30px);line-height:1.35;margin:0 0 26px;overflow-wrap:anywhere}
+#articulos-cedi .pos-error-dialog button{display:block;width:100%;min-height:64px;padding:14px 24px;font-size:clamp(24px,3vw,32px);font-weight:700;background:#fff;color:#7b2018;border-color:transparent}
+#articulos-cedi .pos-error-dialog button:focus-visible{outline:3px solid #fff;outline-offset:5px}
 #articulos-cedi dialog.pos-product-search{width:min(1080px,96vw);max-width:96vw;height:min(720px,94vh);height:min(720px,94dvh);max-height:94dvh;padding:14px;box-sizing:border-box;overflow:hidden}
 #articulos-cedi dialog.pos-product-search[open]{display:grid;grid-template-rows:auto auto auto minmax(0,1fr) auto;gap:6px}
 #articulos-cedi .pos-product-search header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0}
@@ -2526,6 +2527,24 @@ updateRoundingSwitch();
 normalizeSavedPrimaryPrices();recalculatePrices();refreshArticleProperties();refreshPosSale();refreshPosLookup();
 persistTrialSnapshot();
 };
+const missingProductSounds=[{id:'pato',name:'Sonido Pato',file:'assets/sonido-pato.m4a'}];
+let missingProductSoundId='pato';
+function normalizeMissingProductSound(value){return value===undefined?'pato':missingProductSounds.some(sound=>sound.id===value)?value:null;}
+const missingSoundControls=document.createElement('fieldset');missingSoundControls.style.marginTop='12px';
+missingSoundControls.innerHTML='<legend>Sonido de Producto no existente</legend><p>Active un sonido o deje todos desactivados. Duración máxima: 8 segundos; Enter detiene la alerta.</p><div data-sound-list></div>';
+electronicPanel.append(missingSoundControls);
+function renderMissingSoundControls(){
+const list=missingSoundControls.querySelector('[data-sound-list]');list.replaceChildren();
+for(const sound of missingProductSounds){
+const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:16px;max-width:440px;padding:8px 0';
+const label=document.createElement('span');label.textContent=sound.name;
+const toggle=document.createElement('button');toggle.type='button';toggle.className='status-switch cursor-interaction';toggle.setAttribute('role','switch');toggle.setAttribute('aria-label',sound.name);toggle.setAttribute('aria-checked',String(missingProductSoundId===sound.id));
+toggle.innerHTML='<span class="switch-track" aria-hidden="true"></span><span class="switch-label"></span>';toggle.querySelector('.switch-label').textContent=missingProductSoundId===sound.id?'Activado':'Desactivado';
+toggle.onclick=()=>{missingProductSoundId=missingProductSoundId===sound.id?null:sound.id;stopMissingProductSound();renderMissingSoundControls();persistTrialSnapshot();};row.append(label,toggle);list.append(row);
+}
+}
+renderMissingSoundControls();
+
 configurationMain.append(electronicPanel);
 const priceConfigurationTab=document.createElement('button');
 priceConfigurationTab.type='button';
@@ -7485,30 +7504,44 @@ function installFmgProducts(main){
 }
 
 let errorAudioContext=null;
+let missingRecordedAudio=null,missingRecordedTimer=null;
+let missingSoundGeneration=0,missingSoundNodes=[];
+function stopMissingProductSound(){
+missingSoundGeneration++;
+clearTimeout(missingRecordedTimer);missingRecordedTimer=null;
+if(missingRecordedAudio){missingRecordedAudio.pause();missingRecordedAudio.currentTime=0;missingRecordedAudio=null;}
+for(const {oscillator,volume} of missingSoundNodes){try{volume.gain.cancelScheduledValues(errorAudioContext.currentTime);volume.gain.setValueAtTime(0,errorAudioContext.currentTime);oscillator.stop();oscillator.disconnect();volume.disconnect();}catch(error){}}
+missingSoundNodes=[];
+}
 function playMissingProductSound(){
-const AudioContext=window.AudioContext || window.webkitAudioContext;
-if(!AudioContext){return;}
+stopMissingProductSound();const generation=missingSoundGeneration;
+const selectedSound=missingProductSounds.find(sound=>sound.id===missingProductSoundId);if(!selectedSound)return;
 try{
-if(!errorAudioContext || errorAudioContext.state==='closed'){errorAudioContext=new AudioContext();}
+const audio=new Audio(new URL(selectedSound.file,document.baseURI).href);
+missingRecordedAudio=audio;audio.loop=true;audio.volume=.65;
+audio.play().then(()=>{if(generation!==missingSoundGeneration){audio.pause();return;}missingRecordedTimer=setTimeout(stopMissingProductSound,8000);}).catch(()=>{if(generation===missingSoundGeneration)playMissingProductFallback();});
+}catch(error){playMissingProductFallback();}
+}
+function playMissingProductFallback(){
+stopMissingProductSound();const generation=missingSoundGeneration;
+const AudioContext=window.AudioContext || window.webkitAudioContext;if(!AudioContext)return;
+try{
+if(!errorAudioContext||errorAudioContext.state==='closed')errorAudioContext=new AudioContext();
 const sound=()=>{
+if(generation!==missingSoundGeneration)return;
 const start=errorAudioContext.currentTime;
-for(const offset of [0,.18]){
-const oscillator=errorAudioContext.createOscillator();
-const volume=errorAudioContext.createGain();
-oscillator.type='sine';
-oscillator.frequency.value=700;
-volume.gain.setValueAtTime(0,start+offset);
-volume.gain.linearRampToValueAtTime(.12,start+offset+.01);
-volume.gain.linearRampToValueAtTime(0,start+offset+.12);
-oscillator.connect(volume);
-volume.connect(errorAudioContext.destination);
-oscillator.start(start+offset);
-oscillator.stop(start+offset+.13);
+for(let i=0;i<8;i++){
+const oscillator=errorAudioContext.createOscillator(),volume=errorAudioContext.createGain(),at=start+i;
+oscillator.type='sine';oscillator.frequency.value=i%2===0?440:523.25;
+volume.gain.setValueAtTime(0,at);volume.gain.linearRampToValueAtTime(.055,at+.12);volume.gain.setValueAtTime(.055,at+.5);volume.gain.linearRampToValueAtTime(0,at+.9);
+oscillator.connect(volume);volume.connect(errorAudioContext.destination);
+const node={oscillator,volume};missingSoundNodes.push(node);
+oscillator.onended=()=>{oscillator.disconnect();volume.disconnect();missingSoundNodes=missingSoundNodes.filter(item=>item!==node);};
+oscillator.start(at);oscillator.stop(at+1);
 }
 };
-if(errorAudioContext.state==='suspended'){errorAudioContext.resume().then(sound).catch(()=>{});}
-else{sound();}
-}catch(error){}
+if(errorAudioContext.state==='suspended')errorAudioContext.resume().then(sound).catch(()=>{});else sound();
+}catch(error){stopMissingProductSound();}
 }
 function installInternalInvoiceModule(){
  const button=document.createElement('button');button.type='button';button.className='menu-item cursor-interaction';button.textContent='Facturación interna';
@@ -9999,7 +10032,7 @@ general:captureTrialForm(form),
 articlePhotoDraft:captureArticlePhotoDraft(),
 costs:captureTrialForm(costsForm),
 prices:captureTrialForm(priceForm),
-configuration:{warehouses:warehouseDirectory.map(({id,name,active})=>({id,name,active})),posMothersSettings:{...posMothersSettings},posNewYearSettings:{...posNewYearSettings},posValentineSettings:{...posValentineSettings},posThemeSettings:{...posThemeSettings},costBasis:costBasis.value,expectedEnabled,roundingEnabled,defaultExpected:defaultExpectedInput.value,scannerEnabled:scannerCheckbox.checked,scaleEnabled,pendingGainIndices:Array.from(pendingGainEdits)},
+configuration:{missingProductSoundId,warehouses:warehouseDirectory.map(({id,name,active})=>({id,name,active})),posMothersSettings:{...posMothersSettings},posNewYearSettings:{...posNewYearSettings},posValentineSettings:{...posValentineSettings},posThemeSettings:{...posThemeSettings},costBasis:costBasis.value,expectedEnabled,roundingEnabled,defaultExpected:defaultExpectedInput.value,scannerEnabled:scannerCheckbox.checked,scaleEnabled,pendingGainIndices:Array.from(pendingGainEdits)},
 products:Array.from(savedTrialProducts.values()),
 sales:trialCompletedSales,
 posReturns:trialPosReturns,
@@ -10445,6 +10478,7 @@ refreshWarehouseLabels();renderWarehouseDirectory();
 costBasis.value=['reposicion','promedio'].includes(settings.costBasis)?settings.costBasis:'reposicion';
 expectedEnabled=settings.expectedEnabled===true;
 roundingEnabled=settings.roundingEnabled!==false;
+missingProductSoundId=normalizeMissingProductSound(settings.missingProductSoundId);renderMissingSoundControls();if(!missingProductSoundId)stopMissingProductSound();
 const theme=settings.posThemeSettings;posThemeSettings={enabled:theme?.enabled===true,start:validThemeMonthDay(theme?.start)?theme.start:'12-01',end:validThemeMonthDay(theme?.end)?theme.end:'01-06'};const valentine=settings.posValentineSettings;posValentineSettings={enabled:valentine?.enabled===true,start:validThemeMonthDay(valentine?.start)?valentine.start:'02-01',end:validThemeMonthDay(valentine?.end)?valentine.end:'02-14'};const mothers=settings.posMothersSettings;posMothersSettings={enabled:mothers?.enabled===true,start:validThemeMonthDay(mothers?.start)?mothers.start:'08-01',end:validThemeMonthDay(mothers?.end)?mothers.end:'08-15'};const newyear=settings.posNewYearSettings;posNewYearSettings={enabled:newyear?.enabled===true,start:validThemeMonthDay(newyear?.start)?newyear.start:'12-31',end:validThemeMonthDay(newyear?.end)?newyear.end:'01-02'};applyPosTheme();
 updateRoundingSwitch();
 pendingGainEdits.clear();
@@ -10874,17 +10908,17 @@ missingProductDialog.className='pos-error-dialog';
 missingProductDialog.setAttribute('role','alertdialog');
 missingProductDialog.setAttribute('aria-labelledby','pos-missing-product-title');
 missingProductDialog.setAttribute('aria-describedby','pos-missing-product-code');
-missingProductDialog.innerHTML='<h3 id="pos-missing-product-title">Producto no existe</h3><p id="pos-missing-product-code"></p><button type="button" autofocus>Entendido</button>';
+missingProductDialog.innerHTML='<h3 id="pos-missing-product-title">Producto no existe</h3><p id="pos-missing-product-code"></p><button type="button" autofocus>Entendido · Enter</button>';
 posMain.append(missingProductDialog);
 missingProductDialog.querySelector('button').onclick=()=>missingProductDialog.close();
 missingProductDialog.addEventListener('keydown',event=>{
 if(event.key==='Enter'){
 event.preventDefault();
 event.stopPropagation();
-missingProductDialog.close();
+stopMissingProductSound();missingProductDialog.close();
 }
 });
-missingProductDialog.addEventListener('close',focusPosCode);
+missingProductDialog.addEventListener('close',()=>{stopMissingProductSound();focusPosCode();});
 function showMissingProduct(code){
 missingProductDialog.querySelector('p').textContent='Código '+code;
 if(!missingProductDialog.open){missingProductDialog.showModal();}
