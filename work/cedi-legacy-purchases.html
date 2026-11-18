@@ -9674,7 +9674,7 @@ privateContent={cediTrialGzip:encoded};
 }
 if(savedTrialSnapshot!==snapshot&&!requireConfirmation){return;}
 // The hosted wrapper stores larger trial snapshots locally without expanding iframe permissions.
-if(window.parent!==window){window.parent.postMessage({type:'cedi-trial-state-save',updatedAt:snapshot.updatedAt,content:privateContent,blockEmail},'*');}
+if(window.parent!==window){window.parent.postMessage({type:'cedi-trial-state-save',updatedAt:snapshot.updatedAt,content:privateContent,blockEmail,authUsers:(snapshot.userDirectory||[]).map(({id,email,username,firstName,lastName,deleted,suspended})=>({id,email,username,firstName,lastName,deleted,suspended}))},'*');}
 if(JSON.stringify(privateContent).length>=14000){return;}
 await window.openai.setWidgetState({
 modelContent:{savedTrialArticles:snapshot.products.length+(snapshot.xmlPendingArticles?.length||0),savedContacts:snapshot.contactsState?.records?.length || 0,savedCashOutEntries:snapshot.cashOutEntries?.length || 0},

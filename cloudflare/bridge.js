@@ -173,7 +173,7 @@ async function sendSaveStep(body){
 }
 window.addEventListener('message',event=>{
   if(event.source!==frame.contentWindow||event.data?.type!=='cedi-trial-state-save')return;
-  const {content,updatedAt,blockEmail}=event.data;
+  const {content,updatedAt,blockEmail,authUsers}=event.data;
   const reply=(ok,reason)=>frame.contentWindow.postMessage({type:'cedi-trial-state-saved',updatedAt,ok,reason},'*');
   queue=queue.then(async()=>{
     if(blocked||!revision){reply(false,"La sesión tiene un guardado sin confirmar. Revisá Compras registradas.");return;}
@@ -182,6 +182,8 @@ window.addEventListener('message',event=>{
       const access=await checkSessionAccess().catch(()=>null);
       if(!access?.mayBlock){reply(false,'La cuenta requiere permiso de administración para bloquear usuarios.');return;}
     }
+    const access=storePrefix==='/api'&&authUsers!==undefined?await checkSessionAccess():null;
+    const directory=access?.master===true?authUsers:undefined;
     let encoded=content.cediTrialGzip;
     if(!encoded){
       const zipped=new Blob([JSON.stringify(content.cediTrial)]).stream().pipeThrough(new CompressionStream('gzip'));
@@ -195,7 +197,7 @@ window.addEventListener('message',event=>{
     for(let start=0;start<changes.length;start+=4){
       await sendSaveStep({...save,changes:changes.slice(start,start+4)});
     }
-    const result=await sendSaveStep({...save,finish:true,changes:changes.length,blockEmail});
+    const result=await sendSaveStep({...save,finish:true,changes:changes.length,blockEmail,authUsers:directory});
     if(result.revision!=='save:'+save.id)throw Error('La confirmación del guardado no coincide con la operación.');
     revision=result.revision;confirmedParts=parts;latest=updatedAt;reply(true);
   }).catch(e=>{reply(false,e.message);if(!blocked)stop(e.message);});

@@ -2973,22 +2973,26 @@ async function authTables(db){
   db.prepare('CREATE TABLE IF NOT EXISTS pos_login_attempts (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL)')
  ]);
 }
-let authDirectoryCache;
+// Authentication must never inflate the application/XML snapshot.
 async function authDirectory(db){
- const head=await db.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();
- if(!head)return [];
- if(authDirectoryCache?.db===db&&authDirectoryCache.revision===head.revision)return authDirectoryCache.users;
- let offset=0;
- const stream=new ReadableStream({async pull(controller){
-  if(offset>=head.parts){controller.close();return;}
-  const {results}=await db.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? ORDER BY part LIMIT 8').bind(head.revision,offset).all();
-  if(!results.length)throw Error('La base cambió; intente de nuevo.');
-  for(const row of results){if(row.part!==offset++)throw Error('Directorio incompleto');controller.enqueue(Uint8Array.from(atob(row.payload),c=>c.charCodeAt(0)));}
- }});
- const snapshot=await new Response(stream.pipeThrough(new DecompressionStream('gzip'))).json();
- const users=Array.isArray(snapshot.userDirectory)?snapshot.userDirectory:[];
- authDirectoryCache={db,revision:head.revision,users};
- return users;
+ await db.prepare('CREATE TABLE IF NOT EXISTS pos_auth_directory (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)').run();
+ const row=await db.prepare('SELECT payload FROM pos_auth_directory WHERE id=1').first();
+ return row?JSON.parse(row.payload):[];
+}
+function authDirectoryPayload(users){
+ if(!Array.isArray(users)||users.length>1000)throw Error('Directorio de acceso inválido.');
+ const ids=new Set(),emails=new Set(),names=new Set();
+ const clean=users.map(u=>{
+  if(!u||typeof u.id!=='string'||!u.id||u.id.length>128||ids.has(u.id)||typeof u.email!=='string'||u.email.length>254||!/^\S+@\S+\.\S+$/.test(u.email))throw Error('Usuario de acceso inválido.');
+  ids.add(u.id);
+  const email=u.email.trim().toLowerCase(),username=String(u.username||'').trim().toLowerCase();
+  if(username&&!/^[a-z0-9._-]{3,64}$/.test(username))throw Error('Nombre de acceso inválido.');
+  if(!u.deleted){if(emails.has(email)||(username&&names.has(username)))throw Error('Usuario de acceso repetido.');emails.add(email);if(username)names.add(username);}
+  return {id:u.id,email,username,firstName:String(u.firstName||'').slice(0,100),lastName:String(u.lastName||'').slice(0,100),deleted:!!u.deleted,suspended:!!u.suspended};
+ });
+ const payload=JSON.stringify(clean);
+ if(new TextEncoder().encode(payload).length>60000)throw Error('Directorio de acceso demasiado grande.');
+ return payload;
 }
 function credentialUser(users,id){return users.find(u=>u.id===id&&!u.deleted&&!u.suspended);}
 async function passwordSession(request,env){
@@ -3200,6 +3204,7 @@ export default { async fetch(request, env) {
     if(await accountBlock(env.DB,claims.email.toLowerCase()))return json({error:'Su usuario está bloqueado.'},403);
     const response=json({ok:true});
     response.headers.append('Set-Cookie',setCookie(sessionCookie,token,Math.floor(claims.exp-Date.now()/1000)));
+    response.headers.append('Set-Cookie',setCookie(passwordCookie,'',0));
     response.headers.append('Set-Cookie',setCookie(nonceCookie+'_'+challenge,'',0));
     return response;
   }
@@ -3314,7 +3319,8 @@ export default { async fetch(request, env) {
   // Upload bounded batches first. Only the final transaction publishes a revision.
   if(url.pathname==='/api/save' && request.method==='POST'){
     if(request.headers.get('Origin')!==url.origin || request.headers.get('Content-Type')!=='application/json')return json({},403);
-    const {base,id,count,changes,finish,blockEmail}=await request.json();
+    const {base,id,count,changes,finish,blockEmail,authUsers}=await request.json();
+    if(authUsers!==undefined&&(email!==masterEmail||legacy||finish!==true||block))return json({error:"Solo la cuenta máster puede sincronizar accesos."},403);
     if(blockEmail!==undefined&&(legacy||finish!==true||block||!mayBlock(env,email)))return json({error:'Se requiere permiso para bloquear usuarios.'},403);
     if(blockEmail!==undefined&&(typeof blockEmail!=='string'||!/^\S+@\S+\.\S+$/.test(blockEmail)||blockEmail.length>254))return json({},400);
     if(typeof base!=='string'||typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id)||!Number.isInteger(count)||count<1||count>1600)return json({},400);
@@ -3334,6 +3340,12 @@ export default { async fetch(request, env) {
       }
       if(!Number.isInteger(changes)||changes<0||changes>count)return json({},400);
       const accessWrites=[];
+      if(authUsers!==undefined){
+        const payload=authDirectoryPayload(authUsers);
+        await authDirectory(db);
+        accessWrites.push(db.prepare('INSERT INTO pos_auth_directory(id,payload) SELECT 1,? WHERE EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').bind(payload,rev));
+      }
+
       if(blockEmail!==undefined){
         await db.prepare('CREATE TABLE IF NOT EXISTS cedi_blocked_accounts(email TEXT PRIMARY KEY, blocked_at INTEGER NOT NULL)').run();
         accessWrites.push(db.prepare('INSERT OR IGNORE INTO cedi_blocked_accounts SELECT ?,? WHERE EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(blockEmail.trim().toLowerCase(),Date.now(),rev));
