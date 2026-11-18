@@ -173,8 +173,8 @@ async function sendSaveStep(body){
 }
 window.addEventListener('message',event=>{
   if(event.source!==frame.contentWindow||event.data?.type!=='cedi-trial-state-save')return;
-  const {content,updatedAt,blockEmail,authUsers}=event.data;
-  const reply=(ok,reason)=>frame.contentWindow.postMessage({type:'cedi-trial-state-saved',updatedAt,ok,reason},'*');
+  const {content,updatedAt,blockEmail,authUsers,voucherOp}=event.data;
+  const reply=(ok,reason,voucher)=>frame.contentWindow.postMessage({type:'cedi-trial-state-saved',updatedAt,ok,reason,voucher},'*');
   queue=queue.then(async()=>{
     if(blocked||!revision){reply(false,"La sesión tiene un guardado sin confirmar. Revisá Compras registradas.");return;}
     if(updatedAt<=latest){reply(false,"Se recibió una versión más reciente. Consultá Compras registradas.");return;}
@@ -197,9 +197,9 @@ window.addEventListener('message',event=>{
     for(let start=0;start<changes.length;start+=4){
       await sendSaveStep({...save,changes:changes.slice(start,start+4)});
     }
-    const result=await sendSaveStep({...save,finish:true,changes:changes.length,blockEmail,authUsers:directory});
+    const result=await sendSaveStep({...save,finish:true,changes:changes.length,blockEmail,authUsers:directory,voucherOp});
     if(result.revision!=='save:'+save.id)throw Error('La confirmación del guardado no coincide con la operación.');
-    revision=result.revision;confirmedParts=parts;latest=updatedAt;reply(true);
+    revision=result.revision;confirmedParts=parts;latest=updatedAt;reply(true,undefined,result.voucher);
   }).catch(e=>{reply(false,e.message);if(!blocked)stop(e.message);});
 });
 
@@ -225,4 +225,27 @@ window.addEventListener('message',async event=>{
   const result=await response.json();
   frame.contentWindow.postMessage({type:'pos365-credential-result',id,ok:response.ok,error:result.error},'*');
  }catch{frame.contentWindow.postMessage({type:'pos365-credential-result',id,ok:false,error:'No se confirmó la clave. Puede volver a guardarla.'},'*');}
+});
+
+window.addEventListener('message',async event=>{
+ if(event.source!==frame.contentWindow||event.data?.type!=='pos365-voucher-lookup')return;
+ const {id,code}=event.data;
+ try{const response=await fetch('/api/pos-voucher?code='+encodeURIComponent(code),{cache:'no-store'});const result=await response.json();frame.contentWindow.postMessage({type:'pos365-voucher-result',id,ok:response.ok,result},'*');}catch{frame.contentWindow.postMessage({type:'pos365-voucher-result',id,ok:false,result:{error:'No se pudo consultar la nota de crédito comercial.'}},'*');}
+});
+
+function posVoucherBarcode(code){
+// Code 128, subset B, including modulo-103 check symbol and quiet zones.
+const bars='11011001100 11001101100 11001100110 10010011000 10010001100 10001001100 10011001000 10011000100 10001100100 11001001000 11001000100 11000100100 10110011100 10011011100 10011001110 10111001100 10011101100 10011100110 11001110010 11001011100 11001001110 11011100100 11001110100 11101101110 11101001100 11100101100 11100100110 11101100100 11100110100 11100110010 11011011000 11011000110 11000110110 10100011000 10001011000 10001000110 10110001000 10001101000 10001100010 11010001000 11000101000 11000100010 10110111000 10110001110 10001101110 10111011000 10111000110 10001110110 11101110110 11010001110 11000101110 11011101000 11011100010 11011101110 11101011000 11101000110 11100010110 11101101000 11101100010 11100011010 11101111010 11001000010 11110001010 10100110000 10100001100 10010110000 10010000110 10000101100 10000100110 10110010000 10110000100 10011010000 10011000010 10000110100 10000110010 11000010010 11001010000 11110111010 11000010100 10001111010 10100111100 10010111100 10010011110 10111100100 10011110100 10011110010 11110100100 11110010100 11110010010 11011011110 11011110110 11110110110 10101111000 10100011110 10001011110 10111101000 10111100010 11110101000 11110100010 10111011110 10111101110 11101011110 11110101110 11010000100 11010010000 11010011100 1100011101011'.split(' ');
+if(!/^NC[0-9A-F]{24}$/.test(code))throw Error('Código inválido.');
+const symbols=Array.from(code,c=>c.charCodeAt(0)-32),check=(104+symbols.reduce((n,c,i)=>n+c*(i+1),0))%103,bits=[104,...symbols,check,106].map(c=>bars[c]).join('');
+return '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Código de barras de la nota" viewBox="0 0 '+(bits.length+24)+' 92" style="width:100%;max-width:720px;background:white"><rect width="100%" height="100%" fill="white"/>'+Array.from(bits,(bit,i)=>bit==='1'?'<rect x="'+(i+12)+'" y="6" width="1" height="60" fill="black"/>':'').join('')+'<text x="'+((bits.length+24)/2)+'" y="82" text-anchor="middle" font-family="monospace" font-size="10" fill="black">'+code+'</text></svg>';
+}
+
+window.addEventListener('message',event=>{
+ if(event.source!==frame.contentWindow||event.data?.type!=='pos365-print-voucher')return;
+ const {code,text,details}=event.data;if(!/^NC[0-9A-F]{24}$/.test(code)||typeof text!=='string'||typeof details!=='string')return;
+ const paper=document.createElement('iframe');paper.style.cssText='position:fixed;width:1px;height:1px;bottom:0;left:0;border:0';document.body.append(paper);
+ const doc=paper.contentDocument;doc.open();doc.write('<!doctype html><html><head><title>Nota de crédito comercial</title><style>body{font:16px sans-serif;max-width:180mm;margin:12mm auto;padding:5mm}svg{width:100%}</style></head><body><h1>Nota de crédito comercial</h1></body></html>');doc.close();
+ const amount=doc.createElement('p');amount.textContent=text.slice(0,500);doc.body.append(amount);const barcode=doc.createElement('div');barcode.innerHTML=posVoucherBarcode(code);doc.body.append(barcode);const note=doc.createElement('p');note.textContent=details.slice(0,500);doc.body.append(note);
+ paper.contentWindow.addEventListener('afterprint',()=>paper.remove(),{once:true});setTimeout(()=>{paper.contentWindow.focus();paper.contentWindow.print();},200);
 });

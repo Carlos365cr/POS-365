@@ -3049,6 +3049,11 @@ async function passwordLogin(request,env){
  return response;
 }
 
+async function voucherTable(db){await db.prepare('CREATE TABLE IF NOT EXISTS pos_vouchers (code TEXT PRIMARY KEY, return_id TEXT NOT NULL UNIQUE, cents INTEGER NOT NULL, issued INTEGER NOT NULL, expires INTEGER NOT NULL, redeemed_sale TEXT, redeemed_at INTEGER)').run();}
+function validVoucherOperation(op){return op&&['issue','redeem'].includes(op.kind)&&/^NC[0-9A-F]{24}$/.test(op.code)&&typeof op.recordId==='string'&&/^[0-9a-f-]{36}$/.test(op.recordId)&&Number.isSafeInteger(op.cents)&&op.cents>0;}
+async function readVoucher(db,code){await voucherTable(db);return db.prepare('SELECT * FROM pos_vouchers WHERE code=?').bind(code).first();}
+function voucherInfo(row){return row?{code:row.code,cents:row.cents,issued:row.issued,expires:row.expires,used:!!row.redeemed_sale}:null;}
+
 function login() {
   const nonce = crypto.randomUUID();
   return new Response(`<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="apple-mobile-web-app-title" content="POS 365">
@@ -3226,6 +3231,15 @@ export default { async fetch(request, env) {
     const denied=url.pathname.startsWith('/api/')?json({error:'Su usuario está bloqueado.'},403):new Response(null,{status:302,headers:{Location:'/login','Cache-Control':'no-store'}});
     denied.headers.append('Set-Cookie',setCookie(sessionCookie,'',0));return denied;
   }
+  if(url.pathname==='/api/pos-voucher'&&request.method==='GET'){
+    const code=(url.searchParams.get('code')||'').trim().toUpperCase();
+    if(!/^NC[0-9A-F]{24}$/.test(code))return json({error:'Código de nota de crédito comercial inválido.'},400);
+    const row=await readVoucher(env.DB,code);
+    if(!row)return json({error:'La nota de crédito comercial no existe.'},404);
+    if(row.redeemed_sale)return json({error:'La nota de crédito comercial ya fue utilizada.'},409);
+    if(row.expires<=Date.now())return json({error:'La nota de crédito comercial venció.'},410);
+    return json(voucherInfo(row));
+  }
   if(url.pathname==='/api/internal-invoice'){
     if(request.method!=='POST')return json({error:'Se requiere POST.'},405);
     if(request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
@@ -3319,7 +3333,8 @@ export default { async fetch(request, env) {
   // Upload bounded batches first. Only the final transaction publishes a revision.
   if(url.pathname==='/api/save' && request.method==='POST'){
     if(request.headers.get('Origin')!==url.origin || request.headers.get('Content-Type')!=='application/json')return json({},403);
-    const {base,id,count,changes,finish,blockEmail,authUsers}=await request.json();
+    const {base,id,count,changes,finish,blockEmail,authUsers,voucherOp}=await request.json();
+    if(voucherOp!==undefined&&(legacy||block||finish!==true||!validVoucherOperation(voucherOp)))return json({error:'Operación de nota de crédito comercial inválida.'},400);
     if(authUsers!==undefined&&(email!==masterEmail||legacy||finish!==true||block))return json({error:"Solo la cuenta máster puede sincronizar accesos."},403);
     if(blockEmail!==undefined&&(legacy||finish!==true||block||!mayBlock(env,email)))return json({error:'Se requiere permiso para bloquear usuarios.'},403);
     if(blockEmail!==undefined&&(typeof blockEmail!=='string'||!/^\S+@\S+\.\S+$/.test(blockEmail)||blockEmail.length>254))return json({},400);
@@ -3327,7 +3342,7 @@ export default { async fetch(request, env) {
     try{
       const rev='save:'+id;
       const head=await db.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();
-      if(head?.revision===rev)return json({revision:rev});
+      if(head?.revision===rev)return json({revision:rev,...(voucherOp?{voucher:voucherInfo(await readVoucher(db,voucherOp.code))}:{})});
       const conflict=()=>json({error:'La base cambió en otra sesión. Revisá la compra antes de repetirla.'},409);
       if(head?.revision!==base)return conflict();
       // Keep staging separate from live parts so retries cannot modify a published revision.
@@ -3339,7 +3354,19 @@ export default { async fetch(request, env) {
         return json({staged:true});
       }
       if(!Number.isInteger(changes)||changes<0||changes>count)return json({},400);
-      const accessWrites=[];
+      const accessWrites=[];let voucherGuard='',voucherBindings=[];
+      if(voucherOp){
+        await voucherTable(db);const now=Date.now(),old=await readVoucher(db,voucherOp.code);
+        if(voucherOp.kind==='issue'){
+          if(old||await db.prepare('SELECT code FROM pos_vouchers WHERE return_id=?').bind(voucherOp.recordId).first())return json({error:'Esta nota de crédito comercial ya existe.'},409);
+          accessWrites.push(db.prepare('INSERT INTO pos_vouchers(code,return_id,cents,issued,expires) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(voucherOp.code,voucherOp.recordId,voucherOp.cents,now,now+12*3600000,rev));
+        }else{
+          if(!old||old.redeemed_sale||old.expires<=now||old.cents!==voucherOp.cents)return json({error:'La nota de crédito comercial no está disponible, venció o ya fue utilizada.'},409);
+          voucherGuard=' AND EXISTS(SELECT 1 FROM pos_vouchers WHERE code=? AND cents=? AND redeemed_sale IS NULL AND expires>?)';voucherBindings=[voucherOp.code,voucherOp.cents,now];
+          accessWrites.push(db.prepare('UPDATE pos_vouchers SET redeemed_sale=?,redeemed_at=? WHERE code=? AND redeemed_sale IS NULL AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(voucherOp.recordId,now,voucherOp.code,rev));
+        }
+      }
+
       if(authUsers!==undefined){
         const payload=authDirectoryPayload(authUsers);
         await authDirectory(db);
@@ -3354,7 +3381,7 @@ export default { async fetch(request, env) {
       const results=await db.batch([
         db.prepare('INSERT INTO cedi_parts SELECT ?,p.part,p.payload FROM cedi_parts p WHERE p.revision=? AND p.part<? AND NOT EXISTS(SELECT 1 FROM cedi_stage s WHERE s.id=? AND s.part=p.part) AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,base,count,key,base),
         db.prepare('INSERT INTO cedi_parts SELECT ?,part,payload FROM cedi_stage WHERE id=? AND part<? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,key,count,base),
-        db.prepare('UPDATE cedi_head SET revision=?,parts=?,author=? WHERE id=1 AND revision=? AND (SELECT COUNT(*) FROM cedi_parts WHERE revision=?)=? AND (SELECT COUNT(*) FROM cedi_stage WHERE id=?)=?').bind(rev,count,email,base,rev,count,key,changes),
+        db.prepare('UPDATE cedi_head SET revision=?,parts=?,author=? WHERE id=1 AND revision=? AND (SELECT COUNT(*) FROM cedi_parts WHERE revision=?)=? AND (SELECT COUNT(*) FROM cedi_stage WHERE id=?)=?'+voucherGuard).bind(rev,count,email,base,rev,count,key,changes,...voucherBindings),
         db.prepare('DELETE FROM cedi_parts WHERE revision IN (?,?) AND revision<>(SELECT revision FROM cedi_head WHERE id=1)').bind(base,rev),
         db.prepare('DELETE FROM cedi_stage WHERE id=? OR created<unixepoch()-86400').bind(key),
         ...accessWrites
@@ -3363,7 +3390,7 @@ export default { async fetch(request, env) {
         const now=await db.prepare('SELECT revision FROM cedi_head WHERE id=1').first();
         if(now?.revision!==rev)return conflict();
       }
-      return json({revision:rev});
+      return json({revision:rev,...(voucherOp?{voucher:voucherInfo(await readVoucher(db,voucherOp.code))}:{})});
     }catch(error){return saveError(error);}
   }
   if(url.pathname==='/api/state' && request.method==='PUT'){
