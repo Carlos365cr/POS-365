@@ -2382,7 +2382,7 @@ function catalogProductChange(product,old,next){
 }
 
 let profileDirectory=[],refreshProfileDirectory=()=>{};
-let userDirectory=[];
+let userDirectory=[];let posSessionIdentity=null;
 let surveyState={questions:[],completed:0},refreshSurveys=()=>{};
 let refreshUserDirectory=()=>{};
 const warehouseDirectory=[
@@ -8045,6 +8045,41 @@ function installInternalInvoiceModule(){
 }
 
 let savePermissionAssignment;
+function cashierRequest(body){
+ return new Promise((resolve,reject)=>{if(window.parent===window){reject(Error('La administración de cajeros requiere el sitio conectado al servidor.'));return;}const id=crypto.randomUUID();let timer;const finish=(error,result)=>{clearTimeout(timer);window.removeEventListener('message',listener);error?reject(error):resolve(result);};const listener=event=>{if(event.source!==window.parent||event.data?.type!=='pos365-cashiers-result'||event.data.id!==id)return;finish(event.data.ok?null:Error(event.data.result?.error||'No se confirmó la operación.'),event.data.result);};window.addEventListener('message',listener);timer=setTimeout(()=>finish(Error('No se recibió confirmación. Recargue la lista antes de repetir.')),20000);window.parent.postMessage({type:'pos365-cashiers',id,body},new URL(document.baseURI).origin);});
+}
+function installCashiers(panel){
+ panel.innerHTML='<h3>Cajeros</h3><p>Ingrese con CAJA01, CAJA02, etc. y la clave asignada. Los cambios se aplican al guardar. Deje la nueva clave vacía para conservar la actual.</p><div class="actions"><button type="button" data-cashier-add>Agregar caja</button><button type="button" data-cashier-reload>Recargar lista</button></div><p data-cashier-status role="status"></p><div style="overflow:auto"><table style="width:100%;min-width:760px"><thead><tr><th>Caja / Usuario</th><th>Activa</th><th>Nombre y apellido</th><th>Nueva clave</th><th>Acciones</th></tr></thead><tbody></tbody></table></div>';
+ const status=panel.querySelector('[data-cashier-status]'),add=panel.querySelector('[data-cashier-add]');let busy=false,rows=[];
+ async function load(){if(busy)return;busy=true;panel.inert=true;status.textContent='Cargando cajeros…';try{const result=await cashierRequest();rows=result.cashiers;render();status.textContent='Solo la cuenta máster administra los cajeros. El ojo muestra únicamente la nueva clave que está escribiendo.';}catch(error){status.textContent=error.message;}finally{busy=false;panel.inert=false;}}
+ function render(){const body=panel.querySelector('tbody');body.replaceChildren();add.disabled=rows.length>=99;
+  for(const record of rows){
+   const tr=body.insertRow();tr.insertCell().textContent='CAJA'+record.box;
+   const active=document.createElement('input');active.type='checkbox';active.checked=record.active;active.setAttribute('role','switch');active.setAttribute('aria-label','Activar CAJA'+record.box);tr.insertCell().append(active);
+   const name=document.createElement('input');name.value=record.name;name.maxLength=200;name.autocomplete='off';name.setAttribute('aria-label','Nombre y apellido de CAJA'+record.box);tr.insertCell().append(name);
+   const key=document.createElement('input');key.type='password';key.autocomplete='new-password';key.minLength=12;key.maxLength=128;key.placeholder=record.hasPassword?'••••••••••••':'Mínimo 12 caracteres';key.setAttribute('aria-label','Nueva clave de CAJA'+record.box);
+   const eye=document.createElement('button');eye.type='button';eye.textContent='👁 Mostrar';eye.setAttribute('aria-label','Mostrar nueva clave de CAJA'+record.box);eye.setAttribute('aria-pressed','false');eye.onclick=()=>{const visible=key.type==='password';key.type=visible?'text':'password';eye.textContent=visible?'Ocultar':'👁 Mostrar';eye.setAttribute('aria-pressed',String(visible));};
+   const password=tr.insertCell();password.append(key,eye);
+   const cell=tr.insertCell(),button=document.createElement('button'),message=document.createElement('span');button.type='button';message.setAttribute('role','status');cell.append(button,message);
+   let editing=!record.name&&!record.hasPassword;
+   function mode(){name.disabled=key.disabled=eye.disabled=!editing;button.textContent=editing?'Guardar':'Modificar';}
+   active.onchange=()=>{editing=true;mode();message.textContent='Guarde para aplicar.';};
+   button.onclick=async()=>{
+    if(busy)return;if(!editing){editing=true;mode();name.focus();return;}
+    if(active.checked&&!name.value.trim()){message.textContent='Complete el nombre.';name.focus();return;}
+    if((key.value&&key.value.length<12)||(active.checked&&!record.hasPassword&&!key.value)){message.textContent='Ingrese una clave de al menos 12 caracteres.';key.focus();return;}
+    busy=true;panel.inert=true;message.textContent='Guardando…';
+    try{await cashierRequest({action:'save',box:record.box,version:record.version,name:name.value.trim(),active:active.checked,password:key.value});key.value='';const result=await cashierRequest();rows=result.cashiers;render();status.textContent='CAJA'+record.box+' guardada.';}
+    catch(error){key.value='';key.type='password';message.textContent=error.message;}
+    finally{busy=false;panel.inert=false;}
+   };mode();
+  }
+ }
+ add.onclick=async()=>{if(busy)return;busy=true;panel.inert=true;try{const result=await cashierRequest({action:'add'});const list=await cashierRequest();rows=list.cashiers;render();status.textContent='CAJA'+result.box+' creada, inicialmente inactiva.';}catch(error){status.textContent=error.message;}finally{busy=false;panel.inert=false;}};
+ panel.querySelector('[data-cashier-reload]').onclick=load;return load;
+}
+function posCashierSnapshot(){return posSessionIdentity?.kind==='cashier'?{id:posSessionIdentity.userId,name:posSessionIdentity.name,box:posSessionIdentity.box}:null;}
+
 function installUserDirectory(panel){
  const fields=[['firstName','Nombre'],['lastName','Apellido'],['position','Nombre perfil'],['email','Correo'],['phone','Teléfono']];
  const directory=document.createElement('div');
@@ -8675,11 +8710,12 @@ function installSurveys(){
  const item=installEmptyModule('Encuestas','surveys-view');
  const designs=[...menu.children].find(el=>el.textContent.trim()==='Diseños');if(designs)designs.before(item);
  const main=root.querySelector('.surveys-view'),questions=document.createElement('section'),settings=document.createElement('section');main.append(questions,settings);
- const subnav=document.createElement('div');subnav.className='survey-subnav';subnav.setAttribute('aria-label','Submódulos de Encuestas');subnav.innerHTML='<button type="button" data-page="questions">Preguntas</button><button type="button" data-page="settings">Configuración</button>';item.after(subnav);
+ const subnav=document.createElement('div');subnav.className='survey-subnav';subnav.id='survey-submodules';subnav.hidden=true;item.setAttribute('aria-expanded','false');item.setAttribute('aria-controls',subnav.id);subnav.setAttribute('aria-label','Submódulos de Encuestas');subnav.innerHTML='<button type="button" data-page="questions">Preguntas</button><button type="button" data-page="settings">Configuración</button>';item.after(subnav);
  const style=document.createElement('style');style.textContent=`
  #articulos-cedi .surveys-view{max-width:1200px;width:100%;box-sizing:border-box}
  #articulos-cedi .surveys-view [hidden]{display:none!important}
  #articulos-cedi .survey-subnav{padding-left:18px;display:grid;gap:4px;margin-bottom:10px}
+ #articulos-cedi .survey-subnav[hidden]{display:none!important}
  #articulos-cedi .survey-subnav button{text-align:left}
  #articulos-cedi .survey-subnav [aria-current=page]{background:#216544;color:#fff}
  #articulos-cedi .survey-card{border:1px solid #d3dfd6;border-radius:16px;padding:clamp(16px,3vw,36px);text-align:center;background:#fff}
@@ -8776,8 +8812,8 @@ function installSurveys(){
  deletion.querySelector('[data-cancel]').onclick=()=>{if(!busy)deletion.close();};deletion.oncancel=event=>{if(busy)event.preventDefault();};
  deletion.querySelector('[data-confirm]').onclick=async()=>{if(busy)return;const next=structuredClone(surveyState),question=next.questions.find(q=>q.id===deleting);if(!question)return;question.deleted=true;question.active=false;if(await save(next,deletion.querySelector('[data-delete-status]'))){deletion.close();renderReports();renderParents();}};
  s('[data-from]').value=localDay();s('[data-to]').value=localDay();s('[data-export]').onclick=async()=>{const button=s('[data-export]'),status=s('[data-export-status]');button.disabled=true;try{const box=s('[data-box]').value;const sheets=surveyExportSheets(surveyState,s('[data-from]').value,s('[data-to]').value,box);const bytes=await buildCediWorkbook(sheets);downloadCashOutExport('Encuestas-'+s('[data-from]').value+'-'+s('[data-to]').value+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',bytes);status.textContent='Excel preparado con Respuestas y Resumen.';}catch(error){status.textContent=error.message;}finally{button.disabled=false;}};
- const open=item.onclick;function select(page){if(busy)return;open();questions.hidden=page!=='questions';settings.hidden=page!=='settings';subnav.querySelectorAll('button').forEach(button=>{if(button.dataset.page===page)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});if(page==='settings'){session=null;renderReports();renderParents();}else idle();}
- item.onclick=()=>select('questions');subnav.querySelectorAll('button').forEach(button=>button.onclick=()=>select(button.dataset.page));s('[data-preview]').onclick=()=>select('questions');
+ const open=item.onclick;function select(page){if(busy)return;subnav.hidden=false;item.setAttribute('aria-expanded','true');open();questions.hidden=page!=='questions';settings.hidden=page!=='settings';subnav.querySelectorAll('button').forEach(button=>{if(button.dataset.page===page)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});if(page==='settings'){session=null;renderReports();renderParents();}else idle();}
+ item.onclick=()=>{subnav.hidden=!subnav.hidden;item.setAttribute('aria-expanded',String(!subnav.hidden));};subnav.querySelectorAll('button').forEach(button=>button.onclick=()=>select(button.dataset.page));s('[data-preview]').onclick=()=>select('questions');
  refreshSurveys=()=>{renderReports();renderParents();if(!session)idle();};settings.hidden=true;refreshSurveys();
  return item;
 }
@@ -8795,7 +8831,8 @@ function installEmptyModule(name,className,sections=[]){
    tabs.append(tab);main.append(panel);return {tab,panel};
   });
   const refreshPermissions=className==='users-permissions-view'?createModulePermissionList(entries[1].panel,()=>Array.from(menu.querySelectorAll('.menu-item'),item=>item.textContent.trim())):null;
-  const select=index=>{if(index===1&&refreshPermissions)refreshPermissions();entries.forEach((entry,i)=>{entry.tab.setAttribute('aria-selected',String(i===index));entry.tab.classList.toggle('primary',i===index);entry.tab.tabIndex=i===index?0:-1;entry.panel.hidden=i!==index;});};
+  const refreshCashiers=className==='users-permissions-view'?installCashiers(entries[2].panel):null;
+  const select=index=>{if(index===2&&refreshCashiers)refreshCashiers();if(index===1&&refreshPermissions)refreshPermissions();entries.forEach((entry,i)=>{entry.tab.setAttribute('aria-selected',String(i===index));entry.tab.classList.toggle('primary',i===index);entry.tab.tabIndex=i===index?0:-1;entry.panel.hidden=i!==index;});};
   if(className==='users-permissions-view')installUserDirectory(entries[0].panel);
   if(className==='perishables-view'){installVegetableProducts(entries[0].panel);installPerishableProducts(entries[1].panel,'animal');}
   entries.forEach((entry,index)=>{entry.tab.onclick=()=>select(index);entry.tab.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?entries.length-1:(index+(event.key==='ArrowRight'?1:-1)+entries.length)%entries.length;select(next);entries[next].tab.focus();};});select(0);
@@ -9055,7 +9092,7 @@ history.onclick=()=>show('Compras de prueba registradas','Los registros están i
 installPurchaseConsultation();
 installInternalInvoiceModule();
 addPurchaseFormatButton('Compras Formato Viejo','legacy');
-installEmptyModule('Usuarios y permisos','users-permissions-view',['Usuarios','Permisos']);
+installEmptyModule('Usuarios y permisos','users-permissions-view',['Usuarios','Permisos','Cajeros']);
 installEmptyModule('FMG','fmg-view');
 installEmptyModule('Análisis perecederos','perishables-view',['Origen vegetal','Origen animal']);
 const annulDialog=document.createElement('dialog');annulDialog.className='cabys-dialog';
@@ -10207,7 +10244,7 @@ function installPosReturns(getSaleLines,focusSale){
  function openPayment(){try{if(!selections.length)throw Error('Agregue al menos un artículo.');if(!q('[data-reason]').value.trim())throw Error('Escriba el motivo de la devolución.');const result=totals();show('payment');q('[data-payment-total]').textContent=money(result.totalCents);q('[data-paid]').value='0.00';q('[data-balance]').textContent='Monto por devolver: '+money(-result.totalCents);q('[data-paid]').focus();q('[data-paid]').select();}catch(error){status(error.message);}}
  function review(){try{const expected=totals().totalCents,paid=parsePosRefundAmount(q('[data-paid]').value);if(!Number.isFinite(paid)||Math.round(paid*100)!==expected)throw Error('El monto negativo debe coincidir con el total a devolver: '+money(expected));show('confirm');q('[data-confirm-amount]').textContent=money(expected)+' · Factura '+sale.invoiceNumber;q('[data-save]').focus();}catch(error){status(error.message);q('[data-paid]').focus();q('[data-paid]').select();}}
  async function commit(method='cash'){
-  if(busy)return;let record;try{if(getSaleLines().length)throw Error('Hay una venta en curso. Regrese a Facturación.');if(!sale||!trialCompletedSales.some(s=>s.id===sale.id))throw Error('La factura original ya no está disponible.');const result=totals();if(!result.lines.length)throw Error('La devolución está vacía.');if(trialPosReturns.some(r=>r.id===draftId))throw Error('Esta devolución ya fue registrada.');const date=new Date().toISOString();record={id:draftId,kind:'pos-return',status:'recorded',originalSaleId:sale.id,originalInvoiceNumber:sale.invoiceNumber,originalDate:sale.date,customer:structuredClone(sale.customer||null),box:currentPosBox(),originalBox:sale.box||'01',warehouse:sale.warehouse||'',user:actor,date,recordedAt:date,method:method==='voucher'?'Nota de crédito comercial':'Efectivo',voucherCode:method==='voucher'?draftCode:undefined,comment:q('[data-reason]').value.trim(),totalCents:result.totalCents,refundCents:-result.totalCents,lines:result.lines,fiscalStatus:'not-issued'};
+  if(busy)return;let record;try{if(getSaleLines().length)throw Error('Hay una venta en curso. Regrese a Facturación.');if(!sale||!trialCompletedSales.some(s=>s.id===sale.id))throw Error('La factura original ya no está disponible.');const result=totals();if(!result.lines.length)throw Error('La devolución está vacía.');if(trialPosReturns.some(r=>r.id===draftId))throw Error('Esta devolución ya fue registrada.');const date=new Date().toISOString();record={cashier:posCashierSnapshot(),id:draftId,kind:'pos-return',status:'recorded',originalSaleId:sale.id,originalInvoiceNumber:sale.invoiceNumber,originalDate:sale.date,customer:structuredClone(sale.customer||null),box:currentPosBox(),originalBox:sale.box||'01',warehouse:sale.warehouse||'',user:actor,date,recordedAt:date,method:method==='voucher'?'Nota de crédito comercial':'Efectivo',voucherCode:method==='voucher'?draftCode:undefined,comment:q('[data-reason]').value.trim(),totalCents:result.totalCents,refundCents:-result.totalCents,lines:result.lines,fiscalStatus:'not-issued'};
    busy=true;dialog.querySelectorAll('button,input').forEach(el=>el.disabled=true);status('Guardando devolución…');trialPosReturns.push(record);const voucher=await persistPurchaseConfirmed(undefined,method==='voucher'?{kind:'issue',code:draftCode,recordId:draftId,cents:record.refundCents}:undefined);show('done');q('[data-done]').textContent='Factura '+record.originalInvoiceNumber+' · '+record.method+': '+money(record.refundCents);q('[data-voucher-receipt]').hidden=method!=='voucher';q('[data-print-voucher]').hidden=method!=='voucher';if(method==='voucher'){q('[data-voucher-receipt]').innerHTML=posVoucherBarcode(draftCode);const details=document.createElement('p');details.textContent='Vence: '+new Date(voucher.expires).toLocaleString('es-CR')+' · Uso único por el monto completo. No genera vuelto. Documento comercial interno.';q('[data-voucher-receipt]').append(details);}refreshPerishablesProducts();refreshFmgInventoryViews();
   }catch(error){if(record)trialPosReturns=trialPosReturns.filter(r=>r.id!==record.id);status('No se confirmó la devolución. '+error.message);}
   finally{busy=false;dialog.querySelectorAll('button,input').forEach(el=>el.disabled=false);if(step==='done')q('[data-accept]').focus();}
@@ -10638,7 +10675,7 @@ const recordedAt=new Date();
 const box=currentPosBox();
 const invoiceNumber=nextPosInvoiceNumber(trialCompletedSales,box);
 if(!invoiceNumber){paymentMethodDialog.querySelector('[data-error]').textContent='Revise la caja (01 a 99) o el consecutivo: la serie puede estar agotada.';return;}
-const receipt={voucherCode:activePosVoucher?.code||null,voucherCents:activePosVoucher?.cents||0,invoiceNumber,box,sequence:invoiceNumber.slice(2),customer:getPosContactSnapshot(),id:globalThis.crypto?.randomUUID?.() || String(Date.now()),invoiceDate:saleDate.value,date:posDocumentTimestamp(saleDate.value,recordedAt),recordedAt:recordedAt.toISOString(),method:activePosVoucher?(paymentTotalCents===activePosVoucher.cents?'Nota de crédito comercial':names[method]+' + Nota de crédito comercial'):names[method],cashReceivedCents:method==='1'?tenderCents-(activePosVoucher?.cents||0):0,otherPaymentCents:method==='1'?0:paymentTotalCents-(activePosVoucher?.cents||0),saleDiscountCents,exactTotalCents:saleExactTotalCents,roundingCents:paymentTotalCents-saleExactTotalCents,totalCents:paymentTotalCents,receivedCents:method==='1'?tenderCents:paymentTotalCents,changeCents:method==='1'?tenderCents-paymentTotalCents:0,lines:saleRows.map((line,index)=>({barcode:line.productId,cost:line.recordedCost??null,supplier:line.recordedSupplier||'',code:line.code,name:line.name,quantity:line.quantity,price:line.price,vatRate:line.vatRate,includesVAT:line.includesVAT,...discounted.amounts[index]}))};
+const receipt={cashier:posCashierSnapshot(),voucherCode:activePosVoucher?.code||null,voucherCents:activePosVoucher?.cents||0,invoiceNumber,box,sequence:invoiceNumber.slice(2),customer:getPosContactSnapshot(),id:globalThis.crypto?.randomUUID?.() || String(Date.now()),invoiceDate:saleDate.value,date:posDocumentTimestamp(saleDate.value,recordedAt),recordedAt:recordedAt.toISOString(),method:activePosVoucher?(paymentTotalCents===activePosVoucher.cents?'Nota de crédito comercial':names[method]+' + Nota de crédito comercial'):names[method],cashReceivedCents:method==='1'?tenderCents-(activePosVoucher?.cents||0):0,otherPaymentCents:method==='1'?0:paymentTotalCents-(activePosVoucher?.cents||0),saleDiscountCents,exactTotalCents:saleExactTotalCents,roundingCents:paymentTotalCents-saleExactTotalCents,totalCents:paymentTotalCents,receivedCents:method==='1'?tenderCents:paymentTotalCents,changeCents:method==='1'?tenderCents-paymentTotalCents:0,lines:saleRows.map((line,index)=>({barcode:line.productId,cost:line.recordedCost??null,supplier:line.recordedSupplier||'',code:line.code,name:line.name,quantity:line.quantity,price:line.price,vatRate:line.vatRate,includesVAT:line.includesVAT,...discounted.amounts[index]}))};
 savingPosInvoice=true;
 const buttons=paymentMethodDialog.querySelectorAll('button');
 buttons.forEach(button=>button.disabled=true);
@@ -10913,6 +10950,9 @@ event.preventDefault();event.stopPropagation();if(!event.repeat){target.onsubmit
 }
 });
 }
+const cashierIdentity=document.createElement('strong');cashierIdentity.setAttribute('data-pos-cashier','');posMain.querySelector('.pos-heading').append(cashierIdentity);
+window.addEventListener('message',event=>{if(event.source!==window.parent||event.data?.type!=='pos365-billing-user')return;const access=event.data;if(access.kind==='cashier'&&!/^(0[1-9]|[1-9][0-9])$/.test(access.box))return;posSessionIdentity=access;const field=posMain.querySelector('[name="posCaja"]');field.value='Caja-'+(access.kind==='cashier'?access.box:'01');field.setAttribute('aria-label','Caja');cashierIdentity.textContent=access.kind==='cashier'?access.name+' · CAJA'+access.box:'';refreshPosInvoiceNumber();});
+window.parent.postMessage({type:'pos365-read-billing-user'},new URL(document.baseURI).origin);
 refreshReturnAvailability=installPosReturns(()=>lines,focusPosCode);
 refreshPosSale=render;
 render();
@@ -10953,6 +10993,8 @@ function nextPosInvoiceNumber(sales,box='01'){
  return last<9999999999?box+String(last+1).padStart(10,'0'):null;
 }
 function currentPosBox(){
+ if(typeof sharedPurchaseStorage!=='undefined'&&sharedPurchaseStorage&&!posSessionIdentity)return '';
+ if(posSessionIdentity?.kind==='cashier')return /^(0[1-9]|[1-9][0-9])$/.test(posSessionIdentity.box)?posSessionIdentity.box:'';
  return /^Caja-(0[1-9]|[1-9][0-9])$/.exec(posMain.querySelector('[name="posCaja"]').value)?.[1]||'';
 }
 function refreshPosInvoiceNumber(){

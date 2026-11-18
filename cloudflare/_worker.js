@@ -2987,6 +2987,7 @@ function authDirectoryPayload(users){
   ids.add(u.id);
   const email=u.email.trim().toLowerCase(),username=String(u.username||'').trim().toLowerCase();
   if(username&&!/^[a-z0-9._-]{3,64}$/.test(username))throw Error('Nombre de acceso inválido.');
+  if(/^caja(0[1-9]|[1-9][0-9])$/.test(username)||email.endsWith('@pos365.invalid'))throw Error('Los accesos CAJA01 a CAJA99 están reservados para la pestaña Cajeros.');
   if(!u.deleted){if(emails.has(email)||(username&&names.has(username)))throw Error('Usuario de acceso repetido.');emails.add(email);if(username)names.add(username);}
   return {id:u.id,email,username,firstName:String(u.firstName||'').slice(0,100),lastName:String(u.lastName||'').slice(0,100),deleted:!!u.deleted,suspended:!!u.suspended};
  });
@@ -2994,6 +2995,44 @@ function authDirectoryPayload(users){
  if(new TextEncoder().encode(payload).length>60000)throw Error('Directorio de acceso demasiado grande.');
  return payload;
 }
+async function cashierTable(db){
+ await db.prepare('CREATE TABLE IF NOT EXISTS pos_cashiers (box TEXT PRIMARY KEY,name TEXT NOT NULL,active INTEGER NOT NULL,version TEXT NOT NULL)').run();
+ await db.prepare("WITH RECURSIVE boxes(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM boxes WHERE n<15) INSERT OR IGNORE INTO pos_cashiers(box,name,active,version) SELECT printf('%02d',n),'',0,'initial' FROM boxes").run();
+}
+async function accessDirectory(db){
+ const users=await authDirectory(db);await cashierTable(db);
+ const cashiers=await db.prepare('SELECT box,name,active FROM pos_cashiers').all();
+ return [...users,...cashiers.results.map(c=>({id:'cashier-'+c.box,email:'caja'+c.box+'@pos365.invalid',username:'caja'+c.box,firstName:c.name,lastName:'',suspended:!c.active,kind:'cashier',box:c.box}))];
+}
+async function manageCashiers(request,env,email){
+ if(email!==masterEmail)return json({error:'Solo la cuenta máster puede administrar cajeros.'},403);
+ const db=env.DB;await cashierTable(db);await authTables(db);
+ if(request.method==='GET'){
+  const rows=await db.prepare("SELECT b.box,b.name,b.active,b.version,CASE WHEN c.user_id IS NULL THEN 0 ELSE 1 END AS hasPassword FROM pos_cashiers b LEFT JOIN pos_credentials c ON c.user_id='cashier-'||b.box ORDER BY b.box").all();
+  return json({cashiers:rows.results.map(r=>({...r,active:!!r.active,hasPassword:!!r.hasPassword}))});
+ }
+ if(request.method!=='POST'||request.headers.get('Origin')!==new URL(request.url).origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
+ const body=await request.json().catch(()=>null);if(!body)return json({error:'Datos incompletos.'},400);
+ if(body.action==='add'){
+  const added=await db.prepare("INSERT INTO pos_cashiers(box,name,active,version) SELECT printf('%02d',MAX(CAST(box AS INTEGER))+1),'',0,? FROM pos_cashiers HAVING MAX(CAST(box AS INTEGER))<99 RETURNING box").bind(randomAuth()).first();
+  return added?json({ok:true,box:added.box}):json({error:'Se alcanzó el límite de CAJA99.'},400);
+ }
+ if(body.action!=='save'||! /^(0[1-9]|[1-9][0-9])$/.test(body.box)||typeof body.name!=='string'||body.name.trim().length>200||typeof body.active!=='boolean'||typeof body.version!=='string'||typeof body.password!=='string')return json({error:'Revise los datos del cajero.'},400);
+ const row=await db.prepare('SELECT * FROM pos_cashiers WHERE box=?').bind(body.box).first();
+ if(!row||row.version!==body.version)return json({error:'La caja cambió en otra sesión. Recargue la lista.'},409);
+ const userId='cashier-'+body.box,identity='caja'+body.box+'@pos365.invalid',name=body.name.trim();
+ const credential=await db.prepare('SELECT user_id FROM pos_credentials WHERE user_id=?').bind(userId).first();
+ if(body.password&&(body.password.length<12||body.password.length>128))return json({error:'Use una clave de 12 a 128 caracteres.'},400);
+ if(body.active&&(!name||(!credential&&!body.password)))return json({error:'Para activar la caja complete nombre y clave.'},400);
+ // Reserve CAJAxx for the dedicated cashier account; do not create ambiguous logins.
+ const users=await authDirectory(db);if(users.some(u=>!u.deleted&&(u.username==='caja'+body.box||u.email===identity)))return json({error:'Ese acceso ya está asignado a un usuario. Cambie su nombre de acceso antes de activar esta caja.'},409);
+ const version=randomAuth(),writes=[db.prepare('UPDATE pos_cashiers SET name=?,active=?,version=? WHERE box=? AND version=?').bind(name,body.active?1:0,version,body.box,body.version)];
+ if(body.password){const salt=randomAuth(),hash=await passwordHash(body.password,salt);writes.push(db.prepare('INSERT INTO pos_credentials(user_id,email,salt,hash,version) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM pos_cashiers WHERE box=? AND version=?) ON CONFLICT(user_id) DO UPDATE SET email=excluded.email,salt=excluded.salt,hash=excluded.hash,version=excluded.version').bind(userId,identity,salt,hash,randomAuth(),body.box,version));}
+ if(body.password||!body.active)writes.push(db.prepare('DELETE FROM pos_sessions WHERE user_id=? AND EXISTS(SELECT 1 FROM pos_cashiers WHERE box=? AND version=?)').bind(userId,body.box,version));
+ const result=await db.batch(writes);if(!(result[0].meta?.changes??result[0].changes))return json({error:'La caja cambió en otra sesión. Recargue la lista.'},409);
+ return json({ok:true,box:body.box,version});
+}
+
 function credentialUser(users,id){return users.find(u=>u.id===id&&!u.deleted&&!u.suspended);}
 async function passwordSession(request,env){
  const token=cookie(request,passwordCookie);
@@ -3001,9 +3040,9 @@ async function passwordSession(request,env){
  await authTables(env.DB);
  const row=await env.DB.prepare('SELECT s.*,c.email AS credential_email FROM pos_sessions s JOIN pos_credentials c ON c.user_id=s.user_id AND c.version=s.version WHERE token=? AND expires>?').bind(await authDigest(token),Date.now()).first();
  if(!row)return null;
- const user=credentialUser(await authDirectory(env.DB),row.user_id);
+ const user=credentialUser(await accessDirectory(env.DB),row.user_id);
  if(!user||user.email.toLowerCase()!==row.credential_email)return null;
- return {email:user.email,name:[user.firstName,user.lastName].filter(Boolean).join(' '),iat:row.issued/1000,exp:row.expires/1000};
+ return {email:user.email,name:[user.firstName,user.lastName].filter(Boolean).join(' '),kind:user.kind||'user',box:user.box||null,userId:user.id,iat:row.issued/1000,exp:row.expires/1000};
 }
 async function saveCredential(request,env,email){
  if(email!==masterEmail)return json({error:'Solo la cuenta máster puede cambiar claves.'},403);
@@ -3029,7 +3068,7 @@ async function passwordLogin(request,env){
  const bucket=await authDigest((request.headers.get('CF-Connecting-IP')||'local')+'|'+Math.floor(now/900000));
  const attempts=await env.DB.prepare('INSERT INTO pos_login_attempts(key,count,expires) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1 RETURNING count').bind(bucket,now+900000).first();
  if(attempts.count>30)return json({error:'Demasiados intentos. Espere 15 minutos.'},429);
- const users=await authDirectory(env.DB);
+ const users=await accessDirectory(env.DB);
  const matches=users.filter(u=>!u.deleted&&!u.suspended&&[u.email,u.username].some(v=>typeof v==='string'&&v.toLowerCase()===identifier));
  const user=matches.length===1?matches[0]:null;
  const stored=user?await env.DB.prepare('SELECT * FROM pos_credentials WHERE user_id=?').bind(user.id).first():null;
@@ -3278,7 +3317,8 @@ export default { async fetch(request, env) {
   }
   if(url.pathname==='/api/gmail-xml')return gmailRequest(request,env);
   if(url.pathname==='/api/user-credential'){try{return await saveCredential(request,env,email);}catch{return json({error:'No se confirmó el cambio de clave. Intente de nuevo.'},503);}}
-  if(url.pathname==='/api/session-access')return json({master:email===masterEmail,remaining,mayBlock:!block&&mayBlock(env,email),email,name:claims.name||''});
+  if(url.pathname==='/api/cashiers'){try{return await manageCashiers(request,env,email);}catch{return json({error:'No se confirmó el cambio de cajero. Recargue y verifique antes de repetirlo.'},503);}}
+  if(url.pathname==='/api/session-access')return json({master:email===masterEmail,remaining,mayBlock:!block&&mayBlock(env,email),email,name:claims.name||'',kind:claims.kind||'user',box:claims.box||null,userId:claims.userId||null});
   if(!url.pathname.startsWith('/api/')){
     const asset=await env.ASSETS.fetch(request);
     const response=new Response(asset.body,asset);

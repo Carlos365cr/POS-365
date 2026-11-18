@@ -92,7 +92,7 @@ function checkSessionAccess(){
     if(response.status===401||response.status===403){location.replace('/login');return {};}
     if(!response.ok)throw Error('No se pudo comprobar el permiso.');
     const access=await response.json();
-    if(access.email)frame.contentWindow?.postMessage({type:'pos365-billing-user',email:access.email,name:access.name,master:access.master},'*');
+    if(access.email)frame.contentWindow?.postMessage({type:'pos365-billing-user',email:access.email,name:access.name,master:access.master,kind:access.kind,box:access.box,userId:access.userId},'*');
     if(Number.isFinite(access.remaining)){
       let warning=document.getElementById('cedi-session-warning');
       if(!warning){
@@ -248,4 +248,10 @@ window.addEventListener('message',event=>{
  const doc=paper.contentDocument;doc.open();doc.write('<!doctype html><html><head><title>Nota de crédito comercial</title><style>body{font:16px sans-serif;max-width:180mm;margin:12mm auto;padding:5mm}svg{width:100%}</style></head><body><h1>Nota de crédito comercial</h1></body></html>');doc.close();
  const amount=doc.createElement('p');amount.textContent=text.slice(0,500);doc.body.append(amount);const barcode=doc.createElement('div');barcode.innerHTML=posVoucherBarcode(code);doc.body.append(barcode);const note=doc.createElement('p');note.textContent=details.slice(0,500);doc.body.append(note);
  paper.contentWindow.addEventListener('afterprint',()=>paper.remove(),{once:true});setTimeout(()=>{paper.contentWindow.focus();paper.contentWindow.print();},200);
+});
+
+window.addEventListener('message',async event=>{
+ if(event.source!==frame.contentWindow||event.data?.type!=='pos365-cashiers')return;
+ const {id,body}=event.data;
+ try{const response=await fetch('/api/cashiers',body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});const result=await response.json();frame.contentWindow.postMessage({type:'pos365-cashiers-result',id,ok:response.ok,result},'*');}catch{frame.contentWindow.postMessage({type:'pos365-cashiers-result',id,ok:false,result:{error:'No se confirmó la operación. Recargue la lista para verificar.'}},'*');}
 });
