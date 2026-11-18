@@ -8767,62 +8767,105 @@ function installCatalog(main){
 }
 
 function surveySummary(question){
+ if(question.mode==='text'){const responses=question.responses||[];return {counts:[],total:question.responseCount??responses.length,average:null,responses};}
  const counts=question.counts||question.options.map(()=>0),total=counts.reduce((n,v)=>n+v,0);
  return {counts,total,average:question.mode==='yesno'||!total?null:counts.reduce((n,v,i)=>n+v*(i+1),0)/total};
 }
-function surveyApply(state,answers){
- const next=structuredClone(state);
+function surveyInvoice(value){const number=String(value);return /^[0-9]{12}$/.test(number)?{number,box:number.slice(0,2),sequence:number.slice(2)}:null;}
+function surveyAvailable(question,questions,answers,seen=new Set()){
+ if(!question||!question.active||question.deleted||seen.has(question.id))return false;
+ if(!question.parent)return true;
+ seen.add(question.id);const parent=questions.find(q=>q.id===question.parent),answer=answers.find(a=>a.id===question.parent);
+ return surveyAvailable(parent,questions,answers,seen)&&!!answer&&(question.when||[]).includes(answer.choice);
+}
+function surveyApply(state,answers,entry){
+ if(entry&&(state.entries||[]).some(e=>e.id===entry.id))return structuredClone(state);
+ const next=structuredClone(state),seen=new Set(),details=[];
  for(const answer of answers){
   const question=next.questions.find(q=>q.id===answer.id);
-  if(!question||!Number.isInteger(answer.choice)||answer.choice<0||answer.choice>=question.options.length)throw Error('La pregunta cambió. Inicie otra encuesta.');
-  question.counts??=question.options.map(()=>0);question.counts[answer.choice]++;
+  if(!question||seen.has(answer.id))throw Error('La pregunta cambió. Inicie otra encuesta.');seen.add(answer.id);
+  if(question.mode==='text'){
+   if(typeof answer.text!=='string'||answer.text.length>240)throw Error('La respuesta escrita supera el límite permitido.');
+   const text=answer.text.trim();question.responseCount=(question.responseCount??question.responses?.length??0)+1;question.responses??=[];if(text)question.responses.push(text);
+   details.push({id:question.id,question:question.text,mode:'text',answer:text});
+  }else{
+   if(!Number.isInteger(answer.choice)||answer.choice<0||answer.choice>=question.options.length)throw Error('La pregunta cambió. Inicie otra encuesta.');
+   question.counts??=question.options.map(()=>0);question.counts[answer.choice]++;
+   details.push({id:question.id,question:question.text,mode:question.mode,answer:question.options[answer.choice],choice:answer.choice});
+  }
  }
  next.completed=(next.completed||0)+1;
+ if(entry){next.entries??=[];next.entries.push({...entry,answers:details});}
  return next;
 }
+function surveyExportSheets(state,from,to,box=''){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)throw Error('Revise las fechas Desde y Hasta.');
+ const entries=(state.entries||[]).filter(e=>e.date>=from&&e.date<=to&&(!box||(box==='none'?!e.box:e.box===box)));
+ if(!entries.length)throw Error('No hay respuestas con fecha en ese período y caja. Los totales anteriores a esta actualización no tienen fecha ni caja.');
+ const rows=[['Encuesta','Fecha','Hora','Caja','Documento interno','Pregunta','Tipo','Respuesta']],counts=new Map();
+ for(const e of entries)for(const a of e.answers){rows.push([e.id,e.date,e.time,e.box?'CAJA'+e.box:'Sin factura',e.invoice||'',a.question,a.mode==='text'?'Escrita':'Selección',a.answer||'(Sin respuesta)']);const key=JSON.stringify([a.id,a.question,a.answer||'(Sin respuesta)']);counts.set(key,(counts.get(key)||0)+1);}
+ const summary=[['Pregunta','Respuesta','Cantidad'],...Array.from(counts,([key,count])=>{const [,question,answer]=JSON.parse(key);return [question,answer,count];})];
+ return [{name:'Respuestas',data:rows,widths:[38,14,14,14,20,55,14,55]},{name:'Resumen',data:summary,widths:[55,55,15]}];
+}
 function installSurveys(){
- const item=installEmptyModule('Encuestas','surveys-view',['Preguntas','Configuración']);
+ const item=installEmptyModule('Encuestas','surveys-view');
  const designs=[...menu.children].find(el=>el.textContent.trim()==='Diseños');if(designs)designs.before(item);
- const main=root.querySelector('.surveys-view'),panels=main.querySelectorAll('[role=tabpanel]');
- const [questions,settings]=panels;
+ const main=root.querySelector('.surveys-view'),questions=document.createElement('section'),settings=document.createElement('section');main.append(questions,settings);
+ const subnav=document.createElement('div');subnav.className='survey-subnav';subnav.setAttribute('aria-label','Submódulos de Encuestas');subnav.innerHTML='<button type="button" data-page="questions">Preguntas</button><button type="button" data-page="settings">Configuración</button>';item.after(subnav);
  const style=document.createElement('style');style.textContent=`
  #articulos-cedi .surveys-view{max-width:1200px;width:100%;box-sizing:border-box}
  #articulos-cedi .surveys-view [hidden]{display:none!important}
+ #articulos-cedi .survey-subnav{padding-left:18px;display:grid;gap:4px;margin-bottom:10px}
+ #articulos-cedi .survey-subnav button{text-align:left}
+ #articulos-cedi .survey-subnav [aria-current=page]{background:#216544;color:#fff}
  #articulos-cedi .survey-card{border:1px solid #d3dfd6;border-radius:16px;padding:clamp(16px,3vw,36px);text-align:center;background:#fff}
- #articulos-cedi .survey-card h3{font-size:clamp(25px,3vw,40px);line-height:1.25;margin:20px 0 30px}
+ #articulos-cedi .survey-card h3{font-size:clamp(28px,3vw,42px);line-height:1.25;margin:20px 0 30px}
+ #articulos-cedi .survey-card label{display:flex;flex-direction:column;gap:12px;text-align:left;max-width:740px;margin:auto}
+ #articulos-cedi .survey-card input{width:100%;font-size:clamp(26px,4vw,44px);min-height:80px;text-align:center}
+ #articulos-cedi .survey-card textarea{width:100%;font-size:24px;min-height:150px}
+ #articulos-cedi .survey-card button{min-height:60px;font-size:22px;margin:8px}
  #articulos-cedi .survey-options{display:flex;flex-wrap:wrap;justify-content:center;gap:14px}
- #articulos-cedi .survey-options button{min-width:120px;min-height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;font-size:18px;background:#f1f6ef;color:#203e30;border:2px solid #c9dacf;border-radius:14px}
+ #articulos-cedi .survey-options button{min-width:120px;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;font-size:20px;background:#f1f6ef;color:#203e30;border:2px solid #c9dacf;border-radius:14px}
  #articulos-cedi .survey-options button:focus-visible{outline:4px solid #237452;outline-offset:3px}
- #articulos-cedi .survey-options strong{font-size:40px}
- #articulos-cedi .survey-settings{display:grid;gap:12px;max-width:760px;margin-bottom:20px}
+ #articulos-cedi .survey-options strong{font-size:50px}
+ #articulos-cedi .survey-settings{display:grid;gap:12px;max-width:800px;margin-bottom:24px}
  #articulos-cedi .survey-settings label{display:flex;flex-direction:column;gap:5px}
  #articulos-cedi .survey-report{overflow:auto}
  #articulos-cedi .survey-report table{width:100%;border-collapse:collapse}
  #articulos-cedi .survey-report td,#articulos-cedi .survey-report th{padding:10px;text-align:left;border-bottom:1px solid #d3dfd6;vertical-align:top}
- #articulos-cedi .survey-toggle{display:flex;align-items:center;gap:8px}
+ #articulos-cedi .surveys-view .survey-toggle{display:flex;flex-direction:row;align-items:center;gap:8px}
  #articulos-cedi .survey-toggle input{width:20px;height:20px;margin:0}
- #articulos-cedi .survey-thanks{width:min(460px,85vw);box-sizing:border-box;border:1px solid #cad9ce;border-radius:20px;padding:30px;text-align:center;color:#203e30}
- #articulos-cedi .survey-thanks h3{font-size:30px}
- #articulos-cedi .survey-thanks p{font-size:20px;line-height:1.5}
- @media(max-width:600px){#articulos-cedi .survey-options{gap:8px}#articulos-cedi .survey-options button{min-width:90px;flex:1;min-height:96px}}
+ #articulos-cedi .survey-thanks{width:min(560px,90vw);box-sizing:border-box;border:1px solid #cad9ce;border-radius:20px;padding:30px;text-align:center;color:#203e30}
+ #articulos-cedi .survey-thanks h3{font-size:34px}
+ #articulos-cedi .survey-thanks p{font-size:22px;line-height:1.5}
+ @media(max-width:600px){#articulos-cedi .survey-options{gap:8px}#articulos-cedi .survey-options button{min-width:100px;flex:1;min-height:120px}}
  `;main.append(style);
- questions.innerHTML='<div class="survey-card"><p data-survey-progress></p><h3 data-survey-question></h3><div class="survey-options"></div><p data-survey-message role="status" aria-live="polite"></p><button type="button" data-survey-start>Comenzar encuesta</button><button type="button" data-survey-retry hidden>Reintentar guardado</button><button type="button" data-survey-reset hidden>Reiniciar encuesta</button></div>';
- settings.innerHTML='<h3>Crear preguntas</h3><div class="survey-settings"><label>Pregunta<input data-survey-text maxlength="240" placeholder="¿Qué le pareció el surtido del supermercado?"></label><label>Tipo de respuesta<select data-survey-mode><option value="faces">Cinco caritas</option><option value="numbers">Calificación del 1 al 5</option><option value="yesno">Sí / No</option></select></label><button type="button" data-survey-add>Agregar pregunta</button></div><p data-survey-config-status role="status"></p><h3>Preguntas y resultados</h3><p data-survey-completed></p><div class="survey-report"><table><thead><tr><th>Pregunta</th><th>Activa</th><th>Respuestas</th><th>Promedio</th><th>Detalle</th></tr></thead><tbody></tbody></table></div>';
+ questions.innerHTML='<div class="survey-card"><h2>¡Su opinión nos importa!</h2><p>Ayúdenos a mejorar su próxima visita.</p><div data-scan><h3>Escanee o escriba su factura para comenzar</h3><label>Número documento interno<input data-invoice type="text" inputmode="numeric" autocomplete="off" maxlength="12" pattern="[0-9]{12}" placeholder="Ejemplo: 010000000001"></label><p>12 dígitos: caja (2) + consecutivo (10). Avance automático.</p></div><div data-question-area hidden><p data-survey-progress></p><h3 data-survey-question></h3><div class="survey-options"></div><div data-written hidden><label>Su respuesta<textarea maxlength="240" placeholder="Escriba el producto que le gustaría encontrar"></textarea></label><p>Opcional</p><button type="button" data-next>Siguiente pregunta</button></div><button type="button" data-back hidden>Regresar</button></div><p data-survey-message role="status" aria-live="polite"></p><button type="button" data-survey-retry hidden>Reintentar guardado</button><button type="button" data-survey-reset hidden>Reiniciar encuesta</button></div>';
+ settings.innerHTML='<h3>Configuración</h3><div class="survey-settings"><h3>Inicio de la encuesta</h3><label class="survey-toggle"><input type="checkbox" role="switch" data-require-invoice>Solicitar factura antes de iniciar</label><p>Escaneo o digitación manual. Formato obligatorio: 12 dígitos. Ejemplo: 010000000001.</p><button type="button" data-preview>Probar inicio</button></div><h3>Crear preguntas</h3><div class="survey-settings"><label>Pregunta<input data-survey-text maxlength="240" placeholder="¿Qué le pareció el surtido del supermercado?"></label><label>Tipo de respuesta<select data-survey-mode><option value="faces">Cinco caritas</option><option value="numbers">Calificación del 1 al 5</option><option value="yesno">Sí / No</option><option value="text">Respuesta escrita</option></select></label><label>Mostrar según respuesta anterior<select data-parent><option value="">Siempre</option></select></label><div data-conditions></div><button type="button" data-survey-add>Agregar pregunta</button></div><p data-survey-config-status role="status"></p><h3>Preguntas y resultados</h3><p data-survey-completed></p><div class="survey-report"><table><thead><tr><th>Pregunta</th><th>Activa</th><th>Condición</th><th>Respuestas</th><th>Promedio</th><th>Detalle</th><th>Acción</th></tr></thead><tbody></tbody></table></div><details><summary>Historial de preguntas eliminadas</summary><div data-history></div></details><h3>Exportar a Excel</h3><div class="survey-settings"><label>Desde<input type="date" data-from></label><label>Hasta<input type="date" data-to></label><label>Caja<select data-box><option value="">Todas las cajas</option></select></label><button type="button" data-export>Exportar Excel</button><p data-export-status role="status">El detalle por fecha y caja se registra a partir de esta actualización. Los totales anteriores se conservan.</p></div>';
  const thank=document.createElement('dialog');thank.className='survey-thanks';thank.innerHTML='<h3>¡Muchas gracias!</h3><p>Sus respuestas nos ayudan a mejorar cada día. Gracias por compartir su opinión y por preferirnos. ¡Esperamos verle pronto!</p>';main.append(thank);
  thank.setAttribute('aria-label','Gracias por responder');thank.oncancel=event=>event.preventDefault();let thankTimer;
- let session=null,answers=[],busy=false;
+ const deletion=document.createElement('dialog');deletion.className='cabys-dialog';deletion.innerHTML='<h3>¿Eliminar esta pregunta?</h3><p data-delete-name></p><p>Se conservarán las respuestas en el historial. Las preguntas que dependan de ella dejarán de mostrarse.</p><button type="button" data-confirm>Eliminar</button><button type="button" data-cancel>Cancelar</button><p data-delete-status role="status"></p>';main.append(deletion);let deleting=null;
+ let session=null,answers=[],busy=false,currentInvoice=null,sessionEntry=null;
  const q=selector=>questions.querySelector(selector),s=selector=>settings.querySelector(selector);
  const labels=['Muy malo','Malo','Regular','Bueno','Muy bueno'],faces=['😞','🙁','😐','🙂','😄'];
+ const localDay=(date=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
+ const requiresInvoice=()=>surveyState.requireInvoice!==false;
+ function renderParents(){const select=s('[data-parent]'),previous=select.value;select.replaceChildren(new Option('Siempre',''));for(const question of surveyState.questions.filter(q=>!q.deleted&&q.mode!=='text'))select.add(new Option(question.text,question.id));select.value=Array.from(select.options).some(o=>o.value===previous)?previous:'';renderConditions();}
+ function renderConditions(){const parent=surveyState.questions.find(q=>q.id===s('[data-parent]').value),target=s('[data-conditions]');target.replaceChildren();if(!parent)return;parent.options.forEach((text,i)=>{const label=document.createElement('label');label.className='survey-toggle';const input=document.createElement('input');input.type='checkbox';input.value=i;label.append(input,document.createTextNode(text));target.append(label);});}
  function renderReports(){
-  const tbody=s('tbody');tbody.replaceChildren();s('[data-survey-completed]').textContent=(surveyState.completed||0)+' encuestas completadas';
-  for(const question of surveyState.questions){
+  s('[data-require-invoice]').checked=requiresInvoice();const tbody=s('tbody');tbody.replaceChildren();s('[data-survey-completed]').textContent=(surveyState.completed||0)+' encuestas completadas';
+  for(const question of surveyState.questions.filter(q=>!q.deleted)){
    const row=tbody.insertRow();row.insertCell().textContent=question.text;
    const toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=question.active;toggle.setAttribute('aria-label','Activar '+question.text);toggle.disabled=busy;
    const label=document.createElement('label');label.className='survey-toggle';label.append(toggle,document.createTextNode(question.active?'Activa':'Inactiva'));row.insertCell().append(label);
    toggle.onchange=async()=>{const next=structuredClone(surveyState);next.questions.find(q=>q.id===question.id).active=toggle.checked;await save(next,s('[data-survey-config-status]'));renderReports();};
+   const parent=surveyState.questions.find(q=>q.id===question.parent);row.insertCell().textContent=question.parent?(parent&&!parent.deleted?'Si responde: '+(question.when||[]).map(i=>parent.options[i]).join(' / '):'Pregunta anterior eliminada'):'Siempre';
    const report=surveySummary(question);row.insertCell().textContent=report.total;row.insertCell().textContent=report.average===null?'—':report.average.toFixed(2)+' / 5';
-   row.insertCell().textContent=question.options.map((option,i)=>option+': '+report.counts[i]).join(' · ');
+   const detail=row.insertCell();if(question.mode==='text'){const list=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Ver respuestas escritas';list.append(summary);for(const value of report.responses){const p=document.createElement('p');p.textContent=value;list.append(p);}detail.append(list);}else detail.textContent=question.options.map((option,i)=>option+': '+report.counts[i]).join(' · ');
+   const remove=document.createElement('button');remove.type='button';remove.textContent='Eliminar';row.insertCell().append(remove);remove.onclick=()=>{deleting=question.id;deletion.querySelector('[data-delete-name]').textContent=question.text;deletion.querySelector('[data-delete-status]').textContent='';deletion.showModal();deletion.querySelector('[data-cancel]').focus();};
   }
+  s('[data-history]').replaceChildren();for(const question of surveyState.questions.filter(q=>q.deleted)){const p=document.createElement('p');p.textContent=question.text+' · '+surveySummary(question).total+' respuestas';s('[data-history]').append(p);}
+  const box=s('[data-box]'),previous=box.value;box.replaceChildren(new Option('Todas las cajas',''));for(const value of Array.from(new Set((surveyState.entries||[]).map(e=>e.box||''))).sort())box.add(new Option(value?'CAJA'+value:'Sin factura',value||'none'));box.value=Array.from(box.options).some(o=>o.value===previous)?previous:'';
  }
  async function save(next,status){
   if(busy)return false;
@@ -8831,37 +8874,47 @@ function installSurveys(){
   catch(error){surveyState=previous;status.textContent='No se confirmó el guardado. '+error.message;return false;}
   finally{busy=false;settings.inert=false;}
  }
- function idle(){session=null;answers=[];q('[data-survey-progress]').textContent='Su opinión cuenta';q('[data-survey-question]').textContent='Queremos escucharle';q('.survey-options').replaceChildren();q('[data-survey-message]').textContent=surveyState.questions.some(q=>q.active)?'Responda tocando una opción.':'Aún no hay preguntas activas. Agréguelas en Configuración.';q('[data-survey-start]').hidden=false;q('[data-survey-reset]').hidden=true;q('[data-survey-retry]').hidden=true;}
+ function startSurvey(){session=structuredClone(surveyState.questions);answers=[];sessionEntry={id:crypto.randomUUID(),invoice:currentInvoice?.number||'',box:currentInvoice?.box||''};q('[data-scan]').hidden=true;q('[data-question-area]').hidden=false;renderQuestion();}
+ function idle(){session=null;answers=[];currentInvoice=null;sessionEntry=null;q('[data-survey-reset]').hidden=true;q('[data-survey-retry]').hidden=true;q('[data-back]').hidden=true;q('[data-survey-message]').textContent='';q('[data-invoice]').value='';q('[data-scan]').hidden=!requiresInvoice();q('[data-question-area]').hidden=requiresInvoice();if(requiresInvoice()){if(!main.hidden&&!questions.hidden){q('[data-invoice]').focus();q('[data-invoice]').select();}}else startSurvey();}
+ function currentQuestion(){return session?.find(question=>!answers.some(a=>a.id===question.id)&&surveyAvailable(question,session,answers));}
  function renderQuestion(){
-  const current=session[answers.length];q('[data-survey-progress]').textContent='Pregunta '+(answers.length+1)+' de '+session.length;q('[data-survey-question]').textContent=current.text;q('[data-survey-message]').textContent='';
-  const options=q('.survey-options');options.replaceChildren();
-  current.options.forEach((label,index)=>{const button=document.createElement('button');button.type='button';const icon=document.createElement('strong');icon.textContent=current.mode==='faces'?faces[index]:String(index+1);const caption=document.createElement('span');caption.textContent=label;button.append(icon,caption);button.setAttribute('aria-label',(index+1)+': '+label);button.onclick=()=>answer(index);options.append(button);});
-  options.querySelector('button')?.focus();
+  const current=currentQuestion();q('[data-back]').hidden=answers.length===0;q('[data-written]').hidden=current?.mode!=='text';q('.survey-options').replaceChildren();
+  if(!current){if(answers.length){finish();return;}q('[data-survey-progress]').textContent='';q('[data-survey-question]').textContent='Aún no hay preguntas activas.';q('[data-survey-message]').textContent='Agregue o active preguntas en Configuración.';return;}
+  q('[data-survey-progress]').textContent=(currentInvoice?'CAJA'+currentInvoice.box+' · ':'')+'Pregunta '+(answers.length+1);q('[data-survey-question]').textContent=current.text;q('[data-survey-message]').textContent='';
+  if(current.mode==='text'){q('textarea').value='';q('textarea').focus();return;}
+  current.options.forEach((label,index)=>{const button=document.createElement('button');button.type='button';const icon=document.createElement('strong');icon.textContent=current.mode==='faces'?faces[index]:String(index+1);const caption=document.createElement('span');caption.textContent=label;button.append(icon,caption);button.setAttribute('aria-label',(index+1)+': '+label);button.onclick=()=>answer(index);q('.survey-options').append(button);});
+  q('.survey-options button')?.focus();
  }
  async function finish(){
-  if(busy)return;
-  q('[data-survey-retry]').hidden=true;q('[data-survey-reset]').hidden=true;
-  const ok=await save(surveyApply(surveyState,answers),q('[data-survey-message]'));
-  if(ok){renderReports();idle();thank.showModal();clearTimeout(thankTimer);thankTimer=setTimeout(()=>thank.close(),5000);}
-  else {q('[data-survey-retry]').hidden=false;q('[data-survey-reset]').hidden=false;}
+  if(busy)return;q('[data-back]').hidden=true;q('[data-survey-retry]').hidden=true;q('[data-survey-reset]').hidden=true;q('.survey-options').replaceChildren();q('[data-written]').hidden=true;
+  sessionEntry.date??=localDay();sessionEntry.time??=new Date().toLocaleTimeString('es-CR',{timeZone:'America/Costa_Rica'});
+  let next;try{next=surveyApply(surveyState,answers,sessionEntry);}catch(error){q('[data-survey-message]').textContent=error.message;q('[data-survey-reset]').hidden=false;return;}
+  const ok=await save(next,q('[data-survey-message]'));
+  if(ok){renderReports();session=null;thank.showModal();clearTimeout(thankTimer);thankTimer=setTimeout(()=>thank.close(),5000);}
+  else{q('[data-survey-retry]').hidden=false;q('[data-survey-reset]').hidden=false;}
  }
- function answer(choice){
-  if(busy||!session||answers.length>=session.length)return;
-  answers.push({id:session[answers.length].id,choice});
-  if(answers.length<session.length)renderQuestion();else{q('.survey-options').replaceChildren();finish();}
- }
- q('[data-survey-start]').onclick=()=>{session=structuredClone(surveyState.questions.filter(q=>q.active));answers=[];if(!session.length){idle();return;}q('[data-survey-start]').hidden=true;q('[data-survey-reset]').hidden=false;renderQuestion();};
- q('[data-survey-reset]').onclick=()=>{if(!busy)idle();};q('[data-survey-retry]').onclick=finish;
- thank.onclose=()=>{clearTimeout(thankTimer);q('[data-survey-start]').click();};
- main.addEventListener('keydown',event=>{if(main.hidden||questions.hidden||thank.open||event.repeat||event.altKey||event.ctrlKey||event.metaKey)return;if(/^[1-5]$/.test(event.key)&&session&&answers.length<session.length&&Number(event.key)<=session[answers.length].options.length){event.preventDefault();answer(Number(event.key)-1);}});
+ function answer(choice){if(busy||!session)return;const current=currentQuestion();if(!current)return;if(current.mode==='text')answers.push({id:current.id,text:q('textarea').value.trim()});else answers.push({id:current.id,choice});renderQuestion();}
+ q('[data-next]').onclick=()=>answer();
+ q('[data-back]').onclick=()=>{if(busy||!answers.length)return;const previous=answers.pop();renderQuestion();if(previous.text!==undefined)q('textarea').value=previous.text;else q('.survey-options').querySelectorAll('button').forEach((button,i)=>button.setAttribute('aria-pressed',String(i===previous.choice)));};
+ const scan=()=>{if(busy||q('[data-scan]').hidden)return;const invoice=surveyInvoice(q('[data-invoice]').value);if(!invoice)return;currentInvoice=invoice;startSurvey();};
+ q('[data-invoice]').oninput=()=>{q('[data-invoice]').value=q('[data-invoice]').value.replace(/[^0-9]/g,'');scan();};q('[data-invoice]').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();scan();}};
+ q('[data-survey-reset]').onclick=()=>{if(!busy)idle();};q('[data-survey-retry]').onclick=finish;thank.onclose=()=>{clearTimeout(thankTimer);idle();};
+ main.addEventListener('keydown',event=>{if(main.hidden||questions.hidden||thank.open||busy||event.repeat||event.altKey||event.ctrlKey||event.metaKey||event.target.matches('input,textarea,select'))return;const current=currentQuestion();if(/^[1-5]$/.test(event.key)&&current&&current.mode!=='text'&&Number(event.key)<=current.options.length){event.preventDefault();answer(Number(event.key)-1);}});
+ s('[data-require-invoice]').onchange=async()=>{const next=structuredClone(surveyState);next.requireInvoice=s('[data-require-invoice]').checked;await save(next,s('[data-survey-config-status]'));renderReports();idle();};
+ s('[data-parent]').onchange=renderConditions;
  s('[data-survey-add]').onclick=async()=>{
-  const text=s('[data-survey-text]').value.trim(),mode=s('[data-survey-mode]').value;
+  const text=s('[data-survey-text]').value.trim(),mode=s('[data-survey-mode]').value,parent=s('[data-parent]').value,when=Array.from(s('[data-conditions]').querySelectorAll('input:checked'),input=>Number(input.value));
   if(!text){s('[data-survey-config-status]').textContent='Escriba la pregunta.';s('[data-survey-text]').focus();return;}
-  const options=mode==='yesno'?['Sí','No']:[...labels];
-  const next=structuredClone(surveyState);next.questions.push({id:crypto.randomUUID(),text,mode,options,active:true,counts:options.map(()=>0)});
-  if(await save(next,s('[data-survey-config-status]'))){s('[data-survey-text]').value='';renderReports();if(!session)idle();}
+  if(parent&&!when.length){s('[data-survey-config-status]').textContent='Seleccione las respuestas que activan la pregunta.';return;}
+  const options=mode==='text'?[]:mode==='yesno'?['Sí','No']:[...labels];const next=structuredClone(surveyState);next.questions.push({id:crypto.randomUUID(),text,mode,parent,when,options,active:true,counts:options.map(()=>0),responses:[],responseCount:0});
+  if(await save(next,s('[data-survey-config-status]'))){s('[data-survey-text]').value='';renderReports();renderParents();if(!session)idle();}
  };
- refreshSurveys=()=>{renderReports();if(!session)idle();};refreshSurveys();
+ deletion.querySelector('[data-cancel]').onclick=()=>{if(!busy)deletion.close();};deletion.oncancel=event=>{if(busy)event.preventDefault();};
+ deletion.querySelector('[data-confirm]').onclick=async()=>{if(busy)return;const next=structuredClone(surveyState),question=next.questions.find(q=>q.id===deleting);if(!question)return;question.deleted=true;question.active=false;if(await save(next,deletion.querySelector('[data-delete-status]'))){deletion.close();renderReports();renderParents();}};
+ s('[data-from]').value=localDay();s('[data-to]').value=localDay();s('[data-export]').onclick=async()=>{const button=s('[data-export]'),status=s('[data-export-status]');button.disabled=true;try{const box=s('[data-box]').value;const sheets=surveyExportSheets(surveyState,s('[data-from]').value,s('[data-to]').value,box);const bytes=await buildCediWorkbook(sheets);downloadCashOutExport('Encuestas-'+s('[data-from]').value+'-'+s('[data-to]').value+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',bytes);status.textContent='Excel preparado con Respuestas y Resumen.';}catch(error){status.textContent=error.message;}finally{button.disabled=false;}};
+ const open=item.onclick;function select(page){if(busy)return;open();questions.hidden=page!=='questions';settings.hidden=page!=='settings';subnav.querySelectorAll('button').forEach(button=>{if(button.dataset.page===page)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});if(page==='settings'){session=null;renderReports();renderParents();}else idle();}
+ item.onclick=()=>select('questions');subnav.querySelectorAll('button').forEach(button=>button.onclick=()=>select(button.dataset.page));s('[data-preview]').onclick=()=>select('questions');
+ refreshSurveys=()=>{renderReports();renderParents();if(!session)idle();};settings.hidden=true;refreshSurveys();
  return item;
 }
 
