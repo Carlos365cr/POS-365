@@ -9374,6 +9374,12 @@ function createCediBackup(){
 persistTrialSnapshot();
 return {format:'cedi-trial-backup',version:1,createdAt:new Date().toISOString(),catalog:'CABYS abril 2025: incluido en la aplicación; códigos seleccionados en cada producto.',snapshot:JSON.parse(JSON.stringify(savedTrialSnapshot))};
 }
+function normalizeContactEmails(value){return String(value||'').trim().replace(/\s*[;,:]\s*/g,';');}
+function validContactEmails(value){
+const normalized=normalizeContactEmails(value);if(!normalized)return true;
+const validator=document.createElement('input');validator.type='email';
+return normalized.split(';').every(email=>{validator.value=email;return email!==''&&validator.checkValidity();});
+}
 function posIdentityDigits(value){return String(value||'').replace(/[\s-]/g,'');}
 function posIdentityKind(value){const digits=posIdentityDigits(value);if(!/^\d+$/.test(digits))return '';if(/^(3101|3102|3103|3104)/.test(digits))return 'juridico';if(digits.length===9)return 'fisico';if(digits.length===12)return 'dimex';return '';}
 function installPosIdentityEntry({input,onSelect,onClear}){
@@ -9391,11 +9397,25 @@ function location(province='',canton='',district=''){
  options(f.distrito,Object.entries(cantons[f.canton.value]?.districts||{}),'Seleccionar distrito',district);f.canton.disabled=!f.provincia.value;f.distrito.disabled=!f.canton.value;
 }
 f.provincia.onchange=()=>location(f.provincia.value);f.canton.onchange=()=>location(f.provincia.value,f.canton.value);
+for(const name of ['correo','correoNotificacion']){
+ const emailInput=f[name],wrap=document.createElement('span'),atButton=document.createElement('button');
+ wrap.style.cssText='display:flex;align-items:stretch;gap:6px;width:100%;min-width:0';
+ emailInput.style.cssText='flex:1 1 0;min-width:0;width:0;margin:0';
+ // Text input retains email validation through a hidden email validator at save time,
+ // and allows reliable insertion at the caret on all browsers.
+ emailInput.type='text';emailInput.inputMode='email';emailInput.autocomplete='email';emailInput.spellcheck=false;
+ atButton.type='button';atButton.textContent='@';atButton.setAttribute('aria-label','Insertar arroba en '+(name==='correo'?'Correo':'Notificación por correos'));
+ atButton.style.cssText='flex:0 0 38px;width:38px;min-width:38px;margin:0;padding:4px;font-weight:700';
+ emailInput.before(wrap);wrap.append(emailInput,atButton);
+ atButton.addEventListener('pointerdown',event=>event.preventDefault());
+ atButton.onclick=()=>{if(saving)return;const start=emailInput.selectionStart??emailInput.value.length,end=emailInput.selectionEnd??start;emailInput.setRangeText('@',start,end,'end');emailInput.focus();emailInput.dispatchEvent(new Event('input',{bubbles:true}));};
+}
 let lastSuggestedEmail='';
 function suggestNotificationEmail(){
-const email=f.correo.value.trim();
+const email=normalizeContactEmails(f.correo.value);f.correo.value=email;
 if(!f.correoNotificacion.value.trim()||f.correoNotificacion.value===lastSuggestedEmail){f.correoNotificacion.value=email;lastSuggestedEmail=email;}
 }
+for(const name of ['correo','correoNotificacion']){f[name].addEventListener('blur',()=>{f[name].value=normalizeContactEmails(f[name].value);});}
 f.correo.addEventListener('blur',suggestNotificationEmail);
 f.correo.addEventListener('keydown',event=>{if(event.key==='Enter')suggestNotificationEmail();});
 
@@ -9403,12 +9423,13 @@ f.cedula.oninput=()=>{const kind=posIdentityKind(f.cedula.value);if(kind)f.tipoI
 input.readOnly=false;input.inputMode='numeric';input.autocomplete='off';
 input.addEventListener('input',()=>onClear());
 input.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();event.stopImmediatePropagation();if(event.repeat)return;const id=posIdentityDigits(input.value);const status=posMain.querySelector('[data-pos-message]');if(!id){resetPosContact();return;}if(!/^\d+$/.test(id)){status.textContent='La identidad debe contener solo números.';return;}try{const found=matches(id);if(found.length){selectExisting(found);focusPosCode();return;}form.reset();editing=null;lastSuggestedEmail='';f.cedula.value=id;f.tipoIdentificacion.value=posIdentityKind(id);location();feedback.textContent='';editor.showModal();f.cedula.focus();f.cedula.select();}catch(error){status.textContent=error.message;}});
-form.addEventListener('keydown',event=>{if(event.key!=='Enter'||event.target.tagName==='BUTTON'||event.target.tagName==='TEXTAREA')return;event.preventDefault();event.stopPropagation();if(event.repeat)return;const controls=Array.from(form.elements).filter(el=>!el.disabled&&['INPUT','SELECT','TEXTAREA','BUTTON'].includes(el.tagName));const next=controls[controls.indexOf(event.target)+1];next?.focus();next?.select?.();});
+form.addEventListener('keydown',event=>{if(event.key!=='Enter'||event.target.tagName==='BUTTON'||event.target.tagName==='TEXTAREA')return;event.preventDefault();event.stopPropagation();if(event.repeat)return;const controls=Array.from(form.elements).filter(el=>!el.disabled&&(['INPUT','SELECT','TEXTAREA'].includes(el.tagName)||(el.tagName==='BUTTON'&&el.type==='submit')));const next=controls[controls.indexOf(event.target)+1];next?.focus();next?.select?.();});
 editor.addEventListener('keydown',event=>event.stopPropagation());
 editor.querySelector('[data-cancel]').onclick=()=>{if(!saving)editor.close();};editor.addEventListener('cancel',event=>{if(saving)event.preventDefault();});editor.addEventListener('close',()=>{input.focus();input.select();});
 form.onsubmit=async event=>{event.preventDefault();if(saving||!form.reportValidity())return;feedback.textContent='';const id=posIdentityDigits(f.cedula.value);if(!/^\d+$/.test(id)){feedback.textContent='La identidad debe contener solo números.';return;}
  let record,previous;
  try{
+  for(const name of ['correo','correoNotificacion']){f[name].value=normalizeContactEmails(f[name].value);if(!validContactEmails(f[name].value)){f[name].focus();throw new Error('Revisá '+(name==='correo'?'Correo':'Notificación por correos')+': separá las direcciones con punto y coma.');}}
   const found=matches(id).filter(c=>c.id!==editing?.id);if(found.length){if(editing)throw new Error('Esa identidad pertenece a otro contacto.');selectExisting(found);editor.close();return;}
   if(editing){previous=all().find(c=>c.id===editing.id);if(!previous||JSON.stringify(previous)!==JSON.stringify(editing))throw new Error('El contacto cambió. Cerrá esta ventana y volvé a abrir Modificar para cargar sus datos actuales.');}
   const address=[f.provincia.value,f.canton.value,f.distrito.value];if(address.some(Boolean)&&!address.every(Boolean))throw new Error('Completá Provincia, Cantón y Distrito.');
@@ -9575,6 +9596,8 @@ const message=root.querySelector('[data-message]');const error=root.querySelecto
 const normalize=value=>String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es').trim();
 const createOption=(value,label=value)=>{const o=document.createElement('option');o.value=value;o.textContent=label;return o;};
 const locationCatalog=JSON.parse(document.getElementById('cp-location-catalog').textContent);
+for(const name of ['correo','correoNotificacion']){const email=form.elements[name];email.type='text';email.inputMode='email';email.addEventListener('blur',()=>{email.value=normalizeContactEmails(email.value);});}
+
 function syncLocation(province='',canton='',district=''){
 const p=form.elements.provincia;const c=form.elements.canton;const d=form.elements.distrito;
 p.replaceChildren(createOption('','Seleccionar provincia'));
@@ -9671,7 +9694,8 @@ if(operation==='anulacion'){if(existing.status==='annulled'){showErrors(['Este c
 if(existing?.status==='annulled'){showErrors(['El contacto está anulado y solo permite consulta.']);return;}
 const problems=[];const name=form.elements.nombre.value.trim();let code=form.elements.codigo.value.trim();const cedula=form.elements.cedula.value.trim();
 if(!name){problems.push('Falta el nombre o razón social.');}if([form.elements.provincia.value,form.elements.canton.value,form.elements.distrito.value].some(Boolean) && ![form.elements.provincia.value,form.elements.canton.value,form.elements.distrito.value].every(Boolean)){problems.push('Completá Provincia, Cantón y Distrito.');}if(!hasClientRole() && !form.elements.esProveedor.checked){problems.push('Marcá Cliente, Proveedor o ambos en General.');}
-if(form.elements.correo.value && !form.elements.correo.checkValidity()){problems.push('Revisá el correo electrónico.');}if(form.elements.correoNotificacion.value && !form.elements.correoNotificacion.checkValidity()){problems.push('Revisá el correo de notificación.');}
+form.elements.correo.value=normalizeContactEmails(form.elements.correo.value);form.elements.correoNotificacion.value=normalizeContactEmails(form.elements.correoNotificacion.value);
+if(!validContactEmails(form.elements.correo.value)){problems.push('Revisá el correo electrónico.');}if(!validContactEmails(form.elements.correoNotificacion.value)){problems.push('Revisá el correo de notificación.');}
 for(const input of fields().filter(input=>input.type==='number')){if(input.value!=='' && !input.checkValidity()){problems.push('Revisá '+input.closest('label').firstChild.textContent+'.');}}
 if(!code){let n=1;while(records.some(record=>record.code===String(n).padStart(5,'0'))){n++;}code=String(n).padStart(5,'0');}
 if(records.some(record=>record.id!==selectedId && normalize(record.code)===normalize(code))){problems.push('El código ya existe.');}
