@@ -2059,7 +2059,20 @@ html>body{padding:0}
 #articulos-cedi .pos-error-dialog h3{font-size:25px;font-weight:500;margin:0 0 12px}
 #articulos-cedi .pos-error-dialog p{margin:0 0 18px;overflow-wrap:anywhere}
 #articulos-cedi .pos-error-dialog button{background:#fff;color:#7b2018;border-color:transparent}
-#articulos-cedi .pos-product-search{width:min(900px,calc(100% - 24px))}
+#articulos-cedi dialog.pos-product-search{width:min(1080px,96vw);max-width:96vw;height:min(720px,94vh);height:min(720px,94dvh);max-height:94dvh;padding:14px;box-sizing:border-box;overflow:hidden}
+#articulos-cedi dialog.pos-product-search[open]{display:grid;grid-template-rows:auto auto auto minmax(0,1fr) auto;gap:6px}
+#articulos-cedi .pos-product-search header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0}
+#articulos-cedi .pos-product-search h3,#articulos-cedi .pos-product-search p{margin:0}
+#articulos-cedi .pos-product-search>label{display:flex;flex-direction:column;gap:3px;margin:0}
+#articulos-cedi .pos-product-search .pos-product-results{min-height:0;overflow:auto}
+#articulos-cedi .pos-product-search table{width:100%;table-layout:fixed;border-collapse:collapse;margin:0}
+#articulos-cedi .pos-product-search th,#articulos-cedi .pos-product-search td{padding:2px 6px;height:24px;box-sizing:border-box;font-size:13px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+#articulos-cedi .pos-product-search thead{position:sticky;top:0;background:var(--soft);z-index:1}
+#articulos-cedi .pos-product-search td button{display:block;max-width:100%;width:auto;min-width:0;min-height:0;height:21px;padding:0 5px;margin:0;font-size:13px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#articulos-cedi .pos-product-search footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap;margin:0;padding-top:6px;border-top:1px solid var(--line)}
+#articulos-cedi .pos-product-search footer .actions{display:flex;flex-wrap:nowrap;gap:8px;margin:0}
+#articulos-cedi .pos-product-search footer button{width:auto;min-height:30px;padding:4px 12px;margin:0}
+
 #articulos-cedi .pos-product-search tr[data-selected="true"]{background:var(--soft)}
 #articulos-cedi .purchase-product-search{width:min(1050px,calc(100% - 24px))}
 #articulos-cedi .purchase-product-search table{table-layout:auto;font-size:12px}
@@ -9633,7 +9646,17 @@ const valid=providers.some(contact=>contact.id===selected);
 if(selected && !valid){purchasesMain.querySelector('[data-purchase-status]').textContent='El proveedor seleccionado ya no está activo. Seleccioná otro proveedor.';}
 setSupplier(valid?selected:'');updateClient();
 };
-const picker=document.createElement('dialog');picker.className='cabys-dialog';picker.setAttribute('aria-labelledby','contact-picker-title');
+const picker=document.createElement('dialog');picker.className='cabys-dialog pos-contact-picker';picker.setAttribute('aria-labelledby','contact-picker-title');
+const pickerStyle=document.createElement('style');pickerStyle.textContent=`
+#articulos-cedi dialog.pos-contact-picker{width:min(1080px,94vw);max-width:94vw;max-height:82vh;overflow:auto;padding:18px;box-sizing:border-box}
+#articulos-cedi .pos-contact-picker table{width:100%;table-layout:auto;border-collapse:collapse;margin:10px 0}
+#articulos-cedi .pos-contact-picker th,#articulos-cedi .pos-contact-picker td{padding:5px 8px;line-height:1.25;vertical-align:middle}
+#articulos-cedi .pos-contact-picker th:last-child,#articulos-cedi .pos-contact-picker td:last-child{width:205px;min-width:205px;white-space:nowrap}
+#articulos-cedi .pos-contact-picker td:last-child button{display:inline-block;width:auto;min-width:0;min-height:30px;margin:0;padding:5px 9px;font-size:13px;line-height:18px;vertical-align:middle}
+#articulos-cedi .pos-contact-picker td:last-child button+button{margin-left:6px}
+#articulos-cedi .pos-contact-picker td:not(:last-child){overflow-wrap:anywhere}
+#articulos-cedi .pos-contact-picker header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+`;root.append(pickerStyle);
 picker.innerHTML='<header><h3 id="contact-picker-title"></h3><button type="button" data-close>Cerrar</button></header><label>Buscar por código, nombre o cédula<input type="search" autocomplete="off" data-query></label><p data-count aria-live="polite"></p><table><thead><tr><th>Código</th><th>Nombre</th><th>Cédula</th><th>Correo</th><th></th></tr></thead><tbody></tbody></table><footer><button type="button" data-cash>Cliente de contado</button><small>Solo contactos activos. Flechas y Enter para seleccionar.</small></footer><p role="alert" data-error></p>';
 root.append(picker);const query=picker.querySelector('[data-query]');let pickerRole=null;let matches=[];let index=0;
 function choose(id){
@@ -10690,12 +10713,12 @@ const feedback=posMain.querySelector('[data-pos-message]');
 const posProductDialog=document.createElement('dialog');
 posProductDialog.className='cabys-dialog pos-product-search';
 posProductDialog.setAttribute('aria-labelledby','pos-product-search-title');
-posProductDialog.innerHTML='<header><h3 id="pos-product-search-title">Buscar producto</h3><button type="button" data-close>Cerrar</button></header><label>Código, código de barras o nombre<input type="search" autocomplete="off" placeholder="Escribir para buscar"></label><p data-count aria-live="polite"></p><table><colgroup><col style="width:18%"><col style="width:47%"><col style="width:17%"><col style="width:18%"></colgroup><thead><tr><th scope="col">Código</th><th scope="col">Nombre</th><th scope="col">Precio</th><th scope="col">Dinámica</th></tr></thead><tbody></tbody></table><footer><small data-page></small><div class="actions"><button type="button" data-prev>Anterior</button><button type="button" data-next>Siguiente</button></div></footer>';
+posProductDialog.innerHTML='<header><h3 id="pos-product-search-title">Buscar producto</h3><button type="button" data-close>Cerrar</button></header><label>Código, código de barras o nombre<input type="search" autocomplete="off" placeholder="Escribir para buscar"></label><p data-count aria-live="polite"></p><div class="pos-product-results"><table><colgroup><col style="width:18%"><col style="width:47%"><col style="width:17%"><col style="width:18%"></colgroup><thead><tr><th scope="col">Código</th><th scope="col">Nombre</th><th scope="col">Precio</th><th scope="col">Dinámica</th></tr></thead><tbody></tbody></table></div><footer><small data-page></small><div class="actions"><button type="button" data-prev aria-keyshortcuts="ArrowLeft">← Anterior</button><button type="button" data-next aria-keyshortcuts="ArrowRight">Siguiente →</button></div></footer>';
 posMain.append(posProductDialog);
 const posProductQuery=posProductDialog.querySelector('input');
 let posProductMatches=[],forcedPosProduct=null;entry.elements.codigo.addEventListener('input',()=>{forcedPosProduct=null;});
 let posProductIndex=0;
-const posProductPageSize=12;
+const posProductPageSize=18;
 function selectPosProduct(product){
 if(!product || !posProductDialog.open){return;}
 forcedPosProduct=product;entry.elements.codigo.value=product.barcode || product.code;
@@ -10728,7 +10751,7 @@ row.append(code);
 const promotion=getSalePromotion(product);
 const displayedPrice=!roundingEnabled || (promotion && promotionState(true,promotion.start,promotion.end,today)==='active')?product.price:Math.round(product.price/5)*5;
 for(const value of [product.name,product.price===null || product.price===0?'Sin precio':formatPosProductMoney(displayedPrice,product.currency),formatPosProductDynamics(product,today)]){
-const cell=document.createElement('td');cell.textContent=value;row.append(cell);
+const cell=document.createElement('td');cell.textContent=value;cell.title=String(value);row.append(cell);
 }
 row.onclick=()=>selectPosProduct(product);
 body.append(row);
@@ -10770,6 +10793,11 @@ renderPosProducts();
 }
 };
 posProductDialog.addEventListener('keydown',event=>{
+if((event.key==='ArrowRight'||event.key==='ArrowLeft')&&!event.altKey&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey){
+event.preventDefault();event.stopPropagation();
+if(!event.repeat){const pageButton=posProductDialog.querySelector(event.key==='ArrowRight'?'[data-next]':'[data-prev]');if(!pageButton.disabled){pageButton.click();const results=posProductDialog.querySelector('.pos-product-results');results.scrollTop=0;}}
+return;
+}
 if(event.key==='ArrowDown' || event.key==='ArrowUp'){
 event.preventDefault();
 posProductIndex=Math.min(Math.max(0,posProductMatches.length-1),Math.max(0,posProductIndex+(event.key==='ArrowDown'?1:-1)));
