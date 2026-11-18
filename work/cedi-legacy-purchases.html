@@ -2258,6 +2258,14 @@ html>body{padding:0}
 #articulos-cedi .pos-bottom .pos-amounts{gap:14px;align-items:end}
 #articulos-cedi .pos-bottom .pos-state{margin:0;gap:6px 12px;align-self:center}
 #articulos-cedi .pos-bottom .pos-actions{gap:6px}
+#articulos-cedi .pos-window .pos-bottom .pos-centered-total{grid-column:1 / -1;grid-row:3;display:flex;justify-content:center;align-items:center;text-align:center;padding:6px 0}
+#articulos-cedi .pos-window .pos-centered-total strong{font-size:clamp(26px,3vw,42px);font-weight:500;color:light-dark(#b42318,#ffb4ab)}
+#articulos-cedi .pos-window .pos-centered-total [data-pos-total]{font-size:clamp(39px,4.5vw,63px);font-variant-numeric:tabular-nums;line-height:1.1}
+#articulos-cedi .pos-window .pos-bottom .pos-total{justify-content:flex-end;justify-self:end;width:100%}
+#articulos-cedi .pos-window .pos-bottom .pos-total .pos-amounts{display:flex;flex:0 1 auto;justify-content:flex-end;align-items:flex-end;gap:14px;margin-left:auto;text-align:right}
+#articulos-cedi .pos-window .pos-bottom .pos-total .pos-amounts>span{align-items:flex-end}
+
+
 @media(max-width:800px){#articulos-cedi .pos-bottom{grid-template-columns:minmax(0,1fr)}#articulos-cedi .pos-bottom .pos-entry-row,#articulos-cedi .pos-bottom .pos-total,#articulos-cedi .pos-bottom .pos-actions{grid-column:1;grid-row:auto}#articulos-cedi .pos-bottom .pos-amounts{justify-content:space-between;flex:1;gap:8px}}
 #articulos-cedi .pos-window [data-pos-message]:empty{display:none}
 @media(max-width:650px){#articulos-cedi .pos-window .pos-header{grid-template-columns:1fr}#articulos-cedi .pos-window .pos-client-fields{grid-template-columns:repeat(2,minmax(0,1fr))}#articulos-cedi .pos-window .pos-client-fields>label.wide{grid-column:1/-1}}
@@ -10650,6 +10658,7 @@ const entryRow=document.createElement('div');
 entryRow.className='pos-entry-row';
 entryRow.append(entry,posMain.querySelector('.pos-state'));
 bottom.append(entryRow,totals,posMain.querySelector('.pos-actions'));
+const centeredTotal=document.createElement('div');centeredTotal.className='pos-centered-total';centeredTotal.append(totalAmount);bottom.append(centeredTotal);
 posMain.querySelector('[data-pos-remove]').before(posMain.querySelector('[data-pos-refund]'));
 const clientHeader=posMain.querySelector('.pos-header').children[1];
 const clientFields=clientHeader.querySelector('.grid');
