@@ -9365,8 +9365,8 @@ function posIdentityDigits(value){return String(value||'').replace(/[\s-]/g,'');
 function posIdentityKind(value){const digits=posIdentityDigits(value);if(!/^\d+$/.test(digits))return '';if(/^(3101|3102|3103|3104)/.test(digits))return 'juridico';if(digits.length===9)return 'fisico';if(digits.length===12)return 'dimex';return '';}
 function installPosIdentityEntry({input,onSelect,onClear}){
 const editor=document.createElement('dialog');editor.className='cabys-dialog';editor.style.cssText='width:min(820px,94vw);max-height:90vh;overflow:auto';editor.setAttribute('aria-label','Registrar cliente POS');
-editor.innerHTML='<header><h2>Registrar cliente POS</h2><button type="button" data-cancel>Regresar</button></header><form data-quick-client><div class="grid"><label>Identidad<input name="cedula" required autocomplete="off" inputmode="numeric"></label><label>Nombre o razón social<input name="nombre" required></label><label>Correo<input name="correo" type="email"></label><label>Teléfono<input name="telefono" type="tel"></label></div><fieldset><legend>Dirección fiscal</legend><div class="grid"><label>Provincia<select name="provincia"></select></label><label>Cantón<select name="canton"></select></label><label>Distrito<select name="distrito"></select></label><label>Notificación por correos<input type="email" name="correoNotificacion"></label><label class="wide">Otras señas<textarea name="direccion1" rows="2"></textarea></label><label>Dirección 2<textarea name="direccion2" rows="2"></textarea></label><label>Dirección 3<textarea name="direccion3" rows="2"></textarea></label></div></fieldset><div class="grid"><label>Actividad comercial<input name="actividadComercial"></label><label>Tipo de identidad<select name="tipoIdentificacion" required><option value="">Seleccionar</option><option value="fisico">Física</option><option value="juridico">Jurídica</option><option value="dimex">DIMEX</option></select></label></div><p>Cliente POS · Contado</p><p data-feedback role="alert"></p><button type="submit" class="primary">Guardar y seleccionar cliente</button></form>';
-posMain.append(editor);const form=editor.querySelector('form'),f=form.elements,feedback=editor.querySelector('[data-feedback]');let saving=false;
+editor.innerHTML='<header><h2>Registrar cliente POS</h2><button type="button" data-cancel>Regresar</button></header><form data-quick-client><div class="grid"><label>Identidad<input name="cedula" required autocomplete="off" inputmode="numeric"></label><label>Nombre o razón social<input name="nombre" required></label><label>Correo<input name="correo" type="email"></label><label>Teléfono<input name="telefono" type="tel"></label></div><fieldset><legend>Dirección fiscal</legend><div class="grid"><label>Provincia<select name="provincia"></select></label><label>Cantón<select name="canton"></select></label><label>Distrito<select name="distrito"></select></label><label>Notificación por correos<input type="email" name="correoNotificacion"></label><label class="wide">Otras señas<textarea name="direccion1" rows="2"></textarea></label><label>Dirección 2<textarea name="direccion2" rows="2"></textarea></label><label>Dirección 3<textarea name="direccion3" rows="2"></textarea></label></div></fieldset><div class="grid"><label>Actividad comercial<input name="actividadComercial"></label><label>Tipo de identidad<select name="tipoIdentificacion" required><option value="">Seleccionar</option><option value="fisico">Física</option><option value="juridico">Jurídica</option><option value="dimex">DIMEX</option></select></label></div><p>Cliente POS · Contado</p><p data-feedback role="alert"></p><button type="submit" class="primary">Guardar</button></form>';
+posMain.append(editor);const form=editor.querySelector('form'),f=form.elements,feedback=editor.querySelector('[data-feedback]');let saving=false,editing=null;
 const all=()=>captureContactsState()?.records||[];
 const matches=id=>all().filter(c=>posIdentityDigits(c.cedula)===id);
 const selectExisting=found=>{if(found.length!==1){throw new Error('Hay varios contactos con esa identidad. Revisalos en Contactos.');}const c=found[0];if(c.status!=='saved'||!c.active||!c.client)throw new Error('Esta identidad ya existe en Contactos, pero no está disponible como cliente activo. Revisá el registro antes de continuar.');onSelect(c);};
@@ -9378,28 +9378,52 @@ function location(province='',canton='',district=''){
  options(f.distrito,Object.entries(cantons[f.canton.value]?.districts||{}),'Seleccionar distrito',district);f.canton.disabled=!f.provincia.value;f.distrito.disabled=!f.canton.value;
 }
 f.provincia.onchange=()=>location(f.provincia.value);f.canton.onchange=()=>location(f.provincia.value,f.canton.value);
+let lastSuggestedEmail='';
+function suggestNotificationEmail(){
+const email=f.correo.value.trim();
+if(!f.correoNotificacion.value.trim()||f.correoNotificacion.value===lastSuggestedEmail){f.correoNotificacion.value=email;lastSuggestedEmail=email;}
+}
+f.correo.addEventListener('blur',suggestNotificationEmail);
+f.correo.addEventListener('keydown',event=>{if(event.key==='Enter')suggestNotificationEmail();});
+
 f.cedula.oninput=()=>{const kind=posIdentityKind(f.cedula.value);if(kind)f.tipoIdentificacion.value=kind;};
 input.readOnly=false;input.inputMode='numeric';input.autocomplete='off';
 input.addEventListener('input',()=>onClear());
-input.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();event.stopImmediatePropagation();if(event.repeat)return;const id=posIdentityDigits(input.value);const status=posMain.querySelector('[data-pos-message]');if(!id){resetPosContact();return;}if(!/^\d+$/.test(id)){status.textContent='La identidad debe contener solo números.';return;}try{const found=matches(id);if(found.length){selectExisting(found);focusPosCode();return;}form.reset();f.cedula.value=id;f.tipoIdentificacion.value=posIdentityKind(id);location();feedback.textContent='';editor.showModal();f.cedula.focus();f.cedula.select();}catch(error){status.textContent=error.message;}});
+input.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();event.stopImmediatePropagation();if(event.repeat)return;const id=posIdentityDigits(input.value);const status=posMain.querySelector('[data-pos-message]');if(!id){resetPosContact();return;}if(!/^\d+$/.test(id)){status.textContent='La identidad debe contener solo números.';return;}try{const found=matches(id);if(found.length){selectExisting(found);focusPosCode();return;}form.reset();editing=null;lastSuggestedEmail='';f.cedula.value=id;f.tipoIdentificacion.value=posIdentityKind(id);location();feedback.textContent='';editor.showModal();f.cedula.focus();f.cedula.select();}catch(error){status.textContent=error.message;}});
 form.addEventListener('keydown',event=>{if(event.key!=='Enter'||event.target.tagName==='BUTTON'||event.target.tagName==='TEXTAREA')return;event.preventDefault();event.stopPropagation();if(event.repeat)return;const controls=Array.from(form.elements).filter(el=>!el.disabled&&['INPUT','SELECT','TEXTAREA','BUTTON'].includes(el.tagName));const next=controls[controls.indexOf(event.target)+1];next?.focus();next?.select?.();});
 editor.addEventListener('keydown',event=>event.stopPropagation());
 editor.querySelector('[data-cancel]').onclick=()=>{if(!saving)editor.close();};editor.addEventListener('cancel',event=>{if(saving)event.preventDefault();});editor.addEventListener('close',()=>{input.focus();input.select();});
 form.onsubmit=async event=>{event.preventDefault();if(saving||!form.reportValidity())return;feedback.textContent='';const id=posIdentityDigits(f.cedula.value);if(!/^\d+$/.test(id)){feedback.textContent='La identidad debe contener solo números.';return;}
- let record;
+ let record,previous;
  try{
-  const found=matches(id);if(found.length){selectExisting(found);editor.close();return;}
+  const found=matches(id).filter(c=>c.id!==editing?.id);if(found.length){if(editing)throw new Error('Esa identidad pertenece a otro contacto.');selectExisting(found);editor.close();return;}
+  if(editing){previous=all().find(c=>c.id===editing.id);if(!previous||JSON.stringify(previous)!==JSON.stringify(editing))throw new Error('El contacto cambió. Cerrá esta ventana y volvé a abrir Modificar para cargar sus datos actuales.');}
   const address=[f.provincia.value,f.canton.value,f.distrito.value];if(address.some(Boolean)&&!address.every(Boolean))throw new Error('Completá Provincia, Cantón y Distrito.');
   const name=f.nombre.value.trim();if(!name)throw new Error('Falta el nombre o razón social.');
-  const state=captureContactsState();let n=1;while(state.records.some(c=>c.code===String(n).padStart(5,'0')))n++;const code=String(n).padStart(5,'0');
+  const state=captureContactsState();let n=1;while(state.records.some(c=>c.code===String(n).padStart(5,'0')))n++;const code=previous?.code||String(n).padStart(5,'0');
   const fields=Array.from(form.elements).filter(el=>el.name&&el.name!=='tipoIdentificacion').map(el=>[el.name,el.name==='cedula'?id:el.value,null]);
-  fields.push(['codigo',code,null],['tipoIdentificacion',f.tipoIdentificacion.value,true],['esCliente','on',true],['esClienteInterno','on',false],['esProveedor','on',false],['activo','on',true],['creditoCliente','Contado',null]);
-  record={id:crypto.randomUUID(),code,name,cedula:id,client:true,supplier:false,active:true,status:'saved',attachments:[],location:{province:f.provincia.value,canton:f.canton.value,district:f.distrito.value,other:f.direccion1.value},fields,updatedAt:new Date().toISOString()};
+  fields.push(['codigo',code,null],['tipoIdentificacion',f.tipoIdentificacion.value,true]);
+  if(!previous){fields.push(['esCliente','on',true],['esClienteInterno','on',false],['esProveedor','on',false],['activo','on',true],['creditoCliente','Contado',null]);}
+  else if(!previous.fields.some(v=>v[0]==='esClienteInterno'&&v[2]===true)){fields.push(['creditoCliente','Contado',null]);}
+  const changed=new Set(fields.map(v=>v[0]));
+  const mergedFields=[...(previous?.fields||[]).filter(v=>!changed.has(v[0])),...fields];
+  record={...previous,id:previous?.id||crypto.randomUUID(),code,name,cedula:id,client:true,supplier:previous?.supplier||false,active:true,status:'saved',attachments:previous?.attachments||[],location:{province:f.provincia.value,canton:f.canton.value,district:f.distrito.value,other:f.direccion1.value},fields:mergedFields,updatedAt:new Date().toISOString()};
   saving=true;form.inert=true;editor.querySelector('[data-cancel]').disabled=true;form.querySelector('[type=submit]').disabled=true;feedback.textContent='Guardando cliente…';
-  restoreContactsState({...state,records:[...state.records,record]});await persistPurchaseConfirmed();onSelect(record);editor.close();focusPosCode();
- }catch(error){if(record){const state=captureContactsState();restoreContactsState({...state,records:state.records.filter(c=>c.id!==record.id)});}feedback.textContent='No se confirmó el guardado. '+error.message;}
+  restoreContactsState({...state,records:previous?state.records.map(c=>c.id===record.id?record:c):[...state.records,record]});await persistPurchaseConfirmed();onSelect(record);editor.close();focusPosCode();
+ }catch(error){if(record){const state=captureContactsState();restoreContactsState({...state,records:previous?state.records.map(c=>c.id===record.id?previous:c):state.records.filter(c=>c.id!==record.id)});}feedback.textContent='No se confirmó el guardado. '+error.message;}
  finally{saving=false;form.inert=false;editor.querySelector('[data-cancel]').disabled=false;form.querySelector('[type=submit]').disabled=false;}
 };
+return {openEdit(contact){
+if(saving)return;
+editing=JSON.parse(JSON.stringify(contact));form.reset();
+for(const control of Array.from(form.elements).filter(el=>el.name&&el.name!=='tipoIdentificacion')){control.value=contact.fields?.find(v=>v[0]===control.name)?.[1]||'';}
+f.cedula.value=contact.cedula||'';f.nombre.value=contact.name||'';
+f.tipoIdentificacion.value=contact.fields?.find(v=>v[0]==='tipoIdentificacion'&&v[2]===true)?.[1]||posIdentityKind(contact.cedula);
+location(contact.location?.province||f.provincia.value,contact.location?.canton||f.canton.value,contact.location?.district||f.distrito.value);
+f.direccion1.value=contact.location?.other||f.direccion1.value;
+lastSuggestedEmail=f.correo.value===f.correoNotificacion.value?f.correo.value:'';
+feedback.textContent='';editor.showModal();f.nombre.focus();f.nombre.select();
+}};
 }
 
 function installContactConnections(){
@@ -9429,7 +9453,7 @@ const data=contactSnapshot(contact);clientName.value=data?.name || 'Cliente de c
 const paymentClient=posMain.querySelector('[data-pos-panel="payment"] [aria-label="Cliente"]');if(paymentClient){paymentClient.value=clientName.value;}
 }
 getPosContactSnapshot=()=>contactSnapshot(contacts('client').find(contact=>contact.id===selectedPosContactId));
-installPosIdentityEntry({input:clientIdentification,onSelect:contact=>{selectedPosContactId=contact.id;updateClient();},onClear:()=>{selectedPosContactId=null;clientName.value='Cliente de contado';const paymentClient=posMain.querySelector('[data-pos-panel="payment"] [aria-label="Cliente"]');if(paymentClient)paymentClient.value=clientName.value;}});
+const posContactEditor=installPosIdentityEntry({input:clientIdentification,onSelect:contact=>{selectedPosContactId=contact.id;updateClient();},onClear:()=>{selectedPosContactId=null;clientName.value='Cliente de contado';const paymentClient=posMain.querySelector('[data-pos-panel="payment"] [aria-label="Cliente"]');if(paymentClient)paymentClient.value=clientName.value;}});
 resetPosContact=()=>{selectedPosContactId=null;updateClient();};
 function setSupplier(id,explicit=false){
 const contact=contacts('supplier').find(contact=>contact.id===id);supplierSelect.value=contact?.id || '';
@@ -9471,7 +9495,9 @@ index=Math.min(Math.max(0,index),Math.max(0,matches.length-1));const body=picker
 for(const [i,contact] of matches.entries()){
 const row=document.createElement('tr');row.dataset.selected=String(i===index);if(i===index){row.style.background='var(--soft)';}
 for(const text of [contact.code,contact.name,contact.cedula,field(contact,'correo')]){const cell=document.createElement('td');cell.textContent=text;row.append(cell);}
-const cell=document.createElement('td');const select=document.createElement('button');select.type='button';select.textContent='Seleccionar';select.onclick=()=>choose(contact.id);cell.append(select);row.append(cell);row.onclick=event=>{if(!event.target.closest('button')){choose(contact.id);}};body.append(row);
+const cell=document.createElement('td');const select=document.createElement('button');select.type='button';select.textContent='Seleccionar';select.onclick=()=>choose(contact.id);cell.append(select);
+if(pickerRole==='client'){const modify=document.createElement('button');modify.type='button';modify.textContent='Modificar';modify.style.marginLeft='6px';modify.onclick=()=>{picker.close();posContactEditor.openEdit(contact);};cell.append(modify);}
+row.append(cell);row.onclick=event=>{if(!event.target.closest('button')){choose(contact.id);}};body.append(row);
 }
 picker.querySelector('[data-count]').textContent=matches.length+' '+(pickerRole==='supplier'?'proveedores':'clientes')+' activos';
 }
@@ -9581,8 +9607,15 @@ function syncInternalFormVisibility(){
  label.hidden=!form.elements.esClienteInterno.checked;
  label.style.display=label.hidden?'none':'';
 }
+function syncPosContactCondition(){
+const posOnly=form.elements.esCliente.checked&&!form.elements.esClienteInterno.checked;
+const credit=form.elements.creditoCliente;
+if(posOnly){credit.value='Contado';}
+credit.disabled=posOnly||['consulta','anulacion'].includes(mode());
+}
 function updateRoleTabs(){
 syncInternalFormVisibility();
+syncPosContactCondition();
 const client=hasClientRole();const supplier=form.elements.esProveedor.checked;
 root.querySelector('[data-tab=client]').disabled=!client;
 root.querySelector('[data-tab=supplier]').disabled=!supplier;
@@ -9607,6 +9640,7 @@ try{if(serialized.length>13500){const stream=new Blob([serialized]).stream().pip
 }
 async function restoreState(widgetState,force=false){if(edits && !force){return;}try{let state=widgetState?.privateContent?.contactos;const encoded=widgetState?.privateContent?.contactosGzip;if(!state && encoded){const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));state=JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text());}if((edits && !force) || state?.version!==1 || !Array.isArray(state.records)){return;}records=state.records.filter(record=>record && typeof record.id==='string' && typeof record.code==='string' && typeof record.name==='string' && Array.isArray(record.fields));form.reset();restore(state.draft);draftAttachments=attachmentMetadata(state.draftAttachments);selectedId=records.some(record=>record.id===state.selectedId)?state.selectedId:null;setMode(['inclusion','consulta','modificacion','anulacion'].includes(state.mode)?state.mode:'inclusion');changeTab(['general','client','supplier'].includes(state.tab)?state.tab:'general');identity();}catch(e){}}
 function process(){
+syncPosContactCondition();
 error.textContent='';const operation=mode();const existing=records.find(record=>record.id===selectedId);
 if(operation!=='inclusion' && !existing){openList();return;}
 if(operation==='consulta'){showResult('Consulta realizada',existing.name+' · '+existing.code+(existing.status==='annulled'?' · Anulado':''));return;}
@@ -10064,7 +10098,11 @@ installPriceLookup();
 const buildVersionFooter=document.createElement('footer');
 buildVersionFooter.className='cedi-build-version';
 buildVersionFooter.setAttribute('aria-label','Versión de esta aplicación');
-buildVersionFooter.textContent='Versión '+document.querySelector('meta[name="cedi-build-version"]').content;
+function formatPosBuildVersion(value){
+const counter=Number(value);const index=((Number.isSafeInteger(counter)&&counter>0?counter:1)-1)%891;
+return String(Math.floor(index/99)+1)+'.'+String(index%99+1).padStart(2,'0');
+}
+buildVersionFooter.textContent='Versión '+formatPosBuildVersion(document.querySelector('meta[name="cedi-build-version"]').content);
 menu.append(buildVersionFooter);
 const purchaseEntries=Array.from(menu.querySelectorAll('button.menu-item'));
 const legacyEntry=purchaseEntries.find(item=>item.textContent.trim()==='Compras Formato Viejo');
@@ -10389,16 +10427,19 @@ const boxLabel=posMain.querySelector('[name="posCaja"]').closest('label');
 const identityLabel=posMain.querySelector('[name="posIdentificacion"]').closest('label');
 const customerLabel=posMain.querySelector('[name="posCliente"]').closest('label');
 const customerButton=clientFields.querySelector('button');
-compactHeader.replaceChildren(saleDate.closest('label'),paymentCondition,documentLabel,boxLabel,identityLabel,customerLabel,customerButton);
+const cashConditionLabel=document.createElement('label');
+cashConditionLabel.className='pos-cash-condition';cashConditionLabel.textContent='Forma de pago';
+const cashConditionValue=document.createElement('input');cashConditionValue.value='Contado';cashConditionValue.readOnly=true;cashConditionValue.setAttribute('aria-label','Forma de pago');cashConditionLabel.append(cashConditionValue);
+compactHeader.replaceChildren(saleDate.closest('label'),cashConditionLabel,documentLabel,boxLabel,identityLabel,customerLabel,customerButton);
 const headerStyle=document.createElement('style');
-headerStyle.textContent=`#articulos-cedi .pos-window .pos-header.pos-header-row{display:flex;flex-wrap:nowrap;align-items:end;gap:10px;overflow-x:auto;padding-bottom:4px}
-#articulos-cedi .pos-window .pos-header-row>label{display:flex;flex-direction:column;gap:4px;flex:0 0 145px;min-width:0;margin:0}
-#articulos-cedi .pos-window .pos-header-row>label:has([name="posFacturaInterna"]){flex-basis:180px}
-#articulos-cedi .pos-window .pos-header-row>label:has([name="posCaja"]){flex-basis:90px}
-#articulos-cedi .pos-window .pos-header-row>label:has([name="posCliente"]){flex:1 0 220px}
-#articulos-cedi .pos-window .pos-header-row>.pos-condition-inline{flex:0 0 110px;margin:0;padding:4px 8px;align-self:end}
-#articulos-cedi .pos-window .pos-header-row>button{flex:0 0 auto;margin:0!important}
-#articulos-cedi .pos-window .pos-header-row input{width:100%;box-sizing:border-box}`;
+headerStyle.textContent=`#articulos-cedi .pos-window .pos-header.pos-header-row{display:flex;flex-wrap:nowrap;align-items:flex-end;gap:10px;overflow-x:auto;padding:4px 0 6px}
+#articulos-cedi .pos-window .pos-header.pos-header-row>label{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-end;gap:4px;flex:0 0 145px;width:145px;min-width:0;max-width:none;margin:0;grid-column:auto;white-space:nowrap;line-height:18px}
+#articulos-cedi .pos-window .pos-header.pos-header-row>label.pos-cash-condition{flex-basis:105px;width:105px}
+#articulos-cedi .pos-window .pos-header.pos-header-row>label:has([name="posFacturaInterna"]){flex-basis:180px;width:180px}
+#articulos-cedi .pos-window .pos-header.pos-header-row>label:has([name="posCaja"]){flex-basis:80px;width:80px}
+#articulos-cedi .pos-window .pos-header.pos-header-row>label:has([name="posCliente"]){flex:0 0 210px;width:210px}
+#articulos-cedi .pos-window .pos-header.pos-header-row>button{flex:0 0 auto;margin:0!important;height:32px;align-self:flex-end}
+#articulos-cedi .pos-window .pos-header.pos-header-row>label>input{display:block;width:100%;min-width:0;max-width:100%;height:32px;min-height:32px;margin:0;padding:4px 8px;box-sizing:border-box}`;
 posMain.append(headerStyle);
 
 const windowActions=document.createElement('div');
