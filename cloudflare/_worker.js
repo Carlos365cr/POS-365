@@ -3176,8 +3176,19 @@ async function processDynamicNoticesUnlocked(db){
  for(const item of products)writes.push(db.prepare('INSERT INTO pos_dynamic_notice_schedule(id,day,due,payload,delivered) VALUES(?,?,?,?,0) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE delivered=0').bind(item.id,item.day,item.due,JSON.stringify(item)));
  writes.push(db.prepare('UPDATE pos_dynamic_notice_settings SET revision=? WHERE id=1 AND enabled=1').bind(revision));await db.batch(writes);await deliverDynamicSchedules(db,now);
 }
+async function dynamicNoticeHistory(request,db,email){
+ const url=new URL(request.url),day=url.searchParams.get('day')||'',offset=Number(url.searchParams.get('offset')||0);
+ if((day&&!validClosingDate(day))||!Number.isSafeInteger(offset)||offset<0)return json({error:'Revise la fecha y la página.'},400);
+ const filters=["substr(n.id,1,9)='dynamics:'"],args=[];
+ if(email!==masterEmail){filters.push('r.recipient=?');args.push(email);}
+ if(day){filters.push("json_extract(n.message,'$.day')=?");args.push(day);}
+ const rows=await db.prepare('SELECT n.id,n.message,n.created_at,r.recipient,r.recipient_name,r.shown_at,r.ack_at FROM pos_notices n JOIN pos_notice_receipts r ON r.notice_id=n.id WHERE '+filters.join(' AND ')+' ORDER BY n.created_at DESC,n.id,r.recipient LIMIT 51 OFFSET ?').bind(...args,offset).all();
+ return json({notices:rows.results.slice(0,50),hasMore:rows.results.length>50,offset,allRecipients:email===masterEmail});
+}
+
 async function manageDynamicNoticeSettings(request,env,email){
  const db=env.DB,url=new URL(request.url);await noticeTables(db);await dynamicNoticeTables(db);
+ if(request.method==='GET'&&url.searchParams.get('view')==='history')return dynamicNoticeHistory(request,db,email);
  if(request.method==='GET'){const row=await db.prepare('SELECT enabled FROM pos_dynamic_notice_settings WHERE id=1').first();return json({enabled:!!row.enabled,mayConfigure:email===masterEmail});}
  if(request.method!=='POST'||request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
  if(email!==masterEmail)return json({error:'Solo la cuenta máster puede cambiar este aviso.'},403);

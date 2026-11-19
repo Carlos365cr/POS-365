@@ -300,3 +300,9 @@ window.addEventListener('message',event=>{
  paper.contentWindow.addEventListener('afterprint',()=>paper.remove(),{once:true});setTimeout(()=>{try{paper.contentWindow.focus();paper.contentWindow.print();reply(true);}catch{paper.remove();reply(false);}},200);
  }catch{paper.remove();reply(false);}
 });
+
+window.addEventListener('message',async event=>{
+ if(event.source!==frame.contentWindow||event.data?.type!=='pos365-dynamic-notice-history'||!event.ports?.[0])return;
+ const port=event.ports[0],query=new URLSearchParams({view:'history',day:String(event.data.day||''),offset:String(event.data.offset||0)});
+ try{const response=await fetch('/api/dynamic-notice-settings?'+query,{cache:'no-store'});port.postMessage({ok:response.ok,data:await response.json()});}catch{port.postMessage({ok:false,data:{error:'No se pudo consultar el historial. Revise la conexión y reintente.'}});}finally{port.close();}
+});
