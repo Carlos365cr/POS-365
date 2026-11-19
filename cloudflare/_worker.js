@@ -3093,6 +3093,47 @@ function validVoucherOperation(op){return op&&['issue','redeem'].includes(op.kin
 async function readVoucher(db,code){await voucherTable(db);return db.prepare('SELECT * FROM pos_vouchers WHERE code=?').bind(code).first();}
 function voucherInfo(row){return row?{code:row.code,cents:row.cents,issued:row.issued,expires:row.expires,used:!!row.redeemed_sale}:null;}
 
+async function lotTables(db){
+ await db.batch([
+  db.prepare('CREATE TABLE IF NOT EXISTS internal_invoices (number INTEGER PRIMARY KEY, draft TEXT NOT NULL UNIQUE, payload TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'),
+  db.prepare('CREATE TABLE IF NOT EXISTS lot_movements (id TEXT PRIMARY KEY, payload TEXT NOT NULL, author TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+ ]);
+}
+function validLotText(value,max=100){return typeof value==='string'&&value.trim().length>0&&value.length<=max;}
+function validateInvoiceLots(bill){
+ for(const line of bill.lines){
+  if(line.lot!==undefined&&(typeof line.lot!=='string'||line.lot.length>100))return false;
+  if(line.lot&&(!validLotText(line.lot)||!validLotText(line.productKey,200)||!validLotText(bill.header.bodega)||!(line.units>0)))return false;
+ }
+ return true;
+}
+async function lotRecords(db){
+ await lotTables(db);
+ const sales=await db.prepare("SELECT json_extract(j.value,'$.productKey') AS productKey, json_extract(i.payload,'$.header.bodega') AS warehouse, json_extract(j.value,'$.lot') AS lot, MAX(json_extract(j.value,'$.code')) AS code, MAX(json_extract(j.value,'$.name')) AS name, SUM(json_extract(j.value,'$.units')) AS quantity FROM internal_invoices i, json_each(i.payload,'$.lines') j WHERE COALESCE(json_extract(j.value,'$.lot'),'')<>'' GROUP BY productKey,warehouse,lot").all();
+ const adjustments=await db.prepare("SELECT json_extract(j.value,'$.productKey') AS productKey,json_extract(j.value,'$.warehouse') AS warehouse,json_extract(j.value,'$.lot') AS lot,MAX(json_extract(j.value,'$.code')) AS code,MAX(json_extract(j.value,'$.name')) AS name,SUM(json_extract(j.value,'$.delta')) AS quantity FROM lot_movements m,json_each(m.payload,'$.entries') j GROUP BY productKey,warehouse,lot").all();
+ const history=await db.prepare('SELECT id,payload,author,created_at FROM lot_movements ORDER BY created_at DESC,rowid DESC LIMIT 200').all();
+ return {sales:sales.results,adjustments:adjustments.results,history:history.results.map(row=>({...JSON.parse(row.payload),author:row.author,date:row.created_at}))};
+}
+function lotMovement(body){
+ if(!body||!validLotText(body.id,100)||!['transfer','adjust','copy'].includes(body.kind)||!validLotText(body.productKey,200)||!validLotText(body.code,200)||!validLotText(body.name,1000)||!validLotText(body.warehouse)||!validLotText(body.source)||!validLotText(body.reason,500)||!Number.isFinite(body.quantity)||body.quantity===0||Math.abs(body.quantity)>1e12)throw Error('Revise producto, lote, cantidad y motivo.');
+ if(body.kind!=='adjust'&&(!validLotText(body.target)||body.target.trim()===body.source.trim()||body.quantity<=0))throw Error('Elija otro lote de destino y una cantidad positiva.');
+ const common={productKey:body.productKey,code:body.code,name:body.name,warehouse:body.warehouse};
+ const entries=body.kind==='adjust'?[{...common,lot:body.source.trim(),delta:body.quantity}]:body.kind==='transfer'?[{...common,lot:body.source.trim(),delta:-body.quantity},{...common,lot:body.target.trim(),delta:body.quantity}]:[{...common,lot:body.target.trim(),delta:body.quantity}];
+ return {id:body.id,kind:body.kind,source:body.source.trim(),target:body.kind==='adjust'?'':body.target.trim(),quantity:body.quantity,reason:body.reason.trim(),entries};
+}
+async function manageLots(request,env,email){
+ if(request.method==='GET')return json(await lotRecords(env.DB));
+ if(request.method!=='POST')return json({error:'Método no permitido.'},405);
+ if(email!==masterEmail)return json({error:'Solo la cuenta máster puede ajustar lotes.'},403);
+ if(request.headers.get('Origin')!==new URL(request.url).origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
+ let move;try{move=lotMovement(await request.json());}catch(error){return json({error:error.message},400);}
+ await lotTables(env.DB);const payload=JSON.stringify(move);
+ await env.DB.prepare('INSERT INTO lot_movements(id,payload,author) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING').bind(move.id,payload,email).run();
+ const saved=await env.DB.prepare('SELECT payload,author FROM lot_movements WHERE id=?').bind(move.id).first();
+ if(saved?.payload!==payload||saved.author!==email)return json({error:'El movimiento ya existe con otros datos. Recargue el historial.'},409);
+ return json({ok:true,id:move.id});
+}
+
 async function activeCashierChoices(db){
  const users=await accessDirectory(db);
  return users.filter(user=>!user.deleted&&!user.suspended).map(user=>({
@@ -3295,11 +3336,13 @@ export default { async fetch(request, env) {
     if(row.expires<=Date.now())return json({error:'La nota de crédito comercial venció.'},410);
     return json(voucherInfo(row));
   }
+  if(url.pathname==='/api/lots'){try{return await manageLots(request,env,email);}catch{return json({error:'No se pudieron consultar o guardar los lotes. Intente de nuevo.'},503);}}
   if(url.pathname==='/api/internal-invoice'){
     if(request.method!=='POST')return json({error:'Se requiere POST.'},405);
     if(request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
     const bill=await request.json().catch(()=>null);
     if(!bill||!/^\d{8}$/.test(bill.number)||typeof bill.draft!=='string'||bill.draft.length!==36||!bill.header||!Array.isArray(bill.lines)||!bill.lines.length||!Array.isArray(bill.tenders))return json({error:'Revise el número y los artículos de la factura.'},400);
+    if(!validateInvoiceLots(bill))return json({error:'Revise el lote, producto y bodega de la factura.'},400);
     let gross=0;
     for(const line of bill.lines){
       if(!line?.code||![line.units,line.price,line.rate].every(Number.isFinite)||line.price<0||line.rate<0)return json({error:'La factura contiene una línea inválida.'},400);

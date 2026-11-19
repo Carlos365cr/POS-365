@@ -420,6 +420,9 @@ const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0)),url=URL.createObjectURL(
 <script>
 window.addEventListener('message',async event=>{
  const frame=document.getElementById('codex-visualization'),port=event.ports[0];
+ if(frame&&event.source===frame.contentWindow&&event.data?.type==='pos365-lots'&&port){
+  try{const body=event.data.body;const response=await fetch('/api/lots',body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});const result=await response.json();port.postMessage(response.ok?result:{error:result.error||'No se pudieron consultar los lotes.'});}catch{port.postMessage({error:'Revise la conexión. Puede reintentar el mismo movimiento.'});}finally{port.close();}return;
+ }
  if(frame&&event.source===frame.contentWindow&&event.data?.type==='pos365-process-invoice'&&port){
   try{const response=await fetch('/api/internal-invoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event.data.data)});port.postMessage(await response.json());}
   catch{port.postMessage({error:'Revise la conexión y vuelva a intentar.'});}finally{port.close();}return;
