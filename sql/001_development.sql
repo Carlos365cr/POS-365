@@ -16,7 +16,7 @@ BEGIN
   EventId uniqueidentifier NOT NULL PRIMARY KEY,
   BranchId uniqueidentifier NOT NULL REFERENCES dbo.POS365_Branch(BranchId),
   EventType nvarchar(100) NOT NULL,
-  Payload nvarchar(max) NOT NULL CHECK(ISJSON(Payload)=1),
+  Payload nvarchar(max) NOT NULL,
   CreatedAt datetime2 NOT NULL DEFAULT SYSUTCDATETIME(),
   DeliveredAt datetime2 NULL,
   Attempts int NOT NULL DEFAULT 0 CHECK(Attempts>=0));
@@ -26,4 +26,10 @@ BEGIN
   ReceivedAt datetime2 NOT NULL DEFAULT SYSUTCDATETIME());
  INSERT dbo.POS365_SchemaVersion(Version) VALUES(1);
 END;
+-- SQL Server anterior a 2016 no reconoce ISJSON ni siquiera dentro de un IF.
+-- SQL dinamico evita compilar la funcion en motores antiguos.
+-- Los futuros productores de eventos deben validar JSON en .NET en todos los motores.
+IF CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)),4) AS int) >= 13
+ AND OBJECT_ID(N'dbo.CK_POS365_Outbox_Json', N'C') IS NULL
+ EXEC(N'ALTER TABLE dbo.POS365_Outbox WITH CHECK ADD CONSTRAINT CK_POS365_Outbox_Json CHECK (ISJSON(Payload)=1);');
 COMMIT;
