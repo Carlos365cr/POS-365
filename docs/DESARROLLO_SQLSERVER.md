@@ -48,3 +48,45 @@ El respaldo del negocio y las credenciales externas no estan incluidos en GitHub
 Ejecutar inicializacion dos veces debe conservar los mismos objetos y version.
 Comprobar /health/ready, detener SQL para confirmar respuesta 503, restaurar servicio
 y comprobar recuperacion. Hacer estas pruebas solo sobre el entorno de desarrollo.
+
+## Etapa 2: catalogo relacional
+
+Ejecute otra vez `scripts/Iniciar-Local.ps1 -Inicializar` para aplicar la version 2.
+El diagnostico exige ahora schemaVersion >= 2. Abra `/catalogo.html` desde el enlace
+Articulos y precios. Puede crear, buscar por nombre/codigo/barras, editar y gestionar
+listas 0 a 99. Un precio vacio se guarda como NULL; cero se conserva como cero.
+Se permiten hasta cuatro decimales, sin redondeo silencioso. Los ceros iniciales de
+codigos se conservan. CABYS se valida por formato; no se comprueba aun contra el
+catalogo oficial. Incluye IVA es informacion del articulo, no un calculo fiscal.
+
+Las tablas Product, ProductIdentifier y ProductPrice son la fuente del catalogo local.
+Cada guardado de articulo y listas se confirma en una transaccion. Un token rowversion
+impide sobrescribir cambios de otro editor: si aparece conflicto, cierre el editor y
+vuelva a abrir el articulo para revisar los datos actuales. No se implementa borrado.
+
+El importador acepta el JSON original `cedi-trial-backup`, snapshot version 1, hasta
+5000 articulos (products y xmlPendingArticles) y 20 MB desde la pantalla. Primero
+revise el archivo y despues confirme. Todo el lote se confirma o se revierte; no
+sobrescribe codigos ya existentes. El mismo contenido JSON ya importado se reconoce
+por SHA-256. Si el archivo cambia de formato/espacios se revisa de nuevo y los codigos
+existentes bloquean una duplicacion. La restriccion unica SQL resuelve tambien carreras
+entre importaciones o editores simultaneos.
+
+Se importan precios listaN_precio/listaN_moneda, precio principal, moneda, CABYS,
+indicador IVA y codigos. Los demas campos se conservan en SourceJson como copia
+inmutable del articulo original, NO como datos operativos de costos, promociones,
+fotos ni existencias. La pantalla nueva no aplica promociones ni reglas de redondeo
+de la facturacion antigua. No usarla para operar cajas. No se ha enlazado aun el
+catalogo con la interfaz original ni con el servicio de sincronizacion.
+
+Prueba local: crear un articulo, guardarlo con dos listas y un codigo alterno;
+cerrar y reiniciar la API y buscarlo por ese codigo. Abrir el mismo articulo en dos
+pestanas: guardar en una y verificar que la otra recibe conflicto. Probar un codigo
+duplicado y verificar que se conserva el articulo anterior. Importar solo un respaldo
+de pruebas y comprobar el conteo; repetir el archivo no debe duplicar productos.
+
+Validaciones automatizadas sin SQL:
+`dotnet run --project tests/CatalogValidation`
+La compilacion y estas pruebas no sustituyen la validacion real del esquema, transacciones
+e importacion sobre SERVER360. No se han ejecutado desde el entorno del desarrollador
+contra ese servidor.

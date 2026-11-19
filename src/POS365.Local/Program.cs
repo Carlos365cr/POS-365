@@ -25,10 +25,13 @@ if (initialize)
     }
     await using var db = new SqlConnection(cs.ConnectionString);
     await db.OpenAsync();
-    using var stream = typeof(Program).Assembly.GetManifestResourceStream("POS365.Schema.sql")!;
-    using var reader = new StreamReader(stream);
-    await using var migration = new SqlCommand(await reader.ReadToEndAsync(), db) { CommandTimeout = 60 };
-    await migration.ExecuteNonQueryAsync();
+    foreach (var resource in new[] { "POS365.Schema.sql", "POS365.Catalog.sql" })
+    {
+        using var stream = typeof(Program).Assembly.GetManifestResourceStream(resource)!;
+        using var reader = new StreamReader(stream);
+        await using var migration = new SqlCommand(await reader.ReadToEndAsync(), db) { CommandTimeout = 120 };
+        await migration.ExecuteNonQueryAsync();
+    }
     Console.WriteLine("POS365_DEV inicializada. No se modificaron otras bases.");
     return;
 }
@@ -53,7 +56,7 @@ app.MapGet("/health/ready", async (CancellationToken ct) =>
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand("SELECT MAX(Version) FROM dbo.POS365_SchemaVersion", connection);
         var version = await command.ExecuteScalarAsync(ct);
-        return version is int n && n >= 1
+        return version is int n && n >= 2
             ? Results.Ok(new { status = "ok", database = "POS365_DEV", schemaVersion = n })
             : Results.Json(new { status = "pending", message = "Inicialice el esquema." }, statusCode: 503);
     }
@@ -63,5 +66,6 @@ app.MapGet("/health/ready", async (CancellationToken ct) =>
         return Results.Json(new { status = "error", sqlError = ex.Number, message = "Verifique servidor, credenciales, permisos y esquema. No comparta contrasenas." }, statusCode: 503);
     }
 });
+CatalogApi.Map(app, cs.ConnectionString);
 app.MapFallback("/api/{**path}", () => Results.Json(new { error = "Funcion del POS pendiente de migracion; no se ha guardado ninguna operacion." }, statusCode: 501));
 app.Run();
