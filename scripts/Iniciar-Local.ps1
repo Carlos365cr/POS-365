@@ -29,7 +29,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'La compilacion fallo.' }
     if ($Inicializar) {
         & dotnet run --project $project --no-build --no-launch-profile -- --initialize-db
-        if ($LASTEXITCODE -ne 0) { throw 'No se pudo inicializar POS365_DEV. Revise los permisos SQL.' }
+        if ($LASTEXITCODE -ne 0) { throw 'No se pudo inicializar POS365_DEV. Revise el error SQL mostrado arriba (version, esquema, conexion o permisos).' }
     }
     Write-Host 'Abra http://127.0.0.1:5085 . Para detener: Ctrl+C.'
     & dotnet run --project $project --no-build --no-launch-profile
