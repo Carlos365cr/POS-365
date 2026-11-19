@@ -3093,6 +3093,64 @@ function validVoucherOperation(op){return op&&['issue','redeem'].includes(op.kin
 async function readVoucher(db,code){await voucherTable(db);return db.prepare('SELECT * FROM pos_vouchers WHERE code=?').bind(code).first();}
 function voucherInfo(row){return row?{code:row.code,cents:row.cents,issued:row.issued,expires:row.expires,used:!!row.redeemed_sale}:null;}
 
+async function noticeTables(db){
+ await db.prepare('CREATE TABLE IF NOT EXISTS pos_notice_settings (id INTEGER PRIMARY KEY,enabled INTEGER NOT NULL)').run();
+ await db.prepare('INSERT OR IGNORE INTO pos_notice_settings(id,enabled) VALUES(1,1)').run();
+ await db.prepare('CREATE TABLE IF NOT EXISTS pos_notices (id TEXT PRIMARY KEY,sender TEXT NOT NULL,sender_name TEXT NOT NULL,message TEXT NOT NULL,recipients TEXT NOT NULL,created_at INTEGER NOT NULL)').run();
+ await db.prepare('CREATE TABLE IF NOT EXISTS pos_notice_receipts (notice_id TEXT NOT NULL,recipient TEXT NOT NULL,recipient_name TEXT NOT NULL,shown_at INTEGER,ack_at INTEGER,PRIMARY KEY(notice_id,recipient))').run();
+}
+async function noticeDirectory(db){
+ const directory=await accessDirectory(db),map=new Map();
+ for(const user of directory){if(user.deleted||user.suspended||!user.email)continue;const email=user.email.toLowerCase();map.set(email,{email,name:[user.firstName,user.lastName].filter(Boolean).join(' ').trim()||user.username||email});}
+ if(!map.has(masterEmail))map.set(masterEmail,{email:masterEmail,name:masterEmail});
+ return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name,'es'));
+}
+async function manageNotices(request,env,email,claims){
+ const db=env.DB,url=new URL(request.url);await noticeTables(db);
+ const enabled=!!(await db.prepare('SELECT enabled FROM pos_notice_settings WHERE id=1').first()).enabled;
+ if(request.method==='GET'){
+  if(url.searchParams.get('view')==='inbox'){
+   const rows=await db.prepare('SELECT n.id,n.sender_name,n.message,n.created_at,r.shown_at FROM pos_notice_receipts r JOIN pos_notices n ON n.id=r.notice_id WHERE r.recipient=? AND r.ack_at IS NULL ORDER BY n.created_at,n.id LIMIT 20').bind(email).all();
+   return json({pending:rows.results});
+  }
+  const recipients=await noticeDirectory(db);
+  const notices=await db.prepare('SELECT id,message,created_at FROM pos_notices WHERE sender=? ORDER BY created_at DESC LIMIT 100').bind(email).all();
+  const receipts=await db.prepare('SELECT r.* FROM pos_notice_receipts r JOIN pos_notices n ON n.id=r.notice_id WHERE n.sender=? AND n.id IN (SELECT id FROM pos_notices WHERE sender=? ORDER BY created_at DESC LIMIT 100)').bind(email,email).all();
+  return json({enabled,mayConfigure:email===masterEmail,sender:claims.name||recipients.find(r=>r.email===email)?.name||email,recipients,notices:notices.results.map(n=>({...n,receipts:receipts.results.filter(r=>r.notice_id===n.id)}))});
+ }
+ if(request.method!=='POST')return json({error:'Método no permitido.'},405);
+ if(request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
+ const body=await request.json().catch(()=>null);if(!body)return json({error:'Solicitud inválida.'},400);
+ if(body.action==='settings'){
+  if(email!==masterEmail)return json({error:'Solo la cuenta máster puede activar o desactivar Avisos.'},403);
+  if(typeof body.enabled!=='boolean')return json({error:'Estado inválido.'},400);
+  await db.prepare('UPDATE pos_notice_settings SET enabled=? WHERE id=1').bind(body.enabled?1:0).run();return json({enabled:body.enabled});
+ }
+ if(body.action==='shown'||body.action==='ack'){
+  if(typeof body.id!=='string')return json({error:'Aviso inválido.'},400);
+  const now=Date.now();
+  const result=await db.prepare(body.action==='ack'?'UPDATE pos_notice_receipts SET shown_at=COALESCE(shown_at,?),ack_at=COALESCE(ack_at,?) WHERE notice_id=? AND recipient=?':'UPDATE pos_notice_receipts SET shown_at=COALESCE(shown_at,?) WHERE notice_id=? AND recipient=?').bind(...(body.action==='ack'?[now,now,body.id,email]:[now,body.id,email])).run();
+  const receipt=await db.prepare('SELECT shown_at,ack_at FROM pos_notice_receipts WHERE notice_id=? AND recipient=?').bind(body.id,email).first();
+  if(!receipt)return json({error:'Aviso no disponible para este usuario.'},404);
+  return json({ok:true,...receipt});
+ }
+ if(body.action!=='send'||typeof body.id!=='string'||! /^[0-9a-f-]{36}$/i.test(body.id)||typeof body.message!=='string'||!body.message.trim()||body.message.trim().length>4000||!Array.isArray(body.recipients)||!body.recipients.length||body.recipients.length>200||body.recipients.some(r=>typeof r!=='string'))return json({error:'Escriba un mensaje y seleccione entre 1 y 200 destinatarios.'},400);
+ const message=body.message.trim(),selected=[...new Set(body.recipients.map(r=>r.toLowerCase()))].sort(),serialized=JSON.stringify(selected);
+ const existing=await db.prepare('SELECT sender,message,recipients FROM pos_notices WHERE id=?').bind(body.id).first();
+ if(existing)return existing.sender===email&&existing.message===message&&existing.recipients===serialized?json({ok:true,id:body.id}):json({error:'El identificador ya corresponde a otro aviso.'},409);
+ if(!enabled)return json({error:'Avisos está desactivado. No se permiten nuevos envíos.'},403);
+ const directory=await noticeDirectory(db),byEmail=new Map(directory.map(r=>[r.email,r]));
+ if(selected.some(r=>!byEmail.has(r)))return json({error:'Uno de los destinatarios ya no está activo. Actualice la lista.'},400);
+ const now=Date.now(),senderName=claims.name||byEmail.get(email)?.name||email;
+ const statements=[db.prepare('INSERT INTO pos_notices(id,sender,sender_name,message,recipients,created_at) SELECT ?,?,?,?,?,? WHERE (SELECT enabled FROM pos_notice_settings WHERE id=1)=1 ON CONFLICT(id) DO NOTHING').bind(body.id,email,senderName,message,serialized,now)];
+ for(const recipient of selected)statements.push(db.prepare('INSERT INTO pos_notice_receipts(notice_id,recipient,recipient_name) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM pos_notices WHERE id=? AND sender=? AND message=? AND recipients=?) ON CONFLICT(notice_id,recipient) DO NOTHING').bind(body.id,recipient,byEmail.get(recipient).name,body.id,email,message,serialized));
+ await db.batch(statements);
+ const stored=await db.prepare('SELECT sender,message,recipients FROM pos_notices WHERE id=?').bind(body.id).first();
+ if(!stored)return json({error:'Avisos fue desactivado antes del envío.'},403);
+ if(stored.sender!==email||stored.message!==message||stored.recipients!==serialized)return json({error:'El identificador corresponde a otro aviso.'},409);
+ return json({ok:true,id:body.id});
+}
+
 async function lotTables(db){
  await db.batch([
   db.prepare('CREATE TABLE IF NOT EXISTS internal_invoices (number INTEGER PRIMARY KEY, draft TEXT NOT NULL UNIQUE, payload TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'),
@@ -3336,6 +3394,7 @@ export default { async fetch(request, env) {
     if(row.expires<=Date.now())return json({error:'La nota de crédito comercial venció.'},410);
     return json(voucherInfo(row));
   }
+  if(url.pathname==='/api/notices'){try{return await manageNotices(request,env,email,claims);}catch{return json({error:'No se confirmó la operación de Avisos. Puede reintentar.'},503);}}
   if(url.pathname==='/api/lots'){try{return await manageLots(request,env,email);}catch{return json({error:'No se pudieron consultar o guardar los lotes. Intente de nuevo.'},503);}}
   if(url.pathname==='/api/internal-invoice'){
     if(request.method!=='POST')return json({error:'Se requiere POST.'},405);

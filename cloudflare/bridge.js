@@ -255,3 +255,9 @@ window.addEventListener('message',async event=>{
  const {id,body}=event.data;
  try{const response=await fetch('/api/cashiers',body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});const result=await response.json();frame.contentWindow.postMessage({type:'pos365-cashiers-result',id,ok:response.ok,result},'*');}catch{frame.contentWindow.postMessage({type:'pos365-cashiers-result',id,ok:false,result:{error:'No se confirmó la operación. Recargue la lista para verificar.'}},'*');}
 });
+
+window.addEventListener('message',async event=>{
+ if(event.source!==frame.contentWindow||event.data?.type!=='pos365-notices'||!event.ports?.[0])return;
+ const port=event.ports[0],body=event.data.body;
+ try{const response=await fetch('/api/notices'+(event.data.inbox?'?view=inbox':''),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});const data=await response.json();port.postMessage({ok:response.ok,data});}catch{port.postMessage({ok:false,data:{error:'No hay conexión para confirmar el aviso. Reintente.'}});}finally{port.close();}
+});
