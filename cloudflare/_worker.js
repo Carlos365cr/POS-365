@@ -3176,6 +3176,18 @@ async function processDynamicNoticesUnlocked(db){
  for(const item of products)writes.push(db.prepare('INSERT INTO pos_dynamic_notice_schedule(id,day,due,payload,delivered) VALUES(?,?,?,?,0) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE delivered=0').bind(item.id,item.day,item.due,JSON.stringify(item)));
  writes.push(db.prepare('UPDATE pos_dynamic_notice_settings SET revision=? WHERE id=1 AND enabled=1').bind(revision));await db.batch(writes);await deliverDynamicSchedules(db,now);
 }
+async function dynamicNoticeDayList(request,db,email){
+ const day=new URL(request.url).searchParams.get('day')||dynamicNoticeDay(Date.now());
+ if(!validClosingDate(day))return json({error:'Seleccione una fecha de vencimiento válida.'},400);
+ const args=[day],scope=email===masterEmail?'':' AND r.recipient=?';if(scope)args.push(email);
+ const rows=await db.prepare("SELECT DISTINCT n.id,n.message,n.created_at FROM pos_notices n JOIN pos_notice_receipts r ON r.notice_id=n.id WHERE substr(n.id,1,9)='dynamics:' AND json_extract(n.message,'$.day')=?"+scope+' ORDER BY n.created_at DESC,n.id').bind(...args).all();
+ const products=new Map();let company='POS 365';
+ for(const row of rows.results){const data=JSON.parse(row.message);if(products.size===0)company=data.company||company;for(const product of data.products||[]){const key=product.id||JSON.stringify([product.barcode||product.code,product.type,product.day]);if(!products.has(key))products.set(key,product);}}
+ const receiptRows=await db.prepare("SELECT r.recipient,r.recipient_name,r.ack_at FROM pos_notices n JOIN pos_notice_receipts r ON r.notice_id=n.id WHERE substr(n.id,1,9)='dynamics:' AND json_extract(n.message,'$.day')=?"+scope).bind(...args).all();
+ const recipients=new Map();for(const r of receiptRows.results){let entry=recipients.get(r.recipient);if(!entry){entry={recipient:r.recipient,name:r.recipient_name,total:0,confirmed:0,ackAt:null};recipients.set(r.recipient,entry);}entry.total++;if(r.ack_at!==null){entry.confirmed++;entry.ackAt=Math.max(entry.ackAt||0,r.ack_at);}}
+ return json({day,model:{kind:'dynamic-expiry',day,company,products:[...products.values()].sort((a,b)=>a.name.localeCompare(b.name,'es'))},noticeCount:rows.results.length,recipients:[...recipients.values()].map(r=>({...r,state:r.confirmed===r.total?'Entendido':'Pendiente',ackAt:r.confirmed===r.total?r.ackAt:null})).sort((a,b)=>a.name.localeCompare(b.name,'es'))});
+}
+
 async function dynamicNoticeHistory(request,db,email){
  const url=new URL(request.url),day=url.searchParams.get('day')||'',offset=Number(url.searchParams.get('offset')||0);
  if((day&&!validClosingDate(day))||!Number.isSafeInteger(offset)||offset<0)return json({error:'Revise la fecha y la página.'},400);
@@ -3188,6 +3200,7 @@ async function dynamicNoticeHistory(request,db,email){
 
 async function manageDynamicNoticeSettings(request,env,email){
  const db=env.DB,url=new URL(request.url);await noticeTables(db);await dynamicNoticeTables(db);
+ if(request.method==='GET'&&url.searchParams.get('view')==='day-list')return dynamicNoticeDayList(request,db,email);
  if(request.method==='GET'&&url.searchParams.get('view')==='history')return dynamicNoticeHistory(request,db,email);
  if(request.method==='GET'){const row=await db.prepare('SELECT enabled FROM pos_dynamic_notice_settings WHERE id=1').first();return json({enabled:!!row.enabled,mayConfigure:email===masterEmail});}
  if(request.method!=='POST'||request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);

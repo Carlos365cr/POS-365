@@ -285,6 +285,24 @@ window.addEventListener('message',async event=>{
  const port=event.ports[0],body=event.data.body;
  try{const response=await fetch('/api/dynamic-notice-settings',body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});port.postMessage({ok:response.ok,data:await response.json()});}catch{port.postMessage({ok:false,data:{error:'No hay conexión para confirmar el ajuste.'}});}finally{port.close();}
 });
+// Shared receipt renderer: keep identical in the inner screens and the print bridge.
+function renderExpiryTicket(doc,container,model,now=new Date(),printed=false){
+ container.replaceChildren();container.className='expiry-ticket';
+ const add=(tag,text,parent=container,cls='')=>{const el=doc.createElement(tag);el.textContent=String(text??'');if(cls)el.className=cls;parent.append(el);return el;};
+ const short=day=>day.split('-').reverse().join('/'),long=day=>new Intl.DateTimeFormat('es-CR',{timeZone:'America/Costa_Rica',weekday:'long'}).format(new Date(day+'T12:00:00Z'))+', '+short(day);
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).format(now),next=new Date(Date.parse(model.day+'T12:00:00Z')+86400000).toISOString().slice(0,10);
+ const pair=(label,value,parent=container,cls='')=>{const row=add('div','',parent,'ticket-pair '+cls);add('span',label,row);add('span',value,row);return row;};
+ add('p',model.company||'POS 365',container,'ticket-company');add('p','POS 365 · Aviso de dinámicas',container,'ticket-center');
+ add('h1',model.day===today?'Estas promociones\nvencen hoy':'Promociones finalizadas',container);add('p',long(model.day),container,'ticket-center ticket-day');
+ const action=add('div','',container,'ticket-action');add('p',model.day===today?'RETIRAR LOS RÓTULOS MAÑANA':'RETIRAR LOS RÓTULOS',action);add('p',long(next),action);
+ const metadata=add('div','',container,'ticket-metadata');pair('Caja',model.recipient||'Consulta por fecha',metadata);pair('Aviso programado',short(model.day)+' · 1:00 p. m.',metadata);
+ if(printed){const printDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).format(now),time=new Intl.DateTimeFormat('es-CR',{timeZone:'America/Costa_Rica',hour:'numeric',minute:'2-digit',hour12:true}).format(now);pair('Impreso',short(printDay)+' · '+time,metadata);}
+ model.products.forEach((p,i)=>{const section=add('section','',container,'ticket-product');add('h2',(i+1)+'. '+p.name,section);add('p',p.barcode||'Sin código de barras',section,'ticket-barcode');add('p',p.type==='scale'?'Venta escala':'Venta escáner',section,'ticket-type');add('p','Promoción: '+p.promotion,section);add('p','Último día vigente: '+short(p.day),section,'ticket-small');});
+ pair('Total de productos',model.products.length,container,'ticket-total');add('p','Las promociones permanecen vigentes durante todo el día de finalización.',container,'ticket-footnote');
+}
+const expiryTicketStyles='.expiry-ticket{box-sizing:border-box;width:100%;max-width:320px;margin:0 auto;padding:24px 20px 28px;background:#fff;color:#111;font:14px/1.45 Arial,sans-serif;overflow-wrap:anywhere;white-space:normal}.expiry-ticket *{box-sizing:border-box}.expiry-ticket p{font:inherit;margin:3px 0;color:#111;white-space:normal}.expiry-ticket .ticket-company{text-align:center;text-transform:uppercase;font-weight:700}.expiry-ticket .ticket-center{text-align:center}.expiry-ticket h1{font:700 19px/1.2 Arial,sans-serif;white-space:pre-line;text-align:center;margin:14px 0;color:#111}.expiry-ticket .ticket-day{margin:14px 0}.expiry-ticket .ticket-action{border-top:2px solid #111;border-bottom:2px solid #111;padding:12px 0;margin:18px 0;text-align:center;font-weight:700}.expiry-ticket .ticket-metadata{margin:12px 0 18px;font-size:12px}.expiry-ticket .ticket-pair{display:flex;justify-content:space-between;gap:12px}.expiry-ticket .ticket-pair span:last-child{text-align:right;font-variant-numeric:tabular-nums}.expiry-ticket section.ticket-product{border-top:1px dashed #777;margin:0;padding:16px 0;break-inside:avoid}.expiry-ticket h2{font:700 15px/1.4 Arial,sans-serif;margin:0 0 8px;color:#111}.expiry-ticket .ticket-barcode{font-family:monospace;font-size:14px;letter-spacing:.4px}.expiry-ticket .ticket-type{font-weight:700}.expiry-ticket .ticket-small{font-size:12px}.expiry-ticket .ticket-total{border-top:1px dashed #777;padding-top:16px;font-weight:700}.expiry-ticket .ticket-footnote{text-align:center;margin:18px 0 0;padding-bottom:18px;border-bottom:1px dashed #777;font-size:12px}@media print{@page{size:80mm auto;margin:4mm}.expiry-ticket{max-width:72mm;padding:0}}';
+// End shared receipt renderer.
+
 window.addEventListener('message',event=>{
  if(event.source!==frame.contentWindow||event.data?.type!=='pos365-print-dynamic-notice')return;
  const {model,noticeId}=event.data;if(!model||!/^\d{4}-\d{2}-\d{2}$/.test(model.day)||!Array.isArray(model.products))return;
@@ -292,17 +310,13 @@ window.addEventListener('message',event=>{
  const paper=document.createElement('iframe');paper.style.cssText='position:fixed;width:1px;height:1px;bottom:0;left:0;border:0';document.body.append(paper);
  try{
  const doc=paper.contentDocument;doc.open();doc.write('<!doctype html><html><head><title>Aviso de dinámicas</title></head><body></body></html>');doc.close();
- const style=doc.createElement('style');style.textContent='@page{size:80mm auto;margin:4mm}body{font:12px/1.4 Arial,sans-serif;color:#000;background:#fff;max-width:72mm;margin:0 auto}h1{font-size:17px;text-align:center}h2{font-size:13px;margin:0 0 6px}section{border-top:1px dashed #555;padding-top:10px;margin-top:12px;break-inside:avoid}p{margin:4px 0;overflow-wrap:anywhere}.center{text-align:center}.action{text-align:center;font-weight:bold;border-block:2px solid #000;padding:8px 0;margin:12px 0}small{font-size:10px}';doc.head.append(style);
- const add=(tag,text,parent=doc.body)=>{const el=doc.createElement(tag);el.textContent=String(text??'');parent.append(el);return el;},date=d=>d.split('-').reverse().join('/');
- const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),next=new Date(Date.parse(model.day+'T12:00:00Z')+86400000).toISOString().slice(0,10);
- add('p',model.company||'POS 365').className='center';add('p','POS 365 · Aviso de dinámicas').className='center';add('p',model.recipient||'').className='center';add('h1',model.day===today?'Estas promociones vencen hoy':'Promociones finalizadas');add('p','Último día vigente: '+date(model.day)).className='center';add('div','RETIRAR LOS RÓTULOS: '+date(next)).className='action';add('p','Aviso programado: '+date(model.day)+' · 1:00 p. m.');add('p','Impreso: '+new Intl.DateTimeFormat('es-CR',{timeZone:'America/Costa_Rica',dateStyle:'short',timeStyle:'short'}).format(new Date()));
- model.products.forEach((p,i)=>{const section=add('section','');add('h2',(i+1)+'. '+p.name,section);add('p','Código de barras: '+(p.barcode||'Sin código de barras'),section);add('p',p.type==='scale'?'Venta escala':'Venta escáner',section);add('p',p.promotion,section);add('p','Finalización: '+date(p.day),section);});add('p','Total de productos: '+model.products.length);add('small','La promoción permanece vigente durante todo el día de finalización.');
+ const style=doc.createElement('style');style.textContent='body{margin:0;background:#fff}'+expiryTicketStyles;doc.head.append(style);const receipt=doc.createElement('article');doc.body.append(receipt);renderExpiryTicket(doc,receipt,model,new Date(),true);
  paper.contentWindow.addEventListener('afterprint',()=>paper.remove(),{once:true});setTimeout(()=>{try{paper.contentWindow.focus();paper.contentWindow.print();reply(true);}catch{paper.remove();reply(false);}},200);
  }catch{paper.remove();reply(false);}
 });
 
 window.addEventListener('message',async event=>{
  if(event.source!==frame.contentWindow||event.data?.type!=='pos365-dynamic-notice-history'||!event.ports?.[0])return;
- const port=event.ports[0],query=new URLSearchParams({view:'history',day:String(event.data.day||''),offset:String(event.data.offset||0)});
+ const port=event.ports[0],query=new URLSearchParams({view:'day-list',day:String(event.data.day||'')});
  try{const response=await fetch('/api/dynamic-notice-settings?'+query,{cache:'no-store'});port.postMessage({ok:response.ok,data:await response.json()});}catch{port.postMessage({ok:false,data:{error:'No se pudo consultar el historial. Revise la conexión y reintente.'}});}finally{port.close();}
 });
