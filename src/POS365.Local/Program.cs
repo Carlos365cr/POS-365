@@ -67,5 +67,6 @@ app.MapGet("/health/ready", async (CancellationToken ct) =>
     }
 });
 CatalogApi.Map(app, cs.ConnectionString);
+PosLookupApi.Map(app, cs.ConnectionString);
 app.MapFallback("/api/{**path}", () => Results.Json(new { error = "Funcion del POS pendiente de migracion; no se ha guardado ninguna operacion." }, statusCode: 501));
 app.Run();
