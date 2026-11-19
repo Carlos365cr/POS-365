@@ -276,3 +276,5 @@ window.addEventListener('message',event=>{
  if(model.note)append('p',model.note);paper.contentWindow.addEventListener('afterprint',()=>paper.remove(),{once:true});setTimeout(()=>{try{paper.contentWindow.focus();paper.contentWindow.print();}catch{paper.remove();frame.contentWindow.postMessage({type:'pos365-print-closing-error'},'*');}},200);
  }catch{paper.remove();frame.contentWindow.postMessage({type:'pos365-print-closing-error'},'*');}
 });
+
+window.addEventListener('message',async event=>{if(event.source!==frame.contentWindow||event.data?.type!=='pos365-sales-analysis'||!event.ports?.[0])return;const port=event.ports[0];try{const response=await fetch('/api/sales-analysis',{cache:'no-store'});port.postMessage({ok:response.ok,data:await response.json()});}catch{port.postMessage({ok:false,data:{error:'No hay conexión para consultar ventas.'}});}finally{port.close();}});
