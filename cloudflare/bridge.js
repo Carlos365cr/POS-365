@@ -261,3 +261,18 @@ window.addEventListener('message',async event=>{
  const port=event.ports[0],body=event.data.body;
  try{const response=await fetch('/api/notices'+(event.data.inbox?'?view=inbox':''),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});const data=await response.json();port.postMessage({ok:response.ok,data});}catch{port.postMessage({ok:false,data:{error:'No hay conexión para confirmar el aviso. Reintente.'}});}finally{port.close();}
 });
+
+window.addEventListener('message',async event=>{if(event.source!==frame.contentWindow||event.data?.type!=='pos365-closings'||!event.ports?.[0])return;const port=event.ports[0],body=event.data.body;try{const response=await fetch('/api/closings'+(event.data.id?'?id='+encodeURIComponent(event.data.id):''),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});port.postMessage({ok:response.ok,status:response.status,data:await response.json()});}catch{port.postMessage({ok:false,data:{error:'No hay conexión para confirmar el cierre.'}});}finally{port.close();}});
+
+window.addEventListener('message',event=>{
+ if(event.source!==frame.contentWindow||event.data?.type!=='pos365-print-closing')return;
+ const model=event.data.model;if(!model||!Array.isArray(model.sections))return;
+ const paper=document.createElement('iframe');paper.style.cssText='position:fixed;width:1px;height:1px;bottom:0;left:0;border:0';document.body.append(paper);
+ try{
+ const doc=paper.contentDocument;doc.open();doc.write('<!doctype html><html><head><title>Cierre de cajas</title></head><body></body></html>');doc.close();
+ const style=doc.createElement('style');style.textContent='@page{size:'+(model.format==='letter'?'letter':'80mm auto')+';margin:4mm}body{font:12px Arial,sans-serif;color:#000;margin:0 auto;max-width:'+(model.format==='letter'?'185mm':'72mm')+'}h1{font-size:17px;text-align:center}h2{font-size:14px;text-align:center}h3{font-size:12px;border-bottom:1px solid #333;padding:7px 0 4px}section{break-inside:avoid}p{white-space:pre-wrap;overflow-wrap:anywhere}.row{display:flex;gap:8px;justify-content:space-between;padding:3px 0}.row span:last-child{text-align:right;overflow-wrap:anywhere;max-width:60%}';doc.head.append(style);
+ const append=(tag,text,parent=doc.body)=>{const node=doc.createElement(tag);node.textContent=String(text??'').slice(0,2000);parent.append(node);return node;};append('h1',model.company);append('h2',model.title);
+ for(const section of model.sections.slice(0,12)){const block=doc.createElement('section');doc.body.append(block);append('h3',section.title,block);for(const row of (section.rows||[]).slice(0,100)){const line=doc.createElement('div');line.className='row';block.append(line);append('span',row[0],line);append('span',row[1],line);}}
+ if(model.note)append('p',model.note);paper.contentWindow.addEventListener('afterprint',()=>paper.remove(),{once:true});setTimeout(()=>{try{paper.contentWindow.focus();paper.contentWindow.print();}catch{paper.remove();frame.contentWindow.postMessage({type:'pos365-print-closing-error'},'*');}},200);
+ }catch{paper.remove();frame.contentWindow.postMessage({type:'pos365-print-closing-error'},'*');}
+});
