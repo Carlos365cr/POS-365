@@ -6,3 +6,10 @@ __pycache__/
 *.sql
 *.p12
 *.xml
+
+# Desarrollo .NET y configuracion privada
+**/bin/
+**/obj/
+.vs/
+**/appsettings.Local.json
+!sql/*.sql
