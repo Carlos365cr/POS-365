@@ -9,21 +9,21 @@ $root = Split-Path $PSScriptRoot -Parent
 $project = Join-Path $root 'src\POS365.Local\POS365.Local.csproj'
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'Instale el SDK .NET 10.' }
 $connection = New-Object System.Data.SqlClient.SqlConnectionStringBuilder
-$connection.DataSource = $Servidor
-$connection.InitialCatalog = 'POS365_DEV'
-$connection.Encrypt = $true
-$connection.TrustServerCertificate = $true # Solo desarrollo con certificado local.
-$connection.IntegratedSecurity = [bool]$WindowsAuth
+$connection['Data Source'] = $Servidor
+$connection['Initial Catalog'] = 'POS365_DEV'
+$connection['Encrypt'] = $true
+$connection['TrustServerCertificate'] = $true # Solo desarrollo con certificado local.
+$connection['Integrated Security'] = [bool]$WindowsAuth
 if (-not $WindowsAuth) {
-    $connection.UserID = $Usuario
+    $connection['User ID'] = $Usuario
     $secret = Read-Host 'Contrasena SQL (no se guarda en archivos)' -AsSecureString
     $credential = New-Object System.Net.NetworkCredential('', $secret)
-    $connection.Password = $credential.Password
+    $connection['Password'] = $credential.Password
 }
 $previousConnection = $env:ConnectionStrings__Pos365
 $previousEnvironment = $env:ASPNETCORE_ENVIRONMENT
 try {
-    $env:ConnectionStrings__Pos365 = $connection.ConnectionString
+    $env:ConnectionStrings__Pos365 = $connection.get_ConnectionString()
     $env:ASPNETCORE_ENVIRONMENT = 'Development'
     & dotnet build $project -c Debug
     if ($LASTEXITCODE -ne 0) { throw 'La compilacion fallo.' }
