@@ -278,3 +278,25 @@ window.addEventListener('message',event=>{
 });
 
 window.addEventListener('message',async event=>{if(event.source!==frame.contentWindow||event.data?.type!=='pos365-sales-analysis'||!event.ports?.[0])return;const port=event.ports[0];try{const response=await fetch('/api/sales-analysis',{cache:'no-store'});port.postMessage({ok:response.ok,data:await response.json()});}catch{port.postMessage({ok:false,data:{error:'No hay conexión para consultar ventas.'}});}finally{port.close();}});
+
+// The expiration switch uses its own server setting; manual Avisos remains independent.
+window.addEventListener('message',async event=>{
+ if(event.source!==frame.contentWindow||event.data?.type!=='pos365-dynamic-notice-settings'||!event.ports?.[0])return;
+ const port=event.ports[0],body=event.data.body;
+ try{const response=await fetch('/api/dynamic-notice-settings',body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});port.postMessage({ok:response.ok,data:await response.json()});}catch{port.postMessage({ok:false,data:{error:'No hay conexión para confirmar el ajuste.'}});}finally{port.close();}
+});
+window.addEventListener('message',event=>{
+ if(event.source!==frame.contentWindow||event.data?.type!=='pos365-print-dynamic-notice')return;
+ const {model,noticeId}=event.data;if(!model||!/^\d{4}-\d{2}-\d{2}$/.test(model.day)||!Array.isArray(model.products))return;
+ const reply=ok=>frame.contentWindow.postMessage({type:'pos365-print-dynamic-notice-status',noticeId,ok},'*');
+ const paper=document.createElement('iframe');paper.style.cssText='position:fixed;width:1px;height:1px;bottom:0;left:0;border:0';document.body.append(paper);
+ try{
+ const doc=paper.contentDocument;doc.open();doc.write('<!doctype html><html><head><title>Aviso de dinámicas</title></head><body></body></html>');doc.close();
+ const style=doc.createElement('style');style.textContent='@page{size:80mm auto;margin:4mm}body{font:12px/1.4 Arial,sans-serif;color:#000;background:#fff;max-width:72mm;margin:0 auto}h1{font-size:17px;text-align:center}h2{font-size:13px;margin:0 0 6px}section{border-top:1px dashed #555;padding-top:10px;margin-top:12px;break-inside:avoid}p{margin:4px 0;overflow-wrap:anywhere}.center{text-align:center}.action{text-align:center;font-weight:bold;border-block:2px solid #000;padding:8px 0;margin:12px 0}small{font-size:10px}';doc.head.append(style);
+ const add=(tag,text,parent=doc.body)=>{const el=doc.createElement(tag);el.textContent=String(text??'');parent.append(el);return el;},date=d=>d.split('-').reverse().join('/');
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),next=new Date(Date.parse(model.day+'T12:00:00Z')+86400000).toISOString().slice(0,10);
+ add('p',model.company||'POS 365').className='center';add('p','POS 365 · Aviso de dinámicas').className='center';add('p',model.recipient||'').className='center';add('h1',model.day===today?'Estas promociones vencen hoy':'Promociones finalizadas');add('p','Último día vigente: '+date(model.day)).className='center';add('div','RETIRAR LOS RÓTULOS: '+date(next)).className='action';add('p','Aviso programado: '+date(model.day)+' · 1:00 p. m.');add('p','Impreso: '+new Intl.DateTimeFormat('es-CR',{timeZone:'America/Costa_Rica',dateStyle:'short',timeStyle:'short'}).format(new Date()));
+ model.products.forEach((p,i)=>{const section=add('section','');add('h2',(i+1)+'. '+p.name,section);add('p','Código de barras: '+(p.barcode||'Sin código de barras'),section);add('p',p.type==='scale'?'Venta escala':'Venta escáner',section);add('p',p.promotion,section);add('p','Finalización: '+date(p.day),section);});add('p','Total de productos: '+model.products.length);add('small','La promoción permanece vigente durante todo el día de finalización.');
+ paper.contentWindow.addEventListener('afterprint',()=>paper.remove(),{once:true});setTimeout(()=>{try{paper.contentWindow.focus();paper.contentWindow.print();reply(true);}catch{paper.remove();reply(false);}},200);
+ }catch{paper.remove();reply(false);}
+});

@@ -3118,12 +3118,85 @@ async function noticeDirectory(db){
  if(!map.has(masterEmail))map.set(masterEmail,{email:masterEmail,name:masterEmail});
  return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name,'es'));
 }
+// Expiration notices: durable schedules and per-recipient receipts, independent of manual Avisos.
+async function dynamicNoticeTables(db){
+ await db.prepare('CREATE TABLE IF NOT EXISTS pos_dynamic_notice_settings(id INTEGER PRIMARY KEY,enabled INTEGER NOT NULL,since_day TEXT NOT NULL,revision TEXT)').run();
+ await db.prepare("INSERT OR IGNORE INTO pos_dynamic_notice_settings VALUES(1,0,'',NULL)").run();
+ await db.prepare('CREATE TABLE IF NOT EXISTS pos_dynamic_notice_schedule(id TEXT PRIMARY KEY,day TEXT NOT NULL,due INTEGER NOT NULL,payload TEXT NOT NULL,delivered INTEGER NOT NULL DEFAULT 0)').run();
+}
+function dynamicNoticeDay(now){return new Date(now-6*3600000).toISOString().slice(0,10);}
+function dynamicNoticeProducts(products,since){
+ const result=[];
+ for(const product of products||[]){
+  const fields=product.details?.prices||[],value=k=>fields.find(f=>f[0]===k)?.[1]??'',settings=product.details?.promotions||product.promotions||{};
+  const type=settings.scaleEnabled===true?'scale':settings.scannerEnabled===true||(settings.scannerEnabled===undefined&&fields.find(f=>f[0]==='descScanner')?.[2]===true)?'scanner':null;
+  if(!type)continue;
+  const start=value(type==='scale'?'escalaInicio':'scannerInicio'),day=value(type==='scale'?'escalaFin':'scannerFin');
+  if(!validClosingDate(day)||!validClosingDate(start)||start>day||day<since)continue;
+  let promotion;
+  if(type==='scale'){const units=Number(value('escalaCantidad')),price=Number(value('escalaPrecio'));if(!Number.isInteger(units)||units<=0||value('escalaPrecio')===''||!Number.isFinite(price)||price<0)continue;promotion=units+' unidades por '+new Intl.NumberFormat('es-CR',{style:'currency',currency:product.currency==='Dólar'?'USD':product.currency==='Euro'?'EUR':product.currency==='Yen'?'JPY':'CRC'}).format(units*price);}
+  else {const discount=Number(value('scannerDescuento'));if(value('scannerDescuento')===''||!Number.isFinite(discount)||discount<0||discount>100)continue;promotion=discount.toLocaleString('es-CR')+'% de descuento';}
+  const key=String(product.id||product.barcode||product.code||'');if(!key)continue;
+  result.push({id:JSON.stringify([key,type,day]),day,due:Date.parse(day+'T13:00:00-06:00'),barcode:String(product.barcode||''),code:String(product.code||''),name:String(product.name||''),type,promotion});
+ }
+ return result;
+}
+async function deliverDynamicSchedules(db,now){
+ const setting=await db.prepare('SELECT * FROM pos_dynamic_notice_settings WHERE id=1').first();if(!setting.enabled)return;
+ const due=await db.prepare('SELECT * FROM pos_dynamic_notice_schedule WHERE delivered=0 AND due<=? ORDER BY day,id').bind(now).all();if(!due.results.length)return;
+ const recipients=(await accessDirectory(db)).filter(u=>u.kind==='cashier'&&!u.deleted&&!u.suspended&&u.email).map(u=>({email:u.email.toLowerCase(),name:[u.username,u.firstName,u.lastName].filter(Boolean).join(' ')}));
+ // Keep the schedule pending if no cashier is active yet.
+ if(!recipients.length)return;
+ const days=[...new Set(due.results.map(r=>r.day))];
+ for(const day of days){
+  const rows=due.results.filter(r=>r.day===day),ids=rows.map(r=>r.id).sort();
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(ids)));
+  const id='dynamics:'+Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+  const message=JSON.stringify({kind:'dynamic-expiry',day,company:JSON.parse(rows[0].payload).company||'POS 365',products:rows.map(r=>JSON.parse(r.payload))});
+  const writes=[db.prepare("INSERT OR IGNORE INTO pos_notices(id,sender,sender_name,message,recipients,created_at) SELECT ?,'system:dynamics','Dinámicas',?,?,? WHERE (SELECT enabled FROM pos_dynamic_notice_settings WHERE id=1)=1").bind(id,message,JSON.stringify(recipients.map(r=>r.email).sort()),rows[0].due)];
+  for(const recipient of recipients)writes.push(db.prepare('INSERT OR IGNORE INTO pos_notice_receipts(notice_id,recipient,recipient_name) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM pos_notices WHERE id=?)').bind(id,recipient.email,recipient.name,id));
+  for(const row of rows)writes.push(db.prepare('UPDATE pos_dynamic_notice_schedule SET delivered=1 WHERE id=? AND EXISTS(SELECT 1 FROM pos_notices WHERE id=?)').bind(row.id,id));
+  await db.batch(writes);
+ }
+}
+async function withDynamicNoticeLock(db,task){
+ await db.prepare('CREATE TABLE IF NOT EXISTS pos_dynamic_notice_lock(id INTEGER PRIMARY KEY,owner TEXT NOT NULL,expires INTEGER NOT NULL)').run();
+ const owner=crypto.randomUUID(),now=Date.now();
+ const lease=await db.prepare('INSERT INTO pos_dynamic_notice_lock VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET owner=excluded.owner,expires=excluded.expires WHERE expires<? RETURNING owner').bind(owner,now+120000,now).first();
+ if(!lease)return false;
+ try{await task();return true;}finally{await db.prepare('DELETE FROM pos_dynamic_notice_lock WHERE id=1 AND owner=?').bind(owner).run();}
+}
+async function processDynamicNotices(db){return withDynamicNoticeLock(db,()=>processDynamicNoticesUnlocked(db));}
+async function processDynamicNoticesUnlocked(db){
+ await dynamicNoticeTables(db);const setting=await db.prepare('SELECT * FROM pos_dynamic_notice_settings WHERE id=1').first();if(!setting.enabled)return;
+ const now=Date.now();await deliverDynamicSchedules(db,now);
+ const head=await db.prepare('SELECT revision FROM cedi_head WHERE id=1').first();if(!head||head.revision===setting.revision)return;
+ const {snapshot,revision}=await readClosingSnapshot(db),products=dynamicNoticeProducts(snapshot.products,setting.since_day).map(p=>({...p,company:snapshot.companyHeader?.tradeName||snapshot.companyHeader?.legalName||'POS 365'}));
+ const writes=[db.prepare('DELETE FROM pos_dynamic_notice_schedule WHERE delivered=0 AND due>?').bind(now)];
+ for(const item of products)writes.push(db.prepare('INSERT INTO pos_dynamic_notice_schedule(id,day,due,payload,delivered) VALUES(?,?,?,?,0) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE delivered=0').bind(item.id,item.day,item.due,JSON.stringify(item)));
+ writes.push(db.prepare('UPDATE pos_dynamic_notice_settings SET revision=? WHERE id=1 AND enabled=1').bind(revision));await db.batch(writes);await deliverDynamicSchedules(db,now);
+}
+async function manageDynamicNoticeSettings(request,env,email){
+ const db=env.DB,url=new URL(request.url);await noticeTables(db);await dynamicNoticeTables(db);
+ if(request.method==='GET'){const row=await db.prepare('SELECT enabled FROM pos_dynamic_notice_settings WHERE id=1').first();return json({enabled:!!row.enabled,mayConfigure:email===masterEmail});}
+ if(request.method!=='POST'||request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
+ if(email!==masterEmail)return json({error:'Solo la cuenta máster puede cambiar este aviso.'},403);
+ const body=await request.json().catch(()=>null);if(typeof body?.enabled!=='boolean')return json({error:'Estado inválido.'},400);
+ const changed=await withDynamicNoticeLock(db,async()=>{
+ const previous=await db.prepare('SELECT enabled FROM pos_dynamic_notice_settings WHERE id=1').first();
+ if(!!previous.enabled!==body.enabled){await db.batch([db.prepare('DELETE FROM pos_dynamic_notice_schedule WHERE delivered=0'),db.prepare('UPDATE pos_dynamic_notice_settings SET enabled=?,since_day=?,revision=NULL WHERE id=1').bind(body.enabled?1:0,dynamicNoticeDay(Date.now()))]);}
+ if(body.enabled)await processDynamicNoticesUnlocked(db);
+ });
+ return changed?json({enabled:body.enabled,mayConfigure:true}):json({error:'Otro usuario está actualizando los avisos. Reintente.'},409);
+}
+
 async function manageNotices(request,env,email,claims){
  const db=env.DB,url=new URL(request.url);await noticeTables(db);
  const enabled=!!(await db.prepare('SELECT enabled FROM pos_notice_settings WHERE id=1').first()).enabled;
  if(request.method==='GET'){
   if(url.searchParams.get('view')==='inbox'){
-   const rows=await db.prepare('SELECT n.id,n.sender_name,n.message,n.created_at,r.shown_at FROM pos_notice_receipts r JOIN pos_notices n ON n.id=r.notice_id WHERE r.recipient=? AND r.ack_at IS NULL ORDER BY n.created_at,n.id LIMIT 20').bind(email).all();
+   await processDynamicNotices(db);
+   const rows=await db.prepare('SELECT n.id,n.sender_name,n.message,n.created_at,r.shown_at,r.recipient_name FROM pos_notice_receipts r JOIN pos_notices n ON n.id=r.notice_id WHERE r.recipient=? AND r.ack_at IS NULL ORDER BY n.created_at,n.id LIMIT 20').bind(email).all();
    return json({pending:rows.results});
   }
   const recipients=await noticeDirectory(db);
@@ -3409,6 +3482,7 @@ export default { async fetch(request, env) {
   }
   if(url.pathname==='/api/sales-analysis'){if(request.method!=='GET')return json({error:'Método no permitido.'},405);try{const {snapshot}=await readClosingSnapshot(env.DB);return json({sales:snapshot.sales||[],products:(snapshot.products||[]).map(p=>({code:p.code,barcode:p.barcode,name:p.name,codes:p.codes,details:{general:p.details?.general,prices:p.details?.prices,promotions:p.details?.promotions},promotions:p.promotions})),purchases:(snapshot.purchases||[]).map(p=>({id:p.id,invoice:p.invoice,receivedDate:p.receivedDate,status:p.status,warehouse:p.warehouse,lines:(p.lines||[]).map(l=>({barcode:l.barcode,code:l.code,quantity:l.quantity}))})),suppliers:(snapshot.contactsState?.records||[]).filter(c=>c.supplier).map(c=>({id:c.id,code:c.code,name:c.name}))});}catch{return json({error:'No se pudieron consultar las ventas confirmadas.'},503);}}
   if(url.pathname==='/api/closings'){try{return await manageClosings(request,env,email);}catch{return json({error:'No se pudo consultar o confirmar el cierre. Intente de nuevo.'},503);}}
+  if(url.pathname==='/api/dynamic-notice-settings'){try{return await manageDynamicNoticeSettings(request,env,email);}catch{return json({error:'No se confirmó la configuración del aviso. Reintente.'},503);}}
   if(url.pathname==='/api/notices'){try{return await manageNotices(request,env,email,claims);}catch{return json({error:'No se confirmó la operación de Avisos. Puede reintentar.'},503);}}
   if(url.pathname==='/api/lots'){try{return await manageLots(request,env,email);}catch{return json({error:'No se pudieron consultar o guardar los lotes. Intente de nuevo.'},503);}}
   if(url.pathname==='/api/internal-invoice'){
@@ -3563,6 +3637,7 @@ export default { async fetch(request, env) {
         const now=await db.prepare('SELECT revision FROM cedi_head WHERE id=1').first();
         if(now?.revision!==rev)return conflict();
       }
+      await noticeTables(db).then(()=>processDynamicNotices(db)).catch(()=>{});
       return json({revision:rev,...(voucherOp?{voucher:voucherInfo(await readVoucher(db,voucherOp.code))}:{})});
     }catch(error){return saveError(error);}
   }
@@ -3605,6 +3680,7 @@ export default { async fetch(request, env) {
     }
     // Cleanup failure must not turn a confirmed commit into an apparent failure.
     await db.prepare('DELETE FROM cedi_parts WHERE revision=?').bind(base).run().catch(()=>{});
+    await noticeTables(db).then(()=>processDynamicNotices(db)).catch(()=>{});
     return json({revision:rev});
   }
   return json({},404);

@@ -2,7 +2,7 @@
 <html lang="es-419">
 <head>
 <meta charset="utf-8">
-<meta name="cedi-build-version" content="66">
+<meta name="cedi-build-version" content="67">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
@@ -10945,7 +10945,7 @@ function renderScaleNotices(){
 const notices=buildPosPromotionNotices(Array.from(savedTrialProducts.values()),lines,saleDate.value,cabysCatalog);
 scaleNotices.replaceChildren();
 const title=document.createElement('h3');title.textContent='Promociones vigentes';scaleNotices.append(title);
-if(!notices.length){const empty=document.createElement('p');empty.textContent='No hay promociones de Venta escala vigentes.';scaleNotices.append(empty);return;}
+if(!notices.length){const empty=document.createElement('p');empty.textContent='No hay promociones de Venta escala vigentes en esta factura.';scaleNotices.append(empty);return;}
 const quantity=value=>value.toLocaleString('es-CR',{maximumFractionDigits:3});
 for(const notice of notices){
 const article=document.createElement('article');article.className='pos-scale-notice';
@@ -11863,6 +11863,7 @@ const promo=product._salePromotion || getSalePromotion(product);
 if(promo?.type!=='scale' || promotionState(true,promo.start,promo.end,today)!=='active'){continue;}
 const matches=lines.filter(line=>(line.productId || line.code)===id);
 const bought=matches.reduce((sum,line)=>sum+line.quantity,0);
+if(bought<=0){continue;}
 const completed=Math.floor(bought/promo.units);
 const remainder=Number((bought-completed*promo.units).toFixed(6));
 const missing=bought>0 && remainder===0?0:Number((promo.units-remainder).toFixed(6));
@@ -12725,7 +12726,16 @@ if(globalThis.lucide)globalThis.lucide.createIcons({attrs:{width:18,height:18}})
 #articulos-cedi .notice-recipients input,#articulos-cedi .notice-switch input{width:auto}
 #articulos-cedi .notice-history{overflow:auto}#articulos-cedi .notice-history table{width:100%;border-collapse:collapse}#articulos-cedi .notice-history th,#articulos-cedi .notice-history td{padding:8px;text-align:left;border-bottom:1px solid var(--line)}
 dialog.pos-global-notice{box-sizing:border-box;width:min(620px,92vw);max-height:80dvh;overflow:auto;margin:clamp(20px,8vh,80px) auto auto;padding:24px;border:1px solid #a9c5b4;border-radius:12px;background:#fff;color:#203d2d;box-shadow:0 18px 60px #0005;animation:notice-arrive .25s ease-out}
+dialog.pos-global-notice [data-notice-message]{white-space:pre-wrap;overflow-wrap:anywhere}
 dialog.pos-global-notice::backdrop{background:#10291f66}dialog.pos-global-notice h2{font:600 26px system-ui;margin:0 0 12px}dialog.pos-global-notice p{font:18px/1.5 system-ui;white-space:pre-wrap;overflow-wrap:anywhere}dialog.pos-global-notice button{font:600 20px system-ui;padding:12px 22px;background:#216044;color:#fff;border:0;border-radius:7px;min-height:48px}dialog.pos-global-notice [data-notice-error]{font-size:14px;color:#9c2828}
+#articulos-cedi .dynamic-notice-toolbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:8px 0;font-size:13px}
+#articulos-cedi .dynamic-notice-toggle{display:flex;flex-direction:row;align-items:center;gap:7px;margin:0}
+#articulos-cedi .dynamic-notice-toggle input{appearance:none;width:34px;height:20px;min-height:20px;border:0;border-radius:12px;background:#777;position:relative;margin:0;flex:none}
+#articulos-cedi .dynamic-notice-toggle input:before{content:'';position:absolute;left:3px;top:3px;width:14px;height:14px;background:white;border-radius:50%}
+#articulos-cedi .dynamic-notice-toggle input:checked{background:#216044}#articulos-cedi .dynamic-notice-toggle input:checked:before{left:17px}#articulos-cedi .dynamic-notice-toggle input:disabled{opacity:.55}
+#articulos-cedi .dynamic-notice-help{position:relative}#articulos-cedi .dynamic-notice-help summary{cursor:pointer;list-style:none;font-size:20px}#articulos-cedi .dynamic-notice-help[open]{flex-basis:100%}#articulos-cedi .dynamic-notice-help div{font-size:13px;line-height:1.5;padding:8px;background:var(--soft);color:var(--ink)}
+dialog.pos-global-notice.dynamic-expiry{width:min(360px,94vw);padding:18px;max-height:85dvh}dialog.dynamic-expiry h2{font-size:18px}dialog.dynamic-expiry h3{font-size:19px;text-align:center;margin:8px 0}dialog.dynamic-expiry p{font-size:14px;line-height:1.4;margin:6px 0}dialog.dynamic-expiry section{border-top:1px dashed #777;margin-top:12px;padding-top:10px}dialog.dynamic-expiry h4{font-size:15px;margin:0 0 6px}dialog.dynamic-expiry small{font-size:12px}dialog.dynamic-expiry button{font-size:15px;padding:10px 14px;min-height:42px}dialog.dynamic-expiry .expiry-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;position:sticky;bottom:-18px;background:white;padding:8px 0}dialog.dynamic-expiry [data-notice-from]{font-size:12px}
+
 @keyframes notice-arrive{from{transform:translateY(-55px);opacity:.4}to{transform:translateY(0);opacity:1}}@media(prefers-reduced-motion:reduce){dialog.pos-global-notice{animation:none}}
 </style>
 <script>
@@ -12743,11 +12753,35 @@ toggle.onchange=async()=>{const value=toggle.checked;toggle.disabled=true;try{aw
 send.onclick=async()=>{if(sending)return;if(!pendingSend){const message=q('[data-message]').value.trim(),recipients=Array.from(compose.querySelectorAll('[data-recipients] input:checked'),i=>i.value);if(!message||!recipients.length){status.textContent='Escriba un mensaje y seleccione los destinatarios.';return;}pendingSend={action:'send',id:crypto.randomUUID(),message,recipients};}sending=true;controls();status.textContent='Confirmando envío…';try{await api(pendingSend);pendingSend=null;q('[data-message]').value='';compose.querySelectorAll('[data-recipients] input').forEach(i=>i.checked=false);status.textContent='Aviso enviado. Puede consultar las confirmaciones abajo.';}catch(error){status.textContent=error.message+' El reintento conserva el mismo aviso.';}finally{sending=false;controls();await refresh();}};
 q('[data-refresh]').onclick=refresh;
 const menuButton=Array.from(root.querySelectorAll('aside button')).find(b=>b.textContent.trim()==='Avisos');menuButton?.addEventListener('click',refresh);
-const dialog=document.createElement('dialog');dialog.className='pos-global-notice';dialog.setAttribute('aria-labelledby','pos-notice-title');dialog.innerHTML='<h2 id="pos-notice-title">Aviso</h2><p data-notice-from></p><p data-notice-message></p><p data-notice-error role="status"></p><button type="button">Entendido</button>';root.append(dialog);
+// Compact expiration-notice control next to Agregar producto.
+const dynamicAdd=root.querySelector('[data-dynamics-add]');
+if(dynamicAdd){
+ const bar=document.createElement('div');bar.className='dynamic-notice-toolbar';dynamicAdd.before(bar);bar.append(dynamicAdd);
+ const control=document.createElement('label');control.className='dynamic-notice-toggle';control.innerHTML='<input type="checkbox" role="switch" disabled><span>Aviso finalizado de dinámicas</span><small data-state>Consultando…</small>';bar.append(control);
+ const info=document.createElement('details');info.className='dynamic-notice-help';info.innerHTML='<summary aria-label="Reglas del aviso de dinámicas">ⓘ</summary><div>A la 1:00 p. m. (Costa Rica), el último día de la promoción, avisa a todas las cajas activas de Usuarios y permisos, en cualquier módulo. Si no hay conexión, se muestra al volver. Permanece pendiente hasta pulsar Entendido; Imprimir no lo confirma. La promoción sigue vigente ese día: retire los rótulos al día siguiente. Al desactivar, se detienen nuevos avisos y se conservan los pendientes. Solo la cuenta máster cambia este ajuste.</div>';bar.append(info);
+ const problem=document.createElement('span');problem.setAttribute('role','status');bar.append(problem);const input=control.querySelector('input'),label=control.querySelector('[data-state]');let saved=false,busy=false;
+ function settings(body){return new Promise((resolve,reject)=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();reject(Error('Sin confirmación. Vuelva a abrir Dinámicas.'));},20000);channel.port1.onmessage=e=>{clearTimeout(timer);channel.port1.close();e.data.ok?resolve(e.data.data):reject(Error(e.data.data?.error||'No se pudo consultar el aviso.'));};window.parent.postMessage({type:'pos365-dynamic-notice-settings',body},'*',[channel.port2]);});}
+ async function refreshSetting(){if(busy)return;busy=true;try{const state=await settings();saved=state.enabled;input.checked=saved;input.disabled=!state.mayConfigure;label.textContent=saved?'Activado':'Desactivado';problem.textContent='';}catch(error){input.disabled=true;label.textContent='Sin conexión';problem.textContent=error.message;}finally{busy=false;}}
+ input.onchange=async()=>{busy=true;input.disabled=true;const next=input.checked;try{await settings({enabled:next});saved=next;problem.textContent='Configuración guardada.';label.textContent=next?'Activado':'Desactivado';}catch(error){input.checked=saved;problem.textContent=error.message;}finally{busy=false;await refreshSetting();}};
+ Array.from(root.querySelectorAll('aside button')).find(b=>b.textContent.trim()==='Dinámicas')?.addEventListener('click',refreshSetting);window.addEventListener('online',refreshSetting);refreshSetting();
+}
+function expiryModel(notice){if(!notice.id.startsWith('dynamics:'))return null;try{const value=JSON.parse(notice.message);return value.kind==='dynamic-expiry'&&Array.isArray(value.products)?{...value,recipient:notice.recipient_name||''}:null;}catch{return null;}}
+function expiryDate(day){return day.split('-').reverse().join('/');}
+function expiryNextDay(day){return new Date(Date.parse(day+'T12:00:00Z')+86400000).toISOString().slice(0,10);}
+function expiryReceipt(model,container){
+ container.replaceChildren();const add=(tag,text,parent=container)=>{const el=document.createElement(tag);el.textContent=text;parent.append(el);return el;};
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ add('p',model.company||'POS 365');add('small',model.recipient||'');add('h3',model.day===today?'Estas promociones vencen hoy':'Promociones finalizadas el '+expiryDate(model.day));add('p','Último día vigente: '+expiryDate(model.day));add('strong','Retirar los rótulos: '+expiryDate(expiryNextDay(model.day)));
+ model.products.forEach((p,i)=>{const item=add('section','');add('h4',(i+1)+'. '+p.name,item);add('p','Código de barras: '+(p.barcode||'Sin código de barras'),item);add('p',p.type==='scale'?'Venta escala':'Venta escáner',item);add('p',p.promotion,item);add('small','Finalización: '+expiryDate(p.day),item);});add('p','Total de productos: '+model.products.length);add('small','La promoción permanece vigente durante todo el día de finalización.');
+}
+
+const dialog=document.createElement('dialog');dialog.className='pos-global-notice';dialog.setAttribute('aria-labelledby','pos-notice-title');dialog.innerHTML='<h2 id="pos-notice-title">Aviso</h2><p data-notice-from></p><div data-notice-message></div><p data-notice-error role="status"></p><div class="expiry-actions"><button type="button">Entendido</button><button type="button" data-expiry-print hidden>Imprimir</button></div>';root.append(dialog);
 let current=null,polling=false,acknowledging=false,shown=false,previousFocus=null;const acknowledge=dialog.querySelector('button'),errorText=dialog.querySelector('[data-notice-error]');
 dialog.addEventListener('cancel',event=>event.preventDefault());dialog.addEventListener('keydown',event=>event.stopPropagation());dialog.addEventListener('close',()=>{if(current&&!dialog.open)dialog.showModal();});
 async function markShown(){if(!current||shown||document.hidden)return;const id=current.id;try{await api({action:'shown',id});if(current?.id===id)shown=true;}catch{}}
-function display(notice){current=notice;shown=!!notice.shown_at;dialog.querySelector('[data-notice-from]').textContent='De: '+notice.sender_name+' · '+date(notice.created_at);dialog.querySelector('[data-notice-message]').textContent=notice.message;errorText.textContent='';previousFocus=document.activeElement;dialog.showModal();acknowledge.focus();markShown();}
+function display(notice){current=notice;shown=!!notice.shown_at;dialog.querySelector('[data-notice-from]').textContent='De: '+notice.sender_name+' · '+date(notice.created_at);const model=expiryModel(notice);dialog.classList.toggle('dynamic-expiry',!!model);dialog.querySelector('[data-expiry-print]').hidden=!model;if(model){expiryReceipt(model,dialog.querySelector('[data-notice-message]'));}else{dialog.querySelector('[data-notice-message]').textContent=notice.message;}errorText.textContent='';previousFocus=document.activeElement;dialog.showModal();acknowledge.focus();markShown();}
+dialog.querySelector('[data-expiry-print]').onclick=()=>{const model=current&&expiryModel(current);if(model)window.parent.postMessage({type:'pos365-print-dynamic-notice',model,noticeId:current.id},'*');};
+window.addEventListener('message',event=>{if(event.source===window.parent&&event.data?.type==='pos365-print-dynamic-notice-status'&&event.data.noticeId===current?.id)errorText.textContent=event.data.ok?'Impresión preparada. Pulse Entendido para confirmar el aviso.':'No se pudo abrir la impresión. El aviso sigue pendiente.';});
 async function poll(){if(polling||document.hidden)return;polling=true;try{const result=await api(null,true);if(current){if(!result.pending.some(n=>n.id===current.id)){current=null;dialog.close();}else await markShown();}if(!current&&result.pending.length)display(result.pending[0]);}catch{}finally{polling=false;}}
 acknowledge.onclick=async()=>{if(!current||acknowledging)return;acknowledging=true;acknowledge.disabled=true;try{await api({action:'ack',id:current.id});current=null;dialog.close();previousFocus?.focus?.();if(!main.hidden)refresh();await poll();}catch(error){errorText.textContent=error.message+' El aviso permanece abierto hasta confirmar.';}finally{acknowledging=false;acknowledge.disabled=false;}};
 // Keep the global acknowledgement above other modal dialogs opened by the application.
