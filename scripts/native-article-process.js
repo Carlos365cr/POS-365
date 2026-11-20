@@ -60,7 +60,7 @@ function sqlArticlePayload(){
  if(form.elements.referencia.value.trim()&&(!form.elements.proveedor.value||
       form.elements.proveedor.value==='Sin asignar'))
    throw Error('Seleccione proveedor para el código de proveedor.');
- const codes=[code,barcode,form.elements.sku?.value.trim(),form.elements.referencia.value.trim(),
+ const codes=[code,barcode,form.elements.sku?.value.trim(),
     ...sqlOriginalExtraCodes()].filter(Boolean);
  const prices=sqlOriginalPriceRows();
  const product={id,code,barcode,name,cabys,
