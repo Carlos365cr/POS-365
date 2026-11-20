@@ -154,14 +154,30 @@ sql_payment_bridge = r"""
      const shown=Number(saleExactTotalCents)/100;
      if(!Number.isFinite(shown)||Math.abs(shown-total)>0.0001)
        throw Error('El total original no coincide con el precio SQL. Descuentos, promociones e impuestos pendientes de migracion.');
+     // The existing POS displays tax, but the local catalog has no verified
+     // CABYS-to-tax-rate table yet. Require explicit test-only allocation.
+     // Never silently persist zero tax for a taxable-looking transaction.
+     if(mapped.length!==1)
+       throw Error('El desglose de IVA por linea para varios productos aun no esta migrado. Pruebe con un articulo.');
+     const taxText=prompt('IVA de PRUEBA para este articulo (en colones). Consulte el importe mostrado en la pantalla original. No se valida la tarifa fiscal:', '0');
+     if(taxText===null)return;
+     const taxInput=taxText.trim().replace(',', '.');
+     if(!/^(?:0|[0-9]+)(?:\\.[0-9]{1,4})?$/.test(taxInput))
+       throw Error('IVA invalido. Ingrese un importe no negativo con hasta cuatro decimales.');
+     const tax=Number(taxInput);
+     if(!Number.isFinite(tax)||tax>total)
+       throw Error('El IVA de prueba no puede exceder el total.');
+     const subtotal=sqlMoney(total-tax);
+     if(sqlMoney(subtotal+tax)!==total)
+       throw Error('El desglose de IVA no concilia con el precio SQL.');
      const body={registerCode:'Caja-DEV',expectedTotal:total,
-        lines:mapped.map(l=>({productId:l.product.id,quantity:l.quantity,tax:0})),
+        lines:[{productId:mapped[0].product.id,quantity:mapped[0].quantity,tax}],
         payments:[{method:'EFECTIVO-PRUEBA',amount:total}]};
      const fingerprint=JSON.stringify(body);
      if(lastDraftRequest?.fingerprint!==fingerprint)
        lastDraftRequest={fingerprint,requestId:crypto.randomUUID()};
      body.requestId=lastDraftRequest.requestId;
-     if(!confirm('Guardar BORRADOR SQL de prueba por '+total.toFixed(2)+' colones? No registra pago real ni inventario. El impuesto se guardara como 0 SOLO para probar persistencia.'))return;
+     if(!confirm('Guardar BORRADOR SQL de prueba? Total: '+total.toFixed(2)+'; subtotal: '+subtotal.toFixed(2)+'; IVA declarado para prueba: '+tax.toFixed(2)+'. No hay validacion fiscal, pago real ni inventario.'))return;
      const response=await fetch('/api/pos/drafts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
      const data=await response.json().catch(()=>({}));
      if(!response.ok)throw Error(data.error||'No se confirmo el borrador.');
