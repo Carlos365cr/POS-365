@@ -13,6 +13,16 @@ BEGIN
    OtherJson nvarchar(max) NOT NULL,
    UpdatedAt datetime2 NOT NULL DEFAULT SYSUTCDATETIME()
  );
+ CREATE TABLE dbo.POS365_ProductField(
+   ProductId uniqueidentifier NOT NULL REFERENCES dbo.POS365_Product(ProductId),
+   Section nvarchar(20) NOT NULL CHECK(Section IN(N'General',N'Costos',N'Precios')),
+   FieldIndex int NOT NULL CHECK(FieldIndex>=0),
+   FieldName nvarchar(150) NOT NULL,
+   FieldValue nvarchar(max) NOT NULL,
+   IsChecked bit NULL,
+   CONSTRAINT PK_POS365_ProductField PRIMARY KEY(ProductId,Section,FieldIndex)
+ );
+ CREATE INDEX IX_POS365_ProductField_Name ON dbo.POS365_ProductField(ProductId,Section,FieldName);
  INSERT dbo.POS365_SchemaVersion(Version) VALUES(5);
 END;
 COMMIT;
