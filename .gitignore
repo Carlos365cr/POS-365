@@ -13,3 +13,5 @@ __pycache__/
 .vs/
 **/appsettings.Local.json
 !sql/*.sql
+
+src/POS365.Local/wwwroot/pos-original.html

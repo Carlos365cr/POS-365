@@ -90,3 +90,25 @@ Validaciones automatizadas sin SQL:
 La compilacion y estas pruebas no sustituyen la validacion real del esquema, transacciones
 e importacion sobre SERVER360. No se han ejecutado desde el entorno del desarrollador
 contra ese servidor.
+
+## POS original: consulta SQL (desarrollo)
+
+El arranque genera `wwwroot/pos-original.html` desde `work/cedi-current-inner.html`
+mediante `scripts/build-local-pos.py`. Se conserva el frontend original; no es la
+caja simplificada de prueba. Los puntos de adaptacion se verifican para detener la
+generacion si cambia la fuente original. No se modifica el paquete Cloudflare.
+
+Abrir `/pos-original.html`. Codigo/barras y busqueda usan la API local (lista 0).
+La busqueda devuelve hasta 50 coincidencias; refinar el texto si hay mas. Al seleccionar
+se consulta otra vez el precio SQL. La validacion original requiere CABYS con tarifa
+definida; no inventar una tasa para articulos de prueba sin CABYS. Solo colones.
+No se cargan los metadatos historicos como promociones o costos activos.
+
+El detalle permanece temporal. Se bloquea la confirmacion del cobro y la persistencia
+del estado original, y se deshabilita la navegacion a modulos no migrados. No se leen
+respaldos locales antiguos. No usar para ventas reales. Se conserva la logica visual
+y calculos originales, incluido redondeo; no constituye una validacion fiscal.
+
+La generacion y sintaxis JavaScript fueron verificadas. Falta validar interaccion
+completa en navegador y contra SERVER360. El navegador automatizado del entorno
+no pudo arrancar por restricciones del sistema.

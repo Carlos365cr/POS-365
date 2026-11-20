@@ -25,6 +25,8 @@ $previousEnvironment = $env:ASPNETCORE_ENVIRONMENT
 try {
     $env:ConnectionStrings__Pos365 = $connection.get_ConnectionString()
     $env:ASPNETCORE_ENVIRONMENT = 'Development'
+    & py -3 -X utf8 (Join-Path $root 'scripts\build-local-pos.py')
+    if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar el POS original. Verifique Python 3.' }
     & dotnet build $project -c Debug
     if ($LASTEXITCODE -ne 0) { throw 'La compilacion fallo.' }
     if ($Inicializar) {
