@@ -25,7 +25,7 @@ if (initialize)
     }
     await using var db = new SqlConnection(cs.ConnectionString);
     await db.OpenAsync();
-    foreach (var resource in new[] { "POS365.Schema.sql", "POS365.Catalog.sql", "POS365.Sales.sql" })
+    foreach (var resource in new[] { "POS365.Schema.sql", "POS365.Catalog.sql", "POS365.Sales.sql", "POS365.Tax.sql" })
     {
         using var stream = typeof(Program).Assembly.GetManifestResourceStream(resource)!;
         using var reader = new StreamReader(stream);
@@ -56,7 +56,7 @@ app.MapGet("/health/ready", async (CancellationToken ct) =>
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand("SELECT MAX(Version) FROM dbo.POS365_SchemaVersion", connection);
         var version = await command.ExecuteScalarAsync(ct);
-        return version is int n && n >= 3
+        return version is int n && n >= 4
             ? Results.Ok(new { status = "ok", database = "POS365_DEV", schemaVersion = n })
             : Results.Json(new { status = "pending", message = "Inicialice el esquema." }, statusCode: 503);
     }
