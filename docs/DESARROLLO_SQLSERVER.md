@@ -141,3 +141,42 @@ El paso siguiente es desarrollar el servicio de confirmación atómica,
 con validación del catálogo y precios en servidor, cálculo fiscal,
 numeración, pagos, existencias e idempotencia. No confiar en totales
 calculados por el navegador.
+
+## Etapa 3B: escritura de borradores de desarrollo
+
+Se añadió `POST /api/pos/drafts` (exclusivamente loopback/Development). Recibe
+un identificador único de solicitud, caja, artículos con cantidades e impuestos
+declarados, pagos y total esperado. Consulta de nuevo los precios de la lista 0
+en SQL y guarda encabezado, líneas y pagos en una única transacción serializable.
+El reintento con el mismo RequestId devuelve el mismo borrador. Si el precio
+cambió o los pagos no coinciden, se rechaza la transacción.
+
+**Advertencia**: los impuestos del cliente no se verifican contra el CABYS
+ni contra un catálogo tributario vigente. Los registros se guardan exclusivamente
+con estado `Draft`, sin consecutivo fiscal, inventario, caja ni emisión electrónica.
+No es apto para facturación ni cobros reales. El botón original **Guardar**
+sigue sin estar conectado a la API.
+
+Con el servidor local en marcha, en otra consola PowerShell:
+```powershell
+cd C:\proyectos\POS365
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Probar-Borrador-SQL.ps1 -Codigo P1
+```
+La prueba crea deliberadamente un borrador con impuesto 0 para validar solo la
+persistencia (no el cálculo fiscal). Ejecutarla nuevamente crea otro borrador,
+pero cada ejecución reintenta internamente el mismo RequestId para verificar
+que esa solicitud no se duplique.
+
+En SSMS:
+```sql
+USE POS365_DEV;
+SELECT TOP 10 SaleId,RequestId,Status,Total,CreatedAt
+FROM dbo.POS365_Sale ORDER BY CreatedAt DESC;
+SELECT SaleId,LineNumber,Code,Quantity,UnitPrice,Total
+FROM dbo.POS365_SaleLine ORDER BY SaleId,LineNumber;
+SELECT SaleId,PaymentNumber,Method,Amount
+FROM dbo.POS365_SalePayment ORDER BY SaleId,PaymentNumber;
+```
+Pendiente: integración con el formulario original, numeración definitiva,
+validación de impuesto por CABYS, descuentos, cambio/vuelto, caja, existencias
+y comprobantes.
