@@ -273,3 +273,37 @@ realice el calculo. La vista previa del navegador es solo informativa.
 Aun NO se ha implementado la determinacion fiscal oficial por CABYS,
 exenciones, descuentos, precios que excluyen IVA, multiproducto en
 la interfaz, numero fiscal ni inventario.
+
+## Integración inicial del mantenimiento original de artículos con SQL (P3)
+
+`scripts/native-article-sql.js` se inserta al generar
+`pos-original.html` con `scripts/build-local-pos.py`.
+Dentro del mantenimiento original aparecen controles **Buscar SQL**,
+**Nuevo artículo SQL**, **Guardar artículo SQL** y campos explícitos
+**Código SQL**, **Precio lista 0** y **Tarifa IVA de desarrollo**.
+
+Al guardar toma nombre, barras y CABYS desde el formulario original, y
+utiliza `PUT /api/catalog/products/{id}`. En modificación primero se
+debe cargar el artículo con Buscar SQL; así se usa el `rowversion` real y
+se conservan las listas de precios adicionales. Guarda además la tarifa
+de desarrollo, si se indica. **No** migra ni guarda todavía costos,
+categorías, bodegas, existencias, proveedor, imágenes ni demás campos
+históricos. El consecutivo visual `18262` del formulario antiguo no se
+interpreta como código SQL: el operador indica código SQL o usa barras.
+No se activa el guardado histórico de la aplicación.
+
+Prueba P3: en `/pos-original.html` abrir Mantenimiento de artículos,
+pulsar `Nuevo artículo SQL`, rellenar nombre y barras en el formulario
+original, indicar código SQL `P3` y precio lista 0 `1500`, registrar
+CABYS válido si corresponde y pulsar `Guardar artículo SQL`.
+Confirmar en SSMS `POS365_Product`, `POS365_ProductIdentifier` y
+`POS365_ProductPrice`. Desde Facturación POS escanear `P3`: debe
+devolver el artículo, salvo validaciones fiscales aún pendientes.
+Para editarlo, usar **Buscar SQL** y luego **Guardar artículo SQL**.
+Si la interfaz no encuentra un campo nativo muestra un error de
+validación; nunca afirmar que todos los campos del formulario histórico
+se han almacenado.
+
+Los cambios de esta etapa están subidos a la rama, pero la compilación
+y el comportamiento del formulario deben validarse en el navegador del
+usuario. No utilizar para producción.
