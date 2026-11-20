@@ -211,3 +211,30 @@ presionar `Guardar borrador SQL (prueba)` y confirmar. Revisar en SSMS
 el estado `Draft`, las líneas y el pago de prueba. Repetir el mismo
 botón sin cambiar el detalle: debe devolver el mismo identificador sin
 duplicar. No fue posible verificar el navegador remoto desde el conector.
+
+## Etapa 3D: conciliacion aritmetica de IVA declarado en borradores
+
+La pantalla original ahora solicita expresamente el **IVA de prueba** al pulsar
+`Guardar borrador SQL (prueba)`. No lo calcula automaticamente: el catalogo
+relacional aun no tiene fuente validada para tarifas fiscales CABYS.
+En esta etapa el boton admite **solo un renglon de articulo** para no distribuir
+incorrectamente un IVA global entre productos. Valida que el impuesto no sea
+negativo ni supere el total, y concilia subtotal + IVA = total. El identificador
+de solicitud idempotente incluye el importe declarado, de modo que cambiarlo
+constituye otra solicitud.
+
+Prueba orientativa con P1 (precio ₡150 y sin descuentos):
+- En la pantalla original, verificar que el IVA visual sea ₡17,26.
+- Al pulsar el boton de borrador, escribir **17.26** en el campo de IVA de prueba.
+- Confirmar que SQL guarde `Subtotal=132.7400`, `Tax=17.2600`,
+  `Total=150.0000` en encabezado y linea, y el pago neto `150.0000`.
+- No registrar el efectivo recibido de ₡200 como pago de ₡200: el pago
+  aplicado al borrador sigue siendo ₡150, dejando ₡50 de vuelto fuera
+  del registro hasta migrar la captura de tender/change.
+- Repetir sin cambiar el importe de IVA ni los productos: debe devolver
+  el mismo borrador. Una nueva carga de la pagina crea una nueva sesion.
+
+La coincidencia aritmetica NO implica validacion legal ni tributaria;
+no se han migrado tarifas por CABYS, redondeos fiscales, descuentos,
+promociones, consecutivos definitivos ni inventario. No utilizar
+estos borradores para declaraciones o facturas reales.
