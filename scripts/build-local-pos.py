@@ -223,5 +223,10 @@ sql_payment_bridge = r"""
 # Inject inside initializePos body so lines and saleExactTotalCents resolve in the
 # same lexical scope. Runtime initialization is deferred until its DOM is ready.
 replace('function initializePos(){', 'function initializePos(){\n'+sql_payment_bridge+'\n')
+# Inject the native SQL controls into the ORIGINAL maintenance form.
+# Unlike the old additional editor, this reads the visible native inputs.
+native_sql=(root/'scripts/native-article-sql.js').read_text(encoding='utf-8')
+if '</body>' not in s: raise RuntimeError('No se encontro el cierre del POS original.')
+s=s.replace('</body>', '<script>'+native_sql+'</script></body>', 1)
 out=root/'src/POS365.Local/wwwroot/pos-original.html';out.write_text(s,encoding='utf-8')
 print('POS original conectado a consulta SQL:',out)
