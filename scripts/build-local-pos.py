@@ -68,13 +68,35 @@ maintenance_bridge = r"""
       title.dataset.sqlCatalogLinked = 'true';
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = 'Buscar y modificar artículos SQL';
-      button.title = 'Abre el catálogo real POS365_DEV; este formulario histórico todavía no está migrado.';
+      button.textContent = 'Buscar, crear y modificar en SQL';
+      button.title = 'Abre el catálogo SQL dentro de esta misma pantalla, sin cambiar de pestaña.';
       button.style.cssText = 'margin-left:12px;padding:7px 12px;border-radius:6px;background:#155f89;color:white;border:0;cursor:pointer;font:inherit;font-size:13px';
-      button.onclick = () => window.open('/catalogo.html', '_blank', 'noopener');
+      button.onclick = () => {
+        let dialog = document.getElementById('pos365-inline-sql-catalog');
+        if (!dialog) {
+          dialog = document.createElement('dialog');
+          dialog.id = 'pos365-inline-sql-catalog';
+          dialog.style.cssText = 'width:min(1180px,98vw);height:min(92vh,940px);max-width:none;max-height:none;padding:0;border:1px solid #a8b7b0;border-radius:12px;box-shadow:0 15px 70px #0006;background:#fff;color:#19304a';
+          const header = document.createElement('div');
+          header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;background:#eaf0ee;border-bottom:1px solid #bdc9c4';
+          const heading = document.createElement('strong');
+          heading.textContent = 'Mantenimiento de artículos · SQL Server / POS365_DEV';
+          const close = document.createElement('button');
+          close.type='button';close.textContent='Volver al POS';close.style.cssText='padding:8px 12px;border:1px solid #789;border-radius:6px;cursor:pointer';
+          close.onclick=()=>dialog.close();
+          header.append(heading,close);
+          const iframe=document.createElement('iframe');
+          iframe.title='Catálogo SQL integrado';
+          iframe.src='/catalogo.html';
+          iframe.style.cssText='display:block;width:100%;height:calc(100% - 52px);border:0;background:white';
+          dialog.append(header,iframe);
+          document.body.append(dialog);
+        }
+        dialog.showModal();
+      };
       title.append(button);
       const note = document.createElement('small');
-      note.textContent = ' Los artículos de SQL Server se modifican desde el botón azul. La búsqueda de este formulario sigue pendiente de migración.';
+      note.textContent = ' Use el botón azul para guardar artículos, listas de precios y tarifas IVA en SQL Server sin salir del POS. Este formulario histórico todavía no persiste sus otros campos en SQL.';
       note.style.cssText = 'display:block;font-size:12px;color:#8b4b12;margin-top:6px';
       title.after(note);
     }
