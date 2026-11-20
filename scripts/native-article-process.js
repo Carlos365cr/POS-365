@@ -11,8 +11,16 @@ function sqlArticleStatus(text,error=false){
  message.textContent=text;
  message.style.color=error?'#a32222':'#23633f';
 }
+// Tax configuration lives in the original Prices tab, not in a parallel toolbar.
+const nativeTaxLabel=document.createElement('label');
+nativeTaxLabel.textContent='Tarifa IVA SQL (%) · desarrollo';
+const nativeTaxInput=document.createElement('input');
+nativeTaxInput.type='number';nativeTaxInput.name='sqlTaxRate';nativeTaxInput.min='0';
+nativeTaxInput.max='100';nativeTaxInput.step='0.0001';nativeTaxInput.placeholder='Sin configurar';
+nativeTaxLabel.append(nativeTaxInput);
+priceForm.querySelector('.price-settings')?.prepend(nativeTaxLabel);
 function sqlArticleRates(){
- const tax=priceForm.elements.ivaEspecial;
+ const tax=priceForm.elements.sqlTaxRate;
  if(tax && tax.value.trim()){
   const n=Number(tax.value);
   if(!Number.isFinite(n)||n<0||n>100)throw Error('Tarifa IVA no valida.');
@@ -83,8 +91,8 @@ async function sqlArticleLoad(id){
  // Existing native renderer populates all three tabs and their dependent controls.
  loadTrialProduct(oldStyle);
  sqlNativeCurrent=data;
- if(t.rate!==null&&priceForm.elements.ivaEspecial)
-   priceForm.elements.ivaEspecial.value=t.rate;
+ if(priceForm.elements.sqlTaxRate)
+   priceForm.elements.sqlTaxRate.value=t.rate??'';
  setArticleOperation('modificacion');
  sqlArticleStatus('Artículo '+p.code+' cargado desde SQL. Edite y pulse Procesar.');
 }
