@@ -62,7 +62,7 @@ public static class CatalogApi
                 if(value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
                     throw new ArgumentException("Falta información de "+field);
                 var json=value.GetRawText();
-                if(json.Length>1000000)throw new ArgumentException(field+" supera 1 MB.");
+                if(json.Length>(field=="Metadatos"?6000000:1000000))throw new ArgumentException(field+" supera el tamaño permitido.");
                 return json;
             }
             var general=CheckedJson(article.General,"General");
