@@ -162,7 +162,7 @@ sql_payment_bridge = r"""
      const taxText=prompt('IVA de PRUEBA para este articulo (en colones). Consulte el importe mostrado en la pantalla original. No se valida la tarifa fiscal:', '0');
      if(taxText===null)return;
      const taxInput=taxText.trim().replace(',', '.');
-     if(!/^(?:0|[0-9]+)(?:\\.[0-9]{1,4})?$/.test(taxInput))
+     if(!/^(?:0|[0-9]+)(?:\.[0-9]{1,4})?$/.test(taxInput))
        throw Error('IVA invalido. Ingrese un importe no negativo con hasta cuatro decimales.');
      const tax=Number(taxInput);
      if(!Number.isFinite(tax)||tax>total)
