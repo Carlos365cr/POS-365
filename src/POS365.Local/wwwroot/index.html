@@ -1,4 +1,13 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>POS365 · Desarrollo local</title>
-<style>body{font:17px system-ui;background:#eef3f8;color:#19304a;max-width:800px;margin:8vh auto;padding:24px}main{background:white;border-radius:16px;padding:32px}button{background:#145b93;color:white;border:0;border-radius:8px;padding:14px;font:inherit}pre{white-space:pre-wrap}small{color:#526477}</style>
-<main><p><a href="/pos-original.html">Abrir POS original con catálogo SQL</a></p><small>POS365 / ENTORNO DE DESARROLLO</small><h1>Conexión local a SQL Server</h1><p>Catálogo de artículos y precios disponible en SQL Server. Ventas, compras, inventario, usuarios y sincronización todavía no están migrados.</p><p><a href="/catalogo.html">Abrir artículos y precios →</a></p><p><a href="/pos-sql.html">Abrir caja SQL de pruebas (sin facturación) →</a></p><button id="check">Comprobar conexión</button><pre id="result" role="status"></pre><p>Este entorno escucha únicamente en esta computadora. No está habilitado para producción.</p></main>
-<script>document.querySelector('#check').onclick=async()=>{const out=document.querySelector('#result');out.textContent='Consultando…';try{const r=await fetch('/health/ready');const data=await r.json();out.textContent=(r.ok?'Conexión correcta\n':'Requiere revisión\n')+JSON.stringify(data,null,2)}catch{out.textContent='No se pudo contactar con la API local.'}};</script></html>
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="0;url=/pos-original.html">
+<title>POS 365 · Inicio</title>
+</head>
+<body>
+<p>Abriendo POS 365. <a href="/pos-original.html">Entrar al sistema</a></p>
+<script>location.replace('/pos-original.html');</script>
+</body>
+</html>
