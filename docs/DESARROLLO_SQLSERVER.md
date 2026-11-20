@@ -112,3 +112,32 @@ y calculos originales, incluido redondeo; no constituye una validacion fiscal.
 La generacion y sintaxis JavaScript fueron verificadas. Falta validar interaccion
 completa en navegador y contra SERVER360. El navegador automatizado del entorno
 no pudo arrancar por restricciones del sistema.
+
+## Etapa 3: estructura relacional de ventas (sin guardar facturas todavía)
+
+Ejecute `scripts/Iniciar-Local.ps1 -Inicializar` para aplicar la migración 3.
+`/health/ready` exige ahora `schemaVersion >= 3`.
+
+La migración crea `POS365_Sale`, `POS365_SaleLine` y
+`POS365_SalePayment` para documentar encabezados, renglones y pagos.
+Incluye claves foráneas al producto y a la sucursal, RequestId único
+para idempotencia futura, importes decimales y restricciones de integridad.
+Por ahora son tablas preparatorias: **no existe API de guardado de ventas**
+ni asignación definitiva de consecutivos, impuestos fiscales, descuentos,
+inventario o anulación. No escribir registros manualmente ni usarlas
+para facturación real. El botón de cobro se mantiene inoperativo.
+
+Comprobar el esquema en SSMS:
+```sql
+USE POS365_DEV;
+SELECT Version,AppliedAt FROM dbo.POS365_SchemaVersion ORDER BY Version;
+SELECT name FROM sys.tables WHERE name IN
+('POS365_Sale','POS365_SaleLine','POS365_SalePayment');
+SELECT COUNT_BIG(*) AS Ventas FROM dbo.POS365_Sale;
+```
+La consulta de ventas debe devolver cero en una base que no haya recibido
+intervenciones manuales. Volver a inicializar debe ser idempotente.
+El paso siguiente es desarrollar el servicio de confirmación atómica,
+con validación del catálogo y precios en servidor, cálculo fiscal,
+numeración, pagos, existencias e idempotencia. No confiar en totales
+calculados por el navegador.
