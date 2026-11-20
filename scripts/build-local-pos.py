@@ -8,7 +8,7 @@ def replace(old,new):
  if s.count(old)!=1: raise RuntimeError('Original POS changed; review integration anchor: '+old[:90])
  s=s.replace(old,new)
 replace('connect-src blob: data:;',"connect-src 'self' blob: data:;")
-replace('globalThis.cediEntryModule = initialGlobals.entryModule;',"globalThis.cediEntryModule = 'Facturación POS';")
+replace('globalThis.cediEntryModule = initialGlobals.entryModule;',"globalThis.cediEntryModule = null;")
 replace('function initializePos(){', '''function initializePos(){
 let sqlBusy=false, sqlSearchSequence=0;
 async function sqlProduct(code){
@@ -47,7 +47,7 @@ s=s[:start]+'''async function searchPosProducts(){
 replace('function openPaymentMethod(){',"function openPaymentMethod(){paymentPanel.querySelector('[data-pos-balance]').textContent='Cobro pendiente de migración. No se guardó ninguna venta.';return;\n")
 replace('async function completeTrialPayment(method){',"async function completeTrialPayment(method){throw Error('Ventas SQL pendientes de migración.');\n")
 replace('function persistTrialSnapshot(requireConfirmation=false,blockEmail,voucherOp){',"function persistTrialSnapshot(requireConfirmation=false,blockEmail,voucherOp){if(requireConfirmation)throw Error('Operación no migrada a SQL Server.');return;\n")
-replace("const entryModule=[...menu.querySelectorAll('button.menu-item')]", "for(const b of menu.querySelectorAll('button')){if(b.textContent.trim()!=='Facturación POS')b.disabled=true;}\nconst entryModule=[...menu.querySelectorAll('button.menu-item')]")
+replace("const entryModule=[...menu.querySelectorAll('button.menu-item')]", "for(const b of menu.querySelectorAll('button')){const name=b.textContent.trim();if(!['Inicio','Facturación POS','Artículos'].includes(name))b.disabled=true;}\nconst entryModule=[...menu.querySelectorAll('button.menu-item')]")
 replace('const saleDate=posMain.querySelector', '''const sqlNotice=document.createElement('p');sqlNotice.style.cssText='padding:12px;background:#fff1d0;color:#493400';sqlNotice.textContent='DESARROLLO SQL · Pantalla original · Lista 0 · Detalle temporal. Sin guardar ventas, pagos ni inventario. Costos y promociones aún no migrados.';posMain.prepend(sqlNotice);
 const saleDate=posMain.querySelector''')
 replace('async function restoreTrialState(){', 'async function restoreTrialState(){return;\n')
