@@ -11,5 +11,6 @@
     <EmbeddedResource Include="../../sql/002_catalog.sql" LogicalName="POS365.Catalog.sql" />
     <EmbeddedResource Include="../../sql/003_sales_foundation.sql" LogicalName="POS365.Sales.sql" />
     <EmbeddedResource Include="../../sql/004_product_tax.sql" LogicalName="POS365.Tax.sql" />
+    <EmbeddedResource Include="../../sql/005_article_extended.sql" LogicalName="POS365.ArticleExtended.sql" />
   </ItemGroup>
 </Project>
