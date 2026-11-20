@@ -1,5 +1,10 @@
 
 let sqlNativeCurrent=null,sqlNativeBusy=false;
+// The original form resets its inputs on No procesar; clear the SQL editing token too.
+for(const target of [form,costsForm,priceForm])
+ target.addEventListener('reset',()=>{sqlNativeCurrent=null;});
+for(const option of form.querySelectorAll('input[name="articuloOperacion"]'))
+ option.addEventListener('change',()=>{if(option.checked&&option.value==='inclusion')sqlNativeCurrent=null;});
 const sqlCatalogUrl='/api/catalog/';
 async function sqlArticleRequest(url,options={}){
  const r=await fetch(url,{cache:'no-store',...options});
