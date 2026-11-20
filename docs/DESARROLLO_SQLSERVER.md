@@ -307,3 +307,77 @@ se han almacenado.
 Los cambios de esta etapa están subidos a la rama, pero la compilación
 y el comportamiento del formulario deben validarse en el navegador del
 usuario. No utilizar para producción.
+
+## Etapa 5: botón original Procesar y mantenimiento completo SQL
+
+**Objetivo**: no utilizar un editor SQL alternativo ni una barra paralela.
+El generador `scripts/build-local-pos.py` ahora reemplaza el controlador
+histórico de los tres botones **Procesar** (General, Costos, Precios) por
+`saveSqlArticle`, manteniendo el diseño y los campos de las tres pestañas.
+La búsqueda superior nativa se dirige al catálogo SQL. No se ejecuta el
+guardado de snapshot del navegador al pulsar Procesar.
+
+La nueva migración 5 crea:
+- `POS365_ProductExtended`: instantáneas completas JSON por sección y
+  otros datos de imagen/promociones.
+- `POS365_ProductField`: cada entrada original con su sección,
+  nombre, posición, valor y estado checkbox/radio; así los datos
+  permanecen consultables como filas SQL.
+- Se siguen manteniendo `POS365_Product`, `POS365_ProductIdentifier`,
+  `POS365_ProductPrice` y `POS365_ProductTax` para uso operativo.
+
+`PUT /api/catalog/native/{id}` guarda los datos relacionales,
+las tres secciones y, si se proporciona, la tarifa de desarrollo dentro
+de una **misma transacción**. Para modificaciones exige el `rowversion`
+del registro leído de SQL; un conflicto no sobrescribe otro cambio.
+`GET /api/catalog/native/{id}` permite restaurar los formularios.
+La propiedad `details` del sistema anterior se reconstruye para
+`loadTrialProduct` y las pestañas originales.
+
+**Limitaciones**: Los valores de costos, bodegas y existencias se
+almacenan como datos de configuración del artículo, pero NO implican
+movimientos contables ni existencias operativas. Tampoco crean aún
+maestros relacionales de proveedores, categorías o ubicaciones. El
+consecutivo interno visual del frontend debe ser único; su asignación
+centralizada en servidor sigue pendiente. Por seguridad, la exclusión
+SQL queda bloqueada. La imagen se almacena como metadato y aún debe
+comprobarse su visualización/restauración en el navegador.
+
+### Prueba local
+
+1. Detenga la API, actualice `desarrollo/sqlserver` y ejecute
+   `scripts/Iniciar-Local.ps1 -Inicializar` para aplicar versión **5**.
+2. Abra `/pos-original.html` y entre en Mantenimiento de artículos.
+   Debe ver las pestañas originales y el botón **Procesar**, sin la
+   barra extra de Guardar artículo SQL.
+3. En modo Inclusión, complete nombre, código interno único, barras
+   (`p3`), CABYS y precio en Precios, junto con algunos datos
+   adicionales en General y Costos. Pulse **Procesar** en cualquiera
+   de las tres pestañas.
+4. Compruebe en SSMS `POS365_Product`, `POS365_ProductField` y
+   `POS365_ProductExtended`; después pruebe buscar por `p3`
+   en Facturación POS.
+5. Para modificar, use la **búsqueda superior** de artículos, seleccione
+   `P3`, edite campos y pulse **Procesar** en modo Modificación.
+   Vuelva a abrir el artículo y confirme que los valores persisten.
+
+Consulta SQL:
+```sql
+USE POS365_DEV;
+SELECT Version FROM dbo.POS365_SchemaVersion ORDER BY Version;
+SELECT p.ProductId,p.Code,p.Barcode,p.Name,r.Amount
+FROM dbo.POS365_Product p
+LEFT JOIN dbo.POS365_ProductPrice r
+  ON r.ProductId=p.ProductId AND r.ListNumber=0
+WHERE p.Barcode='p3' OR p.Code='P3';
+SELECT pf.Section,pf.FieldName,pf.FieldValue,pf.IsChecked
+FROM dbo.POS365_ProductField pf
+JOIN dbo.POS365_Product p ON p.ProductId=pf.ProductId
+WHERE p.Barcode='p3'
+ORDER BY pf.Section,pf.FieldIndex;
+```
+
+**Pendiente de validar**: ejecución del generador y .NET en Windows,
+lectura/escritura de campos condicionales, formatos de imágenes, recarga
+de listas, códigos duplicados y consistencia de inventario. No utilizar
+en producción.
