@@ -238,3 +238,38 @@ La coincidencia aritmetica NO implica validacion legal ni tributaria;
 no se han migrado tarifas por CABYS, redondeos fiscales, descuentos,
 promociones, consecutivos definitivos ni inventario. No utilizar
 estos borradores para declaraciones o facturas reales.
+
+## Etapa 4: tarifa IVA explicitamente configurada y calculada en la API
+
+Se añade migracion SQL version 4 (`POS365_ProductTax`). No modifica
+los borradores previos. El operador debe configurar explicitamente la tarifa
+en el catalogo SQL, usando el mantenimiento de articulos SQL, campo
+`Tarifa IVA de desarrollo`. No se infiere automaticamente del CABYS
+ni se asegura que la tarifa sea fiscalmente aplicable. Tarifa NULL significa
+**sin configurar**, distinto de una tarifa exenta configurada en 0%.
+
+`POST /api/pos/drafts` consulta el indicador de precio con IVA, el precio
+lista 0 y la tarifa configurada en SQL. Para esta etapa solo se admiten
+productos cuyo precio incluye IVA: al resto se le devuelve un error.
+La API calcula el impuesto dentro de la transaccion; rechaza cualquier
+impuesto enviado que difiera. Redondea el IVA a 2 decimales para esta
+prueba (no supone validacion fiscal). El boton de borrador del POS original
+ya no solicita el IVA manualmente y envia tax=null, para que el servidor
+realice el calculo. La vista previa del navegador es solo informativa.
+
+### Prueba
+
+1. Detener POS local y actualizar la rama.
+2. Ejecutar `scripts/Iniciar-Local.ps1 -Inicializar` UNA vez para la version 4.
+3. Abrir `/catalogo.html`, editar P1 y configurar **13** en tarifa IVA
+   solo si el usuario verifica que esa tarifa corresponde al producto de prueba.
+   La opcion "Precios incluyen IVA" debe estar activada.
+4. Abrir `/pos-original.html`; agregar P1 (150 colones), ir a Pago con
+   y pulsar "Guardar borrador SQL (prueba)". Si se configuró 13%, el nuevo
+   borrador debe indicar subtotal 132.7400, IVA 17.2600, total 150.0000.
+5. Comprobar en SSMS versiones 1 a 4 y nuevos registros Draft en
+   `POS365_Sale` y `POS365_SaleLine`. Los borradores previos permanecen.
+
+Aun NO se ha implementado la determinacion fiscal oficial por CABYS,
+exenciones, descuentos, precios que excluyen IVA, multiproducto en
+la interfaz, numero fiscal ni inventario.
