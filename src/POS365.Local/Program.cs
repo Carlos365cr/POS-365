@@ -3,10 +3,15 @@ using Microsoft.Data.SqlClient;
 
 var initialize = args.Contains("--initialize-db");
 var builder = WebApplication.CreateBuilder(args.Where(a => a != "--initialize-db").ToArray());
-// Development scaffold: cannot be exposed as a production POS.
-if (!builder.Environment.IsDevelopment())
-    throw new InvalidOperationException("Este entorno inicial solo funciona en Development; aun no incluye autenticacion de produccion.");
-builder.WebHost.UseUrls("http://127.0.0.1:5085");
+// Development remains loopback-only. IIS staging requires Windows Authentication
+// and IIS in-process hosting. This is not a production release.
+var iisStaging = builder.Environment.IsEnvironment("IIS-Staging");
+if (!builder.Environment.IsDevelopment() && !iisStaging)
+    throw new InvalidOperationException("POS365 solo admite Development o IIS-Staging por ahora.");
+if (iisStaging && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_IIS_PHYSICAL_PATH")))
+    throw new InvalidOperationException("IIS-Staging requiere hospedaje mediante IIS.");
+if (!iisStaging)
+    builder.WebHost.UseUrls("http://127.0.0.1:5085");
 var raw = builder.Configuration.GetConnectionString("Pos365");
 if (string.IsNullOrWhiteSpace(raw))
     throw new InvalidOperationException("Configure ConnectionStrings__Pos365 mediante scripts/Iniciar-Local.ps1.");
@@ -38,10 +43,19 @@ if (initialize)
 var app = builder.Build();
 app.Use(async (context, next) =>
 {
-    if (context.Connection.RemoteIpAddress is not { } ip || !IPAddress.IsLoopback(ip))
-    { context.Response.StatusCode = 403; return; }
-    if (context.Request.Host.Host is not ("127.0.0.1" or "localhost" or "::1"))
-    { context.Response.StatusCode = 400; return; }
+    if (iisStaging)
+    {
+        // IIS must have Windows Authentication enabled and Anonymous disabled.
+        if (context.User.Identity?.IsAuthenticated != true)
+        { context.Response.StatusCode = 401; return; }
+    }
+    else
+    {
+        if (context.Connection.RemoteIpAddress is not { } ip || !IPAddress.IsLoopback(ip))
+        { context.Response.StatusCode = 403; return; }
+        if (context.Request.Host.Host is not ("127.0.0.1" or "localhost" or "::1"))
+        { context.Response.StatusCode = 400; return; }
+    }
     context.Response.Headers.CacheControl = "no-store";
     await next();
 });
