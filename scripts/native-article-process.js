@@ -163,7 +163,7 @@ async function saveSqlArticle(event){
  const wiredSqlDialogs=new WeakSet();
  let dialogSearchGeneration=0;
  function findNativeArticleDialog(){
-  const heads=document.querySelectorAll('h1,h2,h3,h4,[role="heading"]');
+  const heads=document.querySelectorAll('h1,h2,h3,h4,strong,[role="heading"]');
   for(const head of heads){
    if(head.textContent.trim().toLowerCase()!=='buscar artículo')continue;
    let panel=head.parentElement;
@@ -184,7 +184,7 @@ async function saveSqlArticle(event){
   if(!input||!table)return;
   wiredSqlDialogs.add(panel);
   const summary=[...panel.querySelectorAll('p,span,small,div')].find(el=>
-    el.children.length===0&&/\\d+ artículos encontrados/i.test(el.textContent.trim()));
+    el.children.length===0&&/\d+ artículos encontrados/i.test(el.textContent.trim()));
   const setSummary=value=>{if(summary)summary.textContent=value;};
   let timer=null;
   const run=async()=>{
