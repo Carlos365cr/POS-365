@@ -53,5 +53,47 @@ const saleDate=posMain.querySelector''')
 replace('async function restoreTrialState(){', 'async function restoreTrialState(){return;\n')
 # Disable clear while a lookup is in flight, so delayed responses cannot refill a cleared cart.
 s=s.replace("posMain.querySelector('[data-pos-clear]').onclick=()=>{", "posMain.querySelector('[data-pos-clear]').onclick=()=>{if(sqlBusy)return;")
+# SQL maintenance access from the original application without allowing legacy writes.
+# This interim bridge avoids showing an empty legacy catalog as if it were SQL data.
+maintenance_bridge = r"""
+<script>
+(() => {
+  let scheduling = false;
+  function attach() {
+    scheduling = false;
+    const headers = document.querySelectorAll('h1,h2,h3,h4,legend,strong');
+    for (const title of headers) {
+      if (title.textContent.trim() !== 'Mantenimiento de artículos' ||
+          title.dataset.sqlCatalogLinked === 'true') continue;
+      title.dataset.sqlCatalogLinked = 'true';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Buscar y modificar artículos SQL';
+      button.title = 'Abre el catálogo real POS365_DEV; este formulario histórico todavía no está migrado.';
+      button.style.cssText = 'margin-left:12px;padding:7px 12px;border-radius:6px;background:#155f89;color:white;border:0;cursor:pointer;font:inherit;font-size:13px';
+      button.onclick = () => window.open('/catalogo.html', '_blank', 'noopener');
+      title.append(button);
+      const note = document.createElement('small');
+      note.textContent = ' Los artículos de SQL Server se modifican desde el botón azul. La búsqueda de este formulario sigue pendiente de migración.';
+      note.style.cssText = 'display:block;font-size:12px;color:#8b4b12;margin-top:6px';
+      title.after(note);
+    }
+  }
+  const observer = new MutationObserver(() => {
+    if (!scheduling) {
+      scheduling = true;
+      requestAnimationFrame(attach);
+    }
+  });
+  if (document.documentElement) observer.observe(document.documentElement, {childList:true,subtree:true});
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach);
+  else attach();
+})();
+</script>
+"""
+if '</body>' not in s:
+    raise RuntimeError('No se encontró el cierre HTML del POS original.')
+head,tail=s.rsplit('</body>',1)
+s=head+maintenance_bridge+'</body>'+tail
 out=root/'src/POS365.Local/wwwroot/pos-original.html';out.write_text(s,encoding='utf-8')
 print('POS original conectado a consulta SQL:',out)
