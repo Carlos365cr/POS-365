@@ -4,7 +4,7 @@ using Microsoft.Data.SqlClient;
 // Test-only endpoint: saves an unposted Draft, never a fiscal invoice or stock movement.
 public static class PosDraftApi
 {
-    public sealed record DraftLine(Guid ProductId, decimal Quantity, decimal Tax);
+    public sealed record DraftLine(Guid ProductId, decimal Quantity, decimal? Tax);
     public sealed record DraftPayment(string Method, decimal Amount);
     public sealed record DraftRequest(Guid RequestId, string RegisterCode, DraftLine[] Lines,
         DraftPayment[] Payments, decimal ExpectedTotal);
@@ -22,7 +22,7 @@ public static class PosDraftApi
                 || request.Payments.Length is < 1 or > 10 || request.ExpectedTotal <= 0
                 || request.Lines.Any(x => x.ProductId == Guid.Empty || x.Quantity <= 0
                     || x.Quantity > 99999 || decimal.Round(x.Quantity, 4) != x.Quantity
-                    || x.Tax < 0 || decimal.Round(x.Tax, 4) != x.Tax)
+                    || (x.Tax is decimal t && (t < 0 || decimal.Round(t, 4) != t)))
                 || request.Payments.Any(x => string.IsNullOrWhiteSpace(x.Method) || x.Method.Length > 30
                     || x.Amount <= 0 || decimal.Round(x.Amount, 4) != x.Amount))
                 return Results.BadRequest(new { error = "Solicitud de prueba invalida." });
@@ -70,9 +70,10 @@ public static class PosDraftApi
                 {
                     var line = request.Lines[i];
                     await using var lookup = new SqlCommand("""
-                        SELECT p.Code,p.Name,p.Cabys,r.Amount,r.Currency
+                        SELECT p.Code,p.Name,p.Cabys,r.Amount,r.Currency,p.IncludesVAT,t.TaxRate
                         FROM dbo.POS365_Product p WITH (HOLDLOCK)
                         INNER JOIN dbo.POS365_ProductPrice r ON r.ProductId=p.ProductId AND r.ListNumber=0
+                        LEFT JOIN dbo.POS365_ProductTax t ON t.ProductId=p.ProductId
                         WHERE p.ProductId=@id
                         """, db, tx);
                     lookup.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = line.ProductId;
@@ -84,11 +85,17 @@ public static class PosDraftApi
                     var name = reader.GetString(1);
                     var cabys = reader.GetString(2);
                     var price = reader.GetDecimal(3);
-                    var gross = decimal.Round(price * line.Quantity, 4);
-                    if (line.Tax > gross)
-                        return Results.BadRequest(new { error = "Impuesto supera importe de linea." });
+                    if (!reader.GetBoolean(5))
+                        return Results.BadRequest(new { error = "El precio no incluye IVA; falta migrar el calculo para precios sin IVA." });
+                    if (reader.IsDBNull(6))
+                        return Results.BadRequest(new { error = "Configure la tarifa IVA del articulo en el catalogo SQL antes de guardar." });
+                    var rate = reader.GetDecimal(6);
+                    var gross = decimal.Round(price * line.Quantity, 4, MidpointRounding.AwayFromZero);
+                    var taxAmount = decimal.Round(gross - gross / (1m + rate / 100m), 2, MidpointRounding.AwayFromZero);
+                    if (line.Tax is decimal stated && stated != taxAmount)
+                        return Results.Conflict(new { error = "IVA enviado no coincide con tarifa de SQL. No se guardo." });
                     rows.Add((line.ProductId, code, name, cabys, line.Quantity, price, gross,
-                        line.Tax, gross - line.Tax));
+                        taxAmount, gross - taxAmount));
                 }
                 var total = rows.Sum(x => x.Gross);
                 var tax = rows.Sum(x => x.Tax);
@@ -152,7 +159,7 @@ public static class PosDraftApi
                 }
                 await tx.CommitAsync(ct);
                 return Results.Ok(new { draftId = saleId, total, alreadySaved = false, status = "Draft",
-                    warning = "Borrador de desarrollo: impuestos declarados por el cliente, no validados fiscalmente. No es una venta." });
+                    warning = "Borrador de desarrollo: IVA calculado con tarifa configurada en SQL, no verificada contra catalogo oficial CABYS. No es factura fiscal." });
             }
             catch (SqlException ex) when (ex.Number is 2601 or 2627 or 1205)
             {
