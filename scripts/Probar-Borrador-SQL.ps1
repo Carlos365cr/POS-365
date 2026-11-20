@@ -5,7 +5,9 @@ Write-Host 'Consultando articulo SQL:' $Codigo
 $product = Invoke-RestMethod "$base/api/pos/product?code=$([uri]::EscapeDataString($Codigo))&list=0"
 if (-not $product.id -or $null -eq $product.price) { throw 'Articulo o precio no encontrado.' }
 Write-Host ('Producto: {0} / Precio: {1} {2}' -f $product.name,$product.price,$product.currency)
-if ($product.currency -ne 'Colón') { throw 'Solo pruebas en colones.' }
+# ASCII-safe for Windows PowerShell 5.1, which reads UTF-8 without BOM as ANSI.
+$colonCurrency = 'Col' + [char]0x00F3 + 'n'
+if ($product.currency -cne $colonCurrency) { throw ('Moneda inesperada: [' + $product.currency + ']. Solo pruebas en colones.') }
 
 # El impuesto cero es intencional: esta prueba comprueba persistencia SQL,
 # no calcula impuestos de Hacienda ni registra un comprobante fiscal.
