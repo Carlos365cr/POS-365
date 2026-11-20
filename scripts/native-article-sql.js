@@ -63,7 +63,7 @@
     const read=el=>el?.value?.trim()||'';
     const barcode=read(c.barcode), internal=read(c.internal);
     // Never silently treat a historical auto-number as the SQL primary code.
-    const code=read(c.code)||barcode||read(c.sku)||internal;
+    const code=read(c.code)||barcode||read(c.sku);
     const priceText=read(c.price).replace(',','.');
     if(!code||!read(c.name))throw Error('Complete codigo SQL y nombre del articulo.');
     if(priceText===''||! /^(?:0|[0-9]+)(?:\.[0-9]{1,4})?$/.test(priceText))
@@ -73,7 +73,7 @@
     const cabys=read(c.cabys);
     if(cabys&&!/^[0-9]{13}$/.test(cabys))
       throw Error('El CABYS debe contener 13 digitos.');
-    const codes=[barcode,internal,read(c.sku),read(c.supplier),...c.extra.map(read)]
+    const codes=[barcode,read(c.sku),read(c.supplier),...c.extra.map(read)]
       .filter(x=>x&&x!==code);
     const rate=read(c.tax).replace(',','.');
     if(rate!==''&&(!/^\d+(?:\.\d{1,4})?$/.test(rate)||Number(rate)>100))
@@ -174,7 +174,7 @@
   function attach(){
     pending=false;
     for(const heading of document.querySelectorAll('h1,h2,h3,h4,legend,strong')){
-      if(normalize(heading.textContent)!=='mantenimiento de articulos')continue;
+      if(!normalize(heading.textContent).startsWith('mantenimiento de articulos'))continue;
       const parent=heading.parentElement;
       if(!parent||parent.querySelector('[data-native-sql-bar]'))continue;
       createBar(heading);
