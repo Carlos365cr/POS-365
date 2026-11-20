@@ -23,8 +23,86 @@ public static class CatalogApi
         { return Results.Conflict(new {error="Codigo ya registrado o conflicto simultaneo. Recargue antes de reintentar. No se guardo esta transaccion."}); }
         catch(SqlException e) { return Results.Json(new {error="No se completo la operacion SQL. Verifique conexion y ejecute -Inicializar.",sqlError=e.Number},statusCode:503); }
     }
+    public sealed record NativeArticle(CatalogProduct Product, JsonElement General, JsonElement Costs,
+        JsonElement Prices, JsonElement Other, decimal? TaxRate);
+
     public static void Map(WebApplication app,string connectionString)
     {
+        app.MapGet("/api/catalog/native/{id:guid}",(Guid id)=>Guard(async()=>
+        {
+            await using var db=new SqlConnection(connectionString);
+            await db.OpenAsync();
+            await using var tx=(SqlTransaction)await db.BeginTransactionAsync(IsolationLevel.ReadCommitted);
+            var product=await Read(db,tx,id);
+            if(product is null)return Results.NotFound(new {error="Artículo SQL no encontrado."});
+            await using var cmd=Cmd(db,tx,"""
+                SELECT GeneralJson,CostsJson,PricesJson,OtherJson FROM dbo.POS365_ProductExtended WHERE ProductId=@id
+                """,("@id",id));
+            JsonElement? general=null,costs=null,prices=null,other=null;
+            await using(var r=await cmd.ExecuteReaderAsync())
+            {
+                if(await r.ReadAsync())
+                {
+                    general=JsonSerializer.Deserialize<JsonElement>(r.GetString(0));
+                    costs=JsonSerializer.Deserialize<JsonElement>(r.GetString(1));
+                    prices=JsonSerializer.Deserialize<JsonElement>(r.GetString(2));
+                    other=JsonSerializer.Deserialize<JsonElement>(r.GetString(3));
+                }
+            }
+            await tx.CommitAsync();
+            return Results.Ok(new {product, general, costs, prices, other});
+        }));
+        app.MapPut("/api/catalog/native/{id:guid}",(Guid id,NativeArticle article)=>Guard(async()=>
+        {
+            if(article.Product is null || article.Product.Id!=id)
+                throw new ArgumentException("Identificador de artículo incorrecto.");
+            var p=CatalogValidation.Normalize(article.Product);
+            static string CheckedJson(JsonElement value,string field)
+            {
+                if(value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                    throw new ArgumentException("Falta información de "+field);
+                var json=value.GetRawText();
+                if(json.Length>1000000)throw new ArgumentException(field+" supera 1 MB.");
+                return json;
+            }
+            var general=CheckedJson(article.General,"General");
+            var costs=CheckedJson(article.Costs,"Costos");
+            var prices=CheckedJson(article.Prices,"Precios");
+            var other=CheckedJson(article.Other,"Metadatos");
+            if(article.General.ValueKind!=JsonValueKind.Array || article.Costs.ValueKind!=JsonValueKind.Array ||
+               article.Prices.ValueKind!=JsonValueKind.Array || article.Other.ValueKind!=JsonValueKind.Object)
+                throw new ArgumentException("Formato de campos del mantenimiento original inválido.");
+            if(article.TaxRate is decimal rate &&
+                (rate<0m || rate>100m || decimal.Round(rate,4)!=rate))
+                throw new ArgumentException("Tarifa IVA inválida.");
+            await using var db=new SqlConnection(connectionString);
+            await db.OpenAsync();
+            await using var tx=(SqlTransaction)await db.BeginTransactionAsync();
+            await Write(db,tx,p);
+            await using(var cmd=Cmd(db,tx,"""
+                UPDATE dbo.POS365_ProductExtended SET GeneralJson=@general,CostsJson=@costs,
+                    PricesJson=@prices,OtherJson=@other,UpdatedAt=SYSUTCDATETIME()
+                WHERE ProductId=@id;
+                IF @@ROWCOUNT=0
+                   INSERT dbo.POS365_ProductExtended(ProductId,GeneralJson,CostsJson,PricesJson,OtherJson)
+                   VALUES(@id,@general,@costs,@prices,@other);
+                """,("@id",id),("@general",general),("@costs",costs),("@prices",prices),("@other",other)))
+                await cmd.ExecuteNonQueryAsync();
+            if(article.TaxRate is decimal tax)
+            {
+                await using var cmd=Cmd(db,tx,"""
+                    UPDATE dbo.POS365_ProductTax SET TaxRate=@rate,UpdatedAt=SYSUTCDATETIME() WHERE ProductId=@id;
+                    IF @@ROWCOUNT=0 INSERT dbo.POS365_ProductTax(ProductId,TaxRate) VALUES(@id,@rate);
+                    """,("@id",id));
+                var parameter=cmd.Parameters.Add("@rate",SqlDbType.Decimal);
+                parameter.Precision=7;parameter.Scale=4;parameter.Value=tax;
+                await cmd.ExecuteNonQueryAsync();
+            }
+            var saved=await Read(db,tx,id);
+            await tx.CommitAsync();
+            return Results.Ok(new {product=saved,extendedSaved=true,fields=new[]{"General","Costos","Precios"}});
+        }));
+
         app.MapGet("/api/catalog/products",(string? q,int? page)=>Guard(async()=>
         {
             var query=(q??"").Trim(); if(query.Length>100) throw new ArgumentException("Busqueda demasiado larga.");
