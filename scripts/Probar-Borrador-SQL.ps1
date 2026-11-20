@@ -16,7 +16,7 @@ $payload = @{
   requestId = $requestId
   registerCode = 'Caja-DEV'
   expectedTotal = [decimal]$product.price
-  lines = @(@{ productId = $product.id; quantity = 1; tax = 0 })
+  lines = @(@{ productId = $product.id; quantity = 1; tax = $null })
   payments = @(@{ method = 'EFECTIVO-PRUEBA'; amount = [decimal]$product.price })
 } | ConvertTo-Json -Depth 8
 Write-Host 'Creando borrador de desarrollo (NO una factura)...'
