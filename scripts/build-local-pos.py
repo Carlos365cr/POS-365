@@ -159,7 +159,7 @@ sql_payment_bridge = r"""
      // Never silently persist zero tax for a taxable-looking transaction.
      if(mapped.length!==1)
        throw Error('El desglose de IVA por linea para varios productos aun no esta migrado. Pruebe con un articulo.');
-     const taxText=prompt('IVA de PRUEBA para este articulo (en colones). Consulte el importe mostrado en la pantalla original. No se valida la tarifa fiscal:', '0');
+     const taxText=prompt('IVA de PRUEBA para este articulo (en colones). Consulte el importe mostrado en la pantalla original. No se valida la tarifa fiscal:', '');
      if(taxText===null)return;
      const taxInput=taxText.trim().replace(',', '.');
      if(!/^(?:0|[0-9]+)(?:\.[0-9]{1,4})?$/.test(taxInput))
