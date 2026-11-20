@@ -42,10 +42,10 @@ public static class PosDraftApi
                     if (await existing.ReadAsync(ct))
                     {
                         var id = existing.GetGuid(0);
-                        var total = existing.GetDecimal(1);
+                        var savedTotal = existing.GetDecimal(1);
                         await existing.DisposeAsync();
                         await tx.CommitAsync(ct);
-                        return Results.Ok(new { draftId = id, total, alreadySaved = true, status = "Draft" });
+                        return Results.Ok(new { draftId = id, total = savedTotal, alreadySaved = true, status = "Draft" });
                     }
                 }
 
