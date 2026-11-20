@@ -180,3 +180,34 @@ FROM dbo.POS365_SalePayment ORDER BY SaleId,PaymentNumber;
 Pendiente: integración con el formulario original, numeración definitiva,
 validación de impuesto por CABYS, descuentos, cambio/vuelto, caja, existencias
 y comprobantes.
+
+## Etapa 3C: panel original de pago y borrador SQL
+
+El generador local añade al panel original de pago un botón separado:
+`Guardar borrador SQL (prueba)`. El botón original `Guardar` continúa
+bloqueado: no existen todavía reglas completas de factura fiscal, cierre de caja
+o inventario.
+
+El botón de prueba toma los artículos SQL escaneados en la sesión, intenta
+resolver sus cantidades del detalle original, compara el total original con
+el total de la lista SQL 0 y solicita confirmación antes de llamar
+`POST /api/pos/drafts`. Si no puede identificar un artículo, cantidad o
+precio de forma inequívoca, cancela el registro. Se registra solo un pago
+`EFECTIVO-PRUEBA` por el **total exacto**, nunca el efectivo entregado con
+vuelto. Si vuelve a enviarse el mismo detalle en la misma sesión, conserva
+el RequestId para impedir duplicados.
+
+**Limitación de esta etapa:** para comprobar exclusivamente la escritura,
+se registra impuesto de prueba igual a cero. Esto no coincide con el IVA
+mostrado en la pantalla original y **no debe interpretarse como
+facturación fiscal**. Tampoco se registran descuentos, múltiples pagos,
+inventario o consecutivos. La discrepancia entre el total visual y el precio
+SQL impide guardar un borrador. Solo usar productos simples, sin descuentos
+ni promociones, y con cantidades enteras para esta prueba inicial.
+
+Prueba de navegador a realizar en SERVER360: iniciar la API, abrir
+`/pos-original.html`, buscar y agregar P1 una sola vez, abrir Pago con,
+presionar `Guardar borrador SQL (prueba)` y confirmar. Revisar en SSMS
+el estado `Draft`, las líneas y el pago de prueba. Repetir el mismo
+botón sin cambiar el detalle: debe devolver el mismo identificador sin
+duplicar. No fue posible verificar el navegador remoto desde el conector.
