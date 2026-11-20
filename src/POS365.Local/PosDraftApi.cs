@@ -65,7 +65,7 @@ public static class PosDraftApi
                     branchId = (Guid)(await branch.ExecuteScalarAsync(ct))!;
 
                 var rows = new List<(Guid Id, string Code, string Name, string Cabys, decimal Qty,
-                    decimal Gross, decimal Tax, decimal Net)>();
+                    decimal Price, decimal Gross, decimal Tax, decimal Net)>();
                 for (var i = 0; i < request.Lines.Length; i++)
                 {
                     var line = request.Lines[i];
@@ -130,7 +130,7 @@ public static class PosDraftApi
                     cmd.Parameters.Add("@name", SqlDbType.NVarChar, 250).Value = r.Name;
                     cmd.Parameters.Add("@cabys", SqlDbType.NVarChar, 13).Value = r.Cabys;
                     cmd.Parameters.Add(Money("@qty", r.Qty));
-                    cmd.Parameters.Add(Money("@unit", r.Gross / r.Qty));
+                    cmd.Parameters.Add(Money("@unit", r.Price));
                     cmd.Parameters.Add(Money("@subtotal", r.Net));
                     cmd.Parameters.Add(Money("@tax", r.Tax));
                     cmd.Parameters.Add(Money("@total", r.Gross));
