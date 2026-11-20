@@ -53,70 +53,6 @@ const saleDate=posMain.querySelector''')
 replace('async function restoreTrialState(){', 'async function restoreTrialState(){return;\n')
 # Disable clear while a lookup is in flight, so delayed responses cannot refill a cleared cart.
 s=s.replace("posMain.querySelector('[data-pos-clear]').onclick=()=>{", "posMain.querySelector('[data-pos-clear]').onclick=()=>{if(sqlBusy)return;")
-# SQL maintenance access from the original application without allowing legacy writes.
-# This interim bridge avoids showing an empty legacy catalog as if it were SQL data.
-maintenance_bridge = r"""
-<script>
-(() => {
-  let scheduling = false;
-  function attach() {
-    scheduling = false;
-    const headers = document.querySelectorAll('h1,h2,h3,h4,legend,strong');
-    for (const title of headers) {
-      if (title.textContent.trim() !== 'Mantenimiento de artículos' ||
-          title.dataset.sqlCatalogLinked === 'true') continue;
-      title.dataset.sqlCatalogLinked = 'true';
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = 'Buscar, crear y modificar en SQL';
-      button.title = 'Abre el catálogo SQL dentro de esta misma pantalla, sin cambiar de pestaña.';
-      button.style.cssText = 'margin-left:12px;padding:7px 12px;border-radius:6px;background:#155f89;color:white;border:0;cursor:pointer;font:inherit;font-size:13px';
-      button.onclick = () => {
-        let dialog = document.getElementById('pos365-inline-sql-catalog');
-        if (!dialog) {
-          dialog = document.createElement('dialog');
-          dialog.id = 'pos365-inline-sql-catalog';
-          dialog.style.cssText = 'width:min(1180px,98vw);height:min(92vh,940px);max-width:none;max-height:none;padding:0;border:1px solid #a8b7b0;border-radius:12px;box-shadow:0 15px 70px #0006;background:#fff;color:#19304a';
-          const header = document.createElement('div');
-          header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;background:#eaf0ee;border-bottom:1px solid #bdc9c4';
-          const heading = document.createElement('strong');
-          heading.textContent = 'Mantenimiento de artículos · SQL Server / POS365_DEV';
-          const close = document.createElement('button');
-          close.type='button';close.textContent='Volver al POS';close.style.cssText='padding:8px 12px;border:1px solid #789;border-radius:6px;cursor:pointer';
-          close.onclick=()=>dialog.close();
-          header.append(heading,close);
-          const iframe=document.createElement('iframe');
-          iframe.title='Catálogo SQL integrado';
-          iframe.src='/catalogo.html';
-          iframe.style.cssText='display:block;width:100%;height:calc(100% - 52px);border:0;background:white';
-          dialog.append(header,iframe);
-          document.body.append(dialog);
-        }
-        dialog.showModal();
-      };
-      title.append(button);
-      const note = document.createElement('small');
-      note.textContent = ' Use el botón azul para guardar artículos, listas de precios y tarifas IVA en SQL Server sin salir del POS. Este formulario histórico todavía no persiste sus otros campos en SQL.';
-      note.style.cssText = 'display:block;font-size:12px;color:#8b4b12;margin-top:6px';
-      title.after(note);
-    }
-  }
-  const observer = new MutationObserver(() => {
-    if (!scheduling) {
-      scheduling = true;
-      requestAnimationFrame(attach);
-    }
-  });
-  if (document.documentElement) observer.observe(document.documentElement, {childList:true,subtree:true});
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach);
-  else attach();
-})();
-</script>
-"""
-if '</body>' not in s:
-    raise RuntimeError('No se encontró el cierre HTML del POS original.')
-head,tail=s.rsplit('</body>',1)
-s=head+maintenance_bridge+'</body>'+tail
 # Add a draft-only action beside the original payment controls.
 # This NEVER invokes completeTrialPayment or the fiscal/stock paths.
 sql_payment_bridge = r"""
@@ -223,11 +159,21 @@ sql_payment_bridge = r"""
 # Inject inside initializePos body so lines and saleExactTotalCents resolve in the
 # same lexical scope. Runtime initialization is deferred until its DOM is ready.
 replace('function initializePos(){', 'function initializePos(){\n'+sql_payment_bridge+'\n')
-# Inject the native SQL controls into the ORIGINAL maintenance form.
-# Unlike the old additional editor, this reads the visible native inputs.
-native_sql=(root/'scripts/native-article-sql.js').read_text(encoding='utf-8')
-if '</body>' not in s: raise RuntimeError('No se encontro el cierre del POS original.')
-head,tail=s.rsplit('</body>',1)
-s=head+'<script>'+native_sql+'</script></body>'+tail
+
+# The original module already captures General, Costs and Prices through
+# captureTrialForm(). Replace its historical Process handler with a SQL transaction.
+native_process=(root/'scripts/native-article-process.js').read_text(encoding='utf-8')
+handler_anchor="for(const target of [form,costsForm,priceForm]){\ntarget.noValidate=true;\ntarget.onsubmit=saveTrialArticle;"
+if s.count(handler_anchor)!=1:
+ raise RuntimeError('Cambio en el guardado original; revisar el anclaje SQL.')
+s=s.replace(handler_anchor,native_process+"\nfor(const target of [form,costsForm,priceForm]){\ntarget.noValidate=true;\ntarget.onsubmit=saveSqlArticle;")
+replace('processButton.onclick=saveTrialArticle;', 'processButton.onclick=saveSqlArticle;')
+original_search_start=s.index('function searchArticleForOperation(){')
+original_search_end=s.index('const trialSearchStyle=',original_search_start)
+s=s[:original_search_start]+'''function searchArticleForOperation(){
+ return searchSqlArticle();
+}
+'''+s[original_search_end:]
+
 out=root/'src/POS365.Local/wwwroot/pos-original.html';out.write_text(s,encoding='utf-8')
 print('POS original conectado a consulta SQL:',out)
