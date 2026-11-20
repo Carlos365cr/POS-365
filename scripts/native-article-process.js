@@ -152,3 +152,89 @@ async function saveSqlArticle(event){
  }catch(error){sqlArticleStatus('No se guardó: '+error.message,true);}
  finally{sqlNativeBusy=false;}
 }
+
+
+/*
+ * SQL catalog bridge for the original "Buscar artículo" dialog.
+ * This does not create a second maintenance screen: it populates the
+ * existing result table and loads the selected ProductId via sqlArticleLoad.
+ */
+{
+ const wiredSqlDialogs=new WeakSet();
+ let dialogSearchGeneration=0;
+ function findNativeArticleDialog(){
+  const heads=document.querySelectorAll('h1,h2,h3,h4,[role="heading"]');
+  for(const head of heads){
+   if(head.textContent.trim().toLowerCase()!=='buscar artículo')continue;
+   let panel=head.parentElement;
+   for(let depth=0;panel&&depth<7;depth++,panel=panel.parentElement){
+    if(panel===document.body||panel===root)break;
+    if(panel.querySelector('table tbody')&&panel.querySelector('input')&&
+       panel.getClientRects().length)return panel;
+   }
+  }
+  return null;
+ }
+ function attachNativeArticleDialog(){
+  const panel=findNativeArticleDialog();
+  if(!panel||wiredSqlDialogs.has(panel))return;
+  const table=panel.querySelector('table tbody');
+  const input=[...panel.querySelectorAll('input')].find(x=>
+    x.type==='search'||x.type==='text'||!x.type);
+  if(!input||!table)return;
+  wiredSqlDialogs.add(panel);
+  const summary=[...panel.querySelectorAll('p,span,small,div')].find(el=>
+    el.children.length===0&&/\\d+ artículos encontrados/i.test(el.textContent.trim()));
+  const setSummary=value=>{if(summary)summary.textContent=value;};
+  let timer=null;
+  const run=async()=>{
+   const sequence=++dialogSearchGeneration;
+   setSummary('Consultando artículos en SQL Server…');
+   table.replaceChildren();
+   try{
+    const q=input.value.trim();
+    const result=await sqlArticleRequest(sqlCatalogUrl+'products?'+
+      new URLSearchParams({q,page:'1'}));
+    if(sequence!==dialogSearchGeneration||!panel.getClientRects().length)return;
+    result.items.forEach(item=>{
+     const tr=document.createElement('tr');
+     const cells=[item.code,'',item.code,item.barcode,item.name,
+       item.price==null?'':Number(item.price).toLocaleString('es-CR'), 'Seleccionar'];
+     for(const value of cells){
+      const td=document.createElement('td');td.textContent=value;tr.append(td);
+     }
+     tr.style.cursor='pointer';
+     tr.tabIndex=0;
+     const select=async event=>{
+      event?.preventDefault();event?.stopPropagation();event?.stopImmediatePropagation();
+      try{
+       await sqlArticleLoad(item.id);
+       const close=[...panel.querySelectorAll('button')].find(b=>
+          /^(cerrar|cancelar)$/i.test(b.textContent.trim()));
+       if(close)close.click();
+       else if(panel.matches('dialog'))panel.close();
+       else panel.style.display='none';
+      }catch(error){sqlArticleStatus(error.message,true);}
+     };
+     tr.addEventListener('click',select,true);
+     tr.addEventListener('keydown',event=>{
+       if(event.key==='Enter'||event.key===' '){event.preventDefault();select(event);}
+     },true);
+     table.append(tr);
+    });
+    setSummary(result.items.length+' artículos encontrados.'+
+       (result.hasMore?' Refine la búsqueda para ver más resultados.':''));
+   }catch(error){
+    if(sequence===dialogSearchGeneration)setSummary('Error SQL: '+error.message);
+   }
+  };
+  input.addEventListener('input',event=>{
+   event.stopImmediatePropagation();
+   clearTimeout(timer);timer=setTimeout(run,180);
+  },true);
+  run();
+ }
+ const observeNativeSearch=new MutationObserver(()=>attachNativeArticleDialog());
+ observeNativeSearch.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','open']});
+ root.addEventListener('click',()=>setTimeout(attachNativeArticleDialog,0),true);
+}
