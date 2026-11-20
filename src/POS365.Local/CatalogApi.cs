@@ -72,6 +72,34 @@ public static class CatalogApi
             if(article.General.ValueKind!=JsonValueKind.Array || article.Costs.ValueKind!=JsonValueKind.Array ||
                article.Prices.ValueKind!=JsonValueKind.Array || article.Other.ValueKind!=JsonValueKind.Object)
                 throw new ArgumentException("Formato de campos del mantenimiento original inválido.");
+            static List<(string Section,int Index,string Name,string Value,bool? Checked)> ParseFields(JsonElement fields,string section)
+            {
+                var rows=new List<(string,int,string,string,bool?)>();
+                var index=0;
+                foreach(var entry in fields.EnumerateArray())
+                {
+                    if(entry.ValueKind!=JsonValueKind.Array || entry.GetArrayLength()<3 ||
+                       entry[0].ValueKind!=JsonValueKind.String)
+                        throw new ArgumentException("Estructura de campos inválida en "+section);
+                    var name=entry[0].GetString()??"";
+                    var value=entry[1].ValueKind==JsonValueKind.String?entry[1].GetString()??"":entry[1].ToString();
+                    var check=entry[2].ValueKind switch
+                    {
+                        JsonValueKind.True => (bool?)true,
+                        JsonValueKind.False => false,
+                        JsonValueKind.Null => null,
+                        _ => throw new ArgumentException("Selección inválida en "+section)
+                    };
+                    if(name.Length is <1 or >150 || value.Length>200000)
+                        throw new ArgumentException("Campo demasiado grande o sin nombre en "+section);
+                    rows.Add((section,index++,name,value,check));
+                    if(index>1500)throw new ArgumentException("Demasiados campos en "+section);
+                }
+                return rows;
+            }
+            var allFields=ParseFields(article.General,"General");
+            allFields.AddRange(ParseFields(article.Costs,"Costos"));
+            allFields.AddRange(ParseFields(article.Prices,"Precios"));
             if(article.TaxRate is decimal rate &&
                 (rate<0m || rate>100m || decimal.Round(rate,4)!=rate))
                 throw new ArgumentException("Tarifa IVA inválida.");
@@ -88,6 +116,18 @@ public static class CatalogApi
                    VALUES(@id,@general,@costs,@prices,@other);
                 """,("@id",id),("@general",general),("@costs",costs),("@prices",prices),("@other",other)))
                 await cmd.ExecuteNonQueryAsync();
+            await using(var clear=Cmd(db,tx,
+                "DELETE dbo.POS365_ProductField WHERE ProductId=@id",("@id",id)))
+                await clear.ExecuteNonQueryAsync();
+            foreach(var field in allFields)
+            {
+                await using var cmd=Cmd(db,tx,"""
+                    INSERT dbo.POS365_ProductField(ProductId,Section,FieldIndex,FieldName,FieldValue,IsChecked)
+                    VALUES(@id,@section,@index,@name,@value,@checked)
+                    """,("@id",id),("@section",field.Section),("@index",field.Index),
+                    ("@name",field.Name),("@value",field.Value),("@checked",field.Checked));
+                await cmd.ExecuteNonQueryAsync();
+            }
             if(article.TaxRate is decimal tax)
             {
                 await using var cmd=Cmd(db,tx,"""
