@@ -227,6 +227,7 @@ replace('function initializePos(){', 'function initializePos(){\n'+sql_payment_b
 # Unlike the old additional editor, this reads the visible native inputs.
 native_sql=(root/'scripts/native-article-sql.js').read_text(encoding='utf-8')
 if '</body>' not in s: raise RuntimeError('No se encontro el cierre del POS original.')
-s=s.replace('</body>', '<script>'+native_sql+'</script></body>', 1)
+head,tail=s.rsplit('</body>',1)
+s=head+'<script>'+native_sql+'</script></body>'+tail
 out=root/'src/POS365.Local/wwwroot/pos-original.html';out.write_text(s,encoding='utf-8')
 print('POS original conectado a consulta SQL:',out)
