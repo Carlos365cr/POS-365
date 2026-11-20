@@ -87,7 +87,7 @@ public static class PosDraftApi
                     var gross = decimal.Round(price * line.Quantity, 4);
                     if (line.Tax > gross)
                         return Results.BadRequest(new { error = "Impuesto supera importe de linea." });
-                    rows.Add((line.ProductId, code, name, cabys, line.Quantity, gross,
+                    rows.Add((line.ProductId, code, name, cabys, line.Quantity, price, gross,
                         line.Tax, gross - line.Tax));
                 }
                 var total = rows.Sum(x => x.Gross);
