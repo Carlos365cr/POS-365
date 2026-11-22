@@ -2,7 +2,7 @@
 <html lang="es-419">
 <head>
 <meta charset="utf-8">
-<meta name="cedi-build-version" content="81">
+<meta name="cedi-build-version" content="82">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
@@ -3384,19 +3384,34 @@ async function openPurchaseBoxEditor(cell){
   const value=Number(input.value);if(!/^\d+$/.test(input.value.trim())||!Number.isSafeInteger(value)||value<1){message.textContent='Ingrese una cantidad entera mayor que cero.';input.focus();input.select();return;}
   if(!purchaseBoxInclusion()||findArticleByKey(key)!==product){message.textContent='El artículo o la operación cambió. Regrese y vuelva a abrir la ventana.';return;}
   saving=true;accept.disabled=true;back.disabled=true;input.disabled=true;message.textContent='Preparando el guardado del artículo…';clearTimeout(purchaseBackupTimer);
-  const oldFormBox=form.elements.caja.value,oldDirty=trialHasEdits;
-  const previous=structuredClone(product.details||{}),before=getProductUnitsPerBox(product),oldSnapshot=savedTrialSnapshot,oldLocal=localStorage.getItem(trialStorageKey);
-  const lines=[...purchasesMain.querySelectorAll('.purchase-table tbody tr')].filter(line=>line.dataset.articleKey===key),previousLines=lines.map(line=>({line,data:{...line.dataset},inputs:[...line.querySelectorAll('input')].map(input=>({input,value:input.value,data:{...input.dataset}}))}));
+  let backup=null,mutated=false,confirmed=false;
   try{
+   const formBox=form.elements.namedItem('caja');
+   backup={formBox,oldFormBox:formBox?.value,oldDirty:trialHasEdits,previous:structuredClone(product.details||{}),oldSnapshot:savedTrialSnapshot,localCaptured:false,oldLocal:null,previousLines:[]};
+   try{backup.oldLocal=localStorage.getItem(trialStorageKey);backup.localCaptured=true;}catch{}
+   const before=getProductUnitsPerBox(product);
+   const lines=[...purchasesMain.querySelectorAll('.purchase-table tbody tr')].filter(line=>line.dataset.articleKey===key);
+   backup.previousLines=lines.map(line=>({line,data:{...line.dataset},inputs:[...line.querySelectorAll('input')].map(input=>({input,value:input.value,data:{...input.dataset}}))}));
    if(!purchaseBoxInclusion()||findArticleByKey(key)!==product)throw Error('El catálogo cambió. Regrese y revise el artículo.');
-   trialHasEdits=true;
-   if(selectedArticleRecord()===product)form.elements.caja.value=String(value);
-   product.details=structuredClone(previous);product.details.general=(product.details.general||[]).filter(f=>f[0]!=='caja');product.details.general.push(['caja',String(value),null]);
+   mutated=true;trialHasEdits=true;
+   if(formBox&&selectedArticleRecord()===product)formBox.value=String(value);
+   product.details=structuredClone(backup.previous);product.details.general=(product.details.general||[]).filter(f=>f[0]!=='caja');product.details.general.push(['caja',String(value),null]);
    for(const line of lines){formatPurchaseNumber(line.querySelector('[aria-label="Cant. x CJ"]'),value);if(currentPurchaseXml&&line.dataset.xmlIndex!==undefined)applyXmlPurchasePresentation(line);else syncPurchaseQuantities(line);}
    message.textContent='Enviando artículo y esperando confirmación del servidor…';
    await persistPurchaseConfirmed(undefined,undefined,{key:String(key),before,value});
-   refreshArticleProperties();status.textContent='Cantidad por caja guardada en el artículo.';saving=false;close();
-  }catch(error){product.details=previous;form.elements.caja.value=oldFormBox;trialHasEdits=oldDirty;for(const saved of previousLines){for(const k of Object.keys(saved.line.dataset))delete saved.line.dataset[k];Object.assign(saved.line.dataset,saved.data);for(const field of saved.inputs){field.input.value=field.value;for(const k of Object.keys(field.input.dataset))delete field.input.dataset[k];Object.assign(field.input.dataset,field.data);}updatePurchaseSubtotal(saved.line);}savedTrialSnapshot=oldSnapshot;try{if(oldLocal===null)localStorage.removeItem(trialStorageKey);else localStorage.setItem(trialStorageKey,oldLocal);}catch{}refreshArticleProperties();message.textContent=error.message;saving=false;accept.disabled=false;back.disabled=false;input.disabled=false;}
+   confirmed=true;refreshArticleProperties();status.textContent='Cantidad por caja guardada en el artículo.';saving=false;close();
+  }catch(error){
+   if(mutated&&!confirmed&&backup){
+    product.details=backup.previous;trialHasEdits=backup.oldDirty;savedTrialSnapshot=backup.oldSnapshot;
+    if(backup.formBox)backup.formBox.value=backup.oldFormBox;
+    try{for(const saved of backup.previousLines){for(const k of Object.keys(saved.line.dataset))delete saved.line.dataset[k];Object.assign(saved.line.dataset,saved.data);for(const field of saved.inputs){field.input.value=field.value;for(const k of Object.keys(field.input.dataset))delete field.input.dataset[k];Object.assign(field.input.dataset,field.data);}updatePurchaseSubtotal(saved.line);}}catch(restoreError){console.error('No se pudo restaurar la línea de compra',restoreError);}
+    if(backup.localCaptured){try{if(backup.oldLocal===null)localStorage.removeItem(trialStorageKey);else localStorage.setItem(trialStorageKey,backup.oldLocal);}catch{}}
+    try{refreshArticleProperties();}catch{}
+   }
+   message.textContent=confirmed?'El artículo se guardó, pero no se pudo actualizar la pantalla. Regrese para revisar.':('No se pudo completar el guardado: '+(error?.message||'error inesperado'));
+  }finally{
+   saving=false;back.disabled=false;input.disabled=false;accept.disabled=confirmed;
+  }
  };
 }
 // Clicking the padding of a body cell must focus its own readonly input.
