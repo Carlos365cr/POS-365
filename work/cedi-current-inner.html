@@ -2,7 +2,7 @@
 <html lang="es-419">
 <head>
 <meta charset="utf-8">
-<meta name="cedi-build-version" content="80">
+<meta name="cedi-build-version" content="81">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
@@ -3383,12 +3383,11 @@ async function openPurchaseBoxEditor(cell){
  accept.onclick=async()=>{
   const value=Number(input.value);if(!/^\d+$/.test(input.value.trim())||!Number.isSafeInteger(value)||value<1){message.textContent='Ingrese una cantidad entera mayor que cero.';input.focus();input.select();return;}
   if(!purchaseBoxInclusion()||findArticleByKey(key)!==product){message.textContent='El artículo o la operación cambió. Regrese y vuelva a abrir la ventana.';return;}
-  saving=true;accept.disabled=true;back.disabled=true;input.disabled=true;message.textContent='Verificando nuevamente la existencia…';clearTimeout(purchaseBackupTimer);
+  saving=true;accept.disabled=true;back.disabled=true;input.disabled=true;message.textContent='Preparando el guardado del artículo…';clearTimeout(purchaseBackupTimer);
   const oldFormBox=form.elements.caja.value,oldDirty=trialHasEdits;
   const previous=structuredClone(product.details||{}),before=getProductUnitsPerBox(product),oldSnapshot=savedTrialSnapshot,oldLocal=localStorage.getItem(trialStorageKey);
   const lines=[...purchasesMain.querySelectorAll('.purchase-table tbody tr')].filter(line=>line.dataset.articleKey===key),previousLines=lines.map(line=>({line,data:{...line.dataset},inputs:[...line.querySelectorAll('input')].map(input=>({input,value:input.value,data:{...input.dataset}}))}));
   try{
-   await checkPurchaseBoxStock(product);
    if(!purchaseBoxInclusion()||findArticleByKey(key)!==product)throw Error('El catálogo cambió. Regrese y revise el artículo.');
    trialHasEdits=true;
    if(selectedArticleRecord()===product)form.elements.caja.value=String(value);
