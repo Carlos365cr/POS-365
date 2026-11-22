@@ -2,7 +2,7 @@
 <html lang="es-419">
 <head>
 <meta charset="utf-8">
-<meta name="cedi-build-version" content="79">
+<meta name="cedi-build-version" content="80">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
@@ -3343,11 +3343,22 @@ viewport.scrollTop=context.scrollTop;viewport.scrollLeft=context.scrollLeft;
 });
 }
 function purchaseBoxInclusion(){return !purchaseModification&&!purchaseExclusion&&purchasesMain.querySelector('[name="compraOperacion"]').checked;}
-function checkPurchaseBoxHistory(product){
- const keys=new Set([articleRecordKey(product),product.id,product.xmlOriginId,product.code,product.barcode].filter(Boolean).map(String));
- if(trialCompletedSales.some(s=>(s.lines||[]).some(l=>[l.productKey,l.productId,l.barcode,l.code].some(v=>v!=null&&keys.has(String(v))))))return Promise.reject(Error('Este artículo tiene historial de ventas POS. No se permite modificarlo por este medio.'));
- if(!sharedPurchaseStorage||window.parent===window)return Promise.reject(Error('Se requiere conexión al servidor para verificar el historial POS e interno.'));
- return new Promise((resolve,reject)=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();reject(Error('No se pudo verificar el historial. Intente nuevamente.'));},20000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data?.ok?resolve():reject(Error(event.data?.error||'No se pudo verificar el historial.'));};window.parent.postMessage({type:'pos365-article-box-check',key:String(articleRecordKey(product)),identity:{id:product.id,xmlOriginId:product.xmlOriginId,barcode:product.barcode,code:product.code}},'*',[channel.port2]);});
+function boxStockError(product,pending=false){
+ const raw=product.stockByWarehouse;if(raw!=null&&(typeof raw!=='object'||Array.isArray(raw)))return 'No se pudo verificar la existencia por bodega.';
+ const values=Object.values(raw||{});const present=v=>v!==null&&v!==undefined&&String(v).trim()!=='';
+ if(values.some(v=>!present(v)||!Number.isFinite(Number(v))))return 'No se pudo verificar la existencia por bodega.';
+ if(values.some(v=>Number(v)!==0))return 'Solo se permite cambiar Cant. x CJ cuando la existencia es cero en todas las bodegas.';
+ const totals=[product.availableStock,...(product.details?.general||[]).filter(f=>f[0]==='disponible').map(f=>f[1])].filter(present);
+ if(totals.some(v=>!Number.isFinite(Number(v))))return 'No se pudo verificar la existencia total.';
+ if(totals.some(v=>Number(v)!==0))return 'Solo se permite cambiar Cant. x CJ cuando la existencia es cero en todas las bodegas.';
+ if(!values.length&&!totals.length&&!pending)return 'El artículo no tiene existencia registrada. Verifique sus saldos antes de modificar Cant. x CJ.';
+ return '';
+}
+function checkPurchaseBoxStock(product){
+ const pending=xmlPendingArticles.some(p=>articleRecordKey(p)===articleRecordKey(product))&&!Array.from(savedTrialProducts.values()).some(p=>articleRecordKey(p)===articleRecordKey(product));
+ const error=boxStockError(product,pending);if(error)return Promise.reject(Error(error));
+ if(!sharedPurchaseStorage||window.parent===window)return Promise.reject(Error('Se requiere conexión al servidor para verificar la existencia en todas las bodegas.'));
+ return new Promise((resolve,reject)=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();reject(Error('No se pudo verificar la existencia. Intente nuevamente.'));},20000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data?.ok?resolve():reject(Error(event.data?.error||'No se pudo verificar la existencia.'));};window.parent.postMessage({type:'pos365-article-box-check',key:String(articleRecordKey(product)),identity:{id:product.id,xmlOriginId:product.xmlOriginId,barcode:product.barcode,code:product.code}},'*',[channel.port2]);});
 }
 async function openPurchaseBoxEditor(cell){
  const status=purchasesMain.querySelector('[data-purchase-status]');
@@ -3358,7 +3369,7 @@ async function openPurchaseBoxEditor(cell){
  const dialog=document.createElement('dialog');dialog.className='purchase-box-editor';dialog.setAttribute('aria-label','Modificar cantidad por caja');dialog.style.cssText='width:min(420px,90vw);padding:16px';
  dialog.innerHTML='<h3 style="margin:0 0 10px">Cantidad por caja</h3><label>Código<input data-code readonly></label><label>Producto<input data-name readonly></label><label>Cantidad por caja<input data-quantity type="text" inputmode="numeric" autocomplete="off"></label><p data-message role="status"></p><div class="actions"><button type="button" data-accept class="primary" disabled>Aceptar</button><button type="button" data-back>Regresar</button></div>';
  const input=dialog.querySelector('[data-quantity]'),accept=dialog.querySelector('[data-accept]'),back=dialog.querySelector('[data-back]'),message=dialog.querySelector('[data-message]');
- dialog.querySelector('[data-code]').value=product.code||product.barcode||'';dialog.querySelector('[data-name]').value=product.name||'';input.value=String(getProductUnitsPerBox(product));input.disabled=true;message.textContent='Verificando historial de ventas…';
+ dialog.querySelector('[data-code]').value=product.code||product.barcode||'';dialog.querySelector('[data-name]').value=product.name||'';input.value=String(getProductUnitsPerBox(product));input.disabled=true;message.textContent='Verificando existencia en todas las bodegas…';
  let quantityTouched=false;
  const selectQuantity=()=>{input.focus({preventScroll:true});input.select();input.setSelectionRange(0,input.value.length);};
  input.addEventListener('input',()=>{quantityTouched=true;});
@@ -3368,16 +3379,16 @@ async function openPurchaseBoxEditor(cell){
  let saving=false;const close=()=>{if(saving)return;dialog.close();dialog.remove();cell.focus();};back.onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('input',e=>e.stopPropagation());dialog.addEventListener('change',e=>e.stopPropagation());dialog.addEventListener('keydown',e=>{if(['F5','F8'].includes(e.key)){e.preventDefault();e.stopPropagation();}});
  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();accept.focus();}});
  purchasesMain.append(dialog);dialog.showModal();
- try{await checkPurchaseBoxHistory(product);if(!dialog.isConnected)return;input.disabled=false;accept.disabled=false;message.textContent='Se guardará en Mantenimiento de artículos.';selectQuantity();requestAnimationFrame(()=>requestAnimationFrame(()=>{if(dialog.isConnected&&dialog.open&&!quantityTouched&&!input.disabled)selectQuantity();}));}catch(error){if(dialog.isConnected)message.textContent=error.message;return;}
+ try{await checkPurchaseBoxStock(product);if(!dialog.isConnected)return;input.disabled=false;accept.disabled=false;message.textContent='Se guardará en Mantenimiento de artículos.';selectQuantity();requestAnimationFrame(()=>requestAnimationFrame(()=>{if(dialog.isConnected&&dialog.open&&!quantityTouched&&!input.disabled)selectQuantity();}));}catch(error){if(dialog.isConnected)message.textContent=error.message;return;}
  accept.onclick=async()=>{
   const value=Number(input.value);if(!/^\d+$/.test(input.value.trim())||!Number.isSafeInteger(value)||value<1){message.textContent='Ingrese una cantidad entera mayor que cero.';input.focus();input.select();return;}
   if(!purchaseBoxInclusion()||findArticleByKey(key)!==product){message.textContent='El artículo o la operación cambió. Regrese y vuelva a abrir la ventana.';return;}
-  saving=true;accept.disabled=true;back.disabled=true;input.disabled=true;message.textContent='Verificando nuevamente el historial de ventas…';clearTimeout(purchaseBackupTimer);
+  saving=true;accept.disabled=true;back.disabled=true;input.disabled=true;message.textContent='Verificando nuevamente la existencia…';clearTimeout(purchaseBackupTimer);
   const oldFormBox=form.elements.caja.value,oldDirty=trialHasEdits;
   const previous=structuredClone(product.details||{}),before=getProductUnitsPerBox(product),oldSnapshot=savedTrialSnapshot,oldLocal=localStorage.getItem(trialStorageKey);
   const lines=[...purchasesMain.querySelectorAll('.purchase-table tbody tr')].filter(line=>line.dataset.articleKey===key),previousLines=lines.map(line=>({line,data:{...line.dataset},inputs:[...line.querySelectorAll('input')].map(input=>({input,value:input.value,data:{...input.dataset}}))}));
   try{
-   await checkPurchaseBoxHistory(product);
+   await checkPurchaseBoxStock(product);
    if(!purchaseBoxInclusion()||findArticleByKey(key)!==product)throw Error('El catálogo cambió. Regrese y revise el artículo.');
    trialHasEdits=true;
    if(selectedArticleRecord()===product)form.elements.caja.value=String(value);
