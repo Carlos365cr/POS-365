@@ -2,7 +2,7 @@
 <html lang="es-419">
 <head>
 <meta charset="utf-8">
-<meta name="cedi-build-version" content="76">
+<meta name="cedi-build-version" content="77">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
@@ -3380,11 +3380,21 @@ async function openPurchaseBoxEditor(cell){
   }catch(error){product.details=previous;form.elements.caja.value=oldFormBox;trialHasEdits=oldDirty;for(const saved of previousLines){for(const k of Object.keys(saved.line.dataset))delete saved.line.dataset[k];Object.assign(saved.line.dataset,saved.data);for(const field of saved.inputs){field.input.value=field.value;for(const k of Object.keys(field.input.dataset))delete field.input.dataset[k];Object.assign(field.input.dataset,field.data);}updatePurchaseSubtotal(saved.line);}savedTrialSnapshot=oldSnapshot;try{if(oldLocal===null)localStorage.removeItem(trialStorageKey);else localStorage.setItem(trialStorageKey,oldLocal);}catch{}refreshArticleProperties();message.textContent=error.message;saving=false;accept.disabled=false;back.disabled=false;input.disabled=false;}
  };
 }
+// Clicking the padding of a body cell must focus its own readonly input.
+purchasesMain.querySelector('.purchase-table tbody').addEventListener('click',event=>{
+const cell=event.target.closest('td');const input=cell?.querySelector('input[aria-label="Cant. x CJ"]');
+if(input&&!input.disabled){input.focus({preventScroll:true});}
+});
 purchasesMain.querySelector('[data-purchase-articles]').onclick=openArticlesFromPurchases;
+document.addEventListener('keydown',event=>{
+if(event.key!=='F5'||purchasesMain.hidden||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||root.querySelector('dialog[open]'))return;
+event.preventDefault();event.stopImmediatePropagation();if(event.repeat)return;
+const target=event.target===document||event.target===document.body?document.activeElement:event.target;
+const cell=target?.closest?.('.purchase-table tbody td');
+const box=cell&&purchasesMain.contains(cell)?cell.querySelector('input[aria-label="Cant. x CJ"]'):null;
+if(box){selectPurchaseRow(box.closest('tr'));openPurchaseBoxEditor(box);}else{openArticlesFromPurchases();}
+},true);
 purchasesMain.addEventListener('keydown',event=>{
-if(event.key==='F5' && !purchasesMain.hidden && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey){
-event.preventDefault();event.stopPropagation();if(!event.repeat){if(event.target.matches('[aria-label="Cant. x CJ"]'))openPurchaseBoxEditor(event.target);else openArticlesFromPurchases();}return;
-}
 if(!['F3','F4'].includes(event.key) || purchasesMain.hidden || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || purchasesMain.querySelector('dialog[open]')){return;}
 event.preventDefault();event.stopPropagation();if(event.repeat){return;}
 if(event.key==='F3'){removePurchaseLine();}else{openPurchaseClear();}
