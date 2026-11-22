@@ -2,7 +2,7 @@
 <html lang="es-419">
 <head>
 <meta charset="utf-8">
-<meta name="cedi-build-version" content="77">
+<meta name="cedi-build-version" content="78">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
@@ -3047,6 +3047,8 @@ purchasesMain.querySelector('.purchase-table tbody').append(row);
 renumberPurchaseRows();
 if(!selectedPurchaseRow){selectPurchaseRow(row);}
 row.querySelector('[aria-label="Cant. x CJ"]').value='';
+row.querySelector('[aria-label="Cant. x CJ"]').setAttribute('aria-keyshortcuts','F8');
+row.querySelector('[aria-label="Cant. x CJ"]').title='Seleccione esta celda y presione F8 para modificar cantidad por caja';
 row.querySelector('[aria-label="Existencia"]').value='';
 row.querySelector('[aria-label="Precio actual"]').value='';
 row.querySelector('[aria-label="Costo actual"]').value='';
@@ -3357,7 +3359,7 @@ async function openPurchaseBoxEditor(cell){
  dialog.innerHTML='<h3 style="margin:0 0 10px">Cantidad por caja</h3><label>Código<input data-code readonly></label><label>Producto<input data-name readonly></label><label>Cantidad por caja<input data-quantity type="text" inputmode="numeric" autocomplete="off"></label><p data-message role="status"></p><div class="actions"><button type="button" data-accept class="primary" disabled>Aceptar</button><button type="button" data-back>Regresar</button></div>';
  const input=dialog.querySelector('[data-quantity]'),accept=dialog.querySelector('[data-accept]'),back=dialog.querySelector('[data-back]'),message=dialog.querySelector('[data-message]');
  dialog.querySelector('[data-code]').value=product.code||product.barcode||'';dialog.querySelector('[data-name]').value=product.name||'';input.value=String(getProductUnitsPerBox(product));input.disabled=true;message.textContent='Verificando historial de ventas…';
- let saving=false;const close=()=>{if(saving)return;dialog.close();dialog.remove();cell.focus();};back.onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('input',e=>e.stopPropagation());dialog.addEventListener('change',e=>e.stopPropagation());dialog.addEventListener('keydown',e=>{if(e.key==='F5'){e.preventDefault();e.stopPropagation();}});
+ let saving=false;const close=()=>{if(saving)return;dialog.close();dialog.remove();cell.focus();};back.onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('input',e=>e.stopPropagation());dialog.addEventListener('change',e=>e.stopPropagation());dialog.addEventListener('keydown',e=>{if(['F5','F8'].includes(e.key)){e.preventDefault();e.stopPropagation();}});
  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();accept.focus();}});
  purchasesMain.append(dialog);dialog.showModal();
  try{await checkPurchaseBoxHistory(product);if(!dialog.isConnected)return;input.disabled=false;accept.disabled=false;message.textContent='Se guardará en Mantenimiento de artículos.';input.focus();input.select();}catch(error){if(dialog.isConnected)message.textContent=error.message;return;}
@@ -3387,12 +3389,13 @@ if(input&&!input.disabled){input.focus({preventScroll:true});}
 });
 purchasesMain.querySelector('[data-purchase-articles]').onclick=openArticlesFromPurchases;
 document.addEventListener('keydown',event=>{
-if(event.key!=='F5'||purchasesMain.hidden||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||root.querySelector('dialog[open]'))return;
+if(!['F5','F8'].includes(event.key)||purchasesMain.hidden||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||root.querySelector('dialog[open]'))return;
 event.preventDefault();event.stopImmediatePropagation();if(event.repeat)return;
 const target=event.target===document||event.target===document.body?document.activeElement:event.target;
 const cell=target?.closest?.('.purchase-table tbody td');
 const box=cell&&purchasesMain.contains(cell)?cell.querySelector('input[aria-label="Cant. x CJ"]'):null;
-if(box){selectPurchaseRow(box.closest('tr'));openPurchaseBoxEditor(box);}else{openArticlesFromPurchases();}
+if(event.key==='F5'){openArticlesFromPurchases();return;}
+if(box){selectPurchaseRow(box.closest('tr'));openPurchaseBoxEditor(box);}else{purchasesMain.querySelector('[data-purchase-status]').textContent='Para usar F8, haga clic en Cant. x CJ de una línea de producto.';}
 },true);
 purchasesMain.addEventListener('keydown',event=>{
 if(!['F3','F4'].includes(event.key) || purchasesMain.hidden || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || purchasesMain.querySelector('dialog[open]')){return;}
@@ -5355,7 +5358,7 @@ let raw;if(unchanged){raw={gross:source.gross,discount:source.discount,net:sourc
 const result={subtotalCents:xmlCents(raw.gross),discountCents:xmlCents(raw.discount),netCents:xmlCents(raw.net),otherChargesCents:xmlCents(raw.oc),vatCents:xmlCents(raw.tax),totalCents:xmlCents(raw.total),raw};return Object.values(result).filter(v=>typeof v==='number').every(Number.isSafeInteger)?result:null;
 }
 function populateXmlPurchaseRow(row,chosen=null){
-const index=Number(row.dataset.xmlIndex),source=currentPurchaseXml?.rows[index];if(!source){return false;}if(chosen){currentPurchaseXml.mapping[index]=xmlProductKey(chosen);}const product=pendingProduct(currentPurchaseXml.mapping[index]);const field=name=>row.querySelector('[aria-label="'+name+'"]');showPurchaseCurrentGain(row,product);
+const index=Number(row.dataset.xmlIndex),source=currentPurchaseXml?.rows[index];if(!source){return false;}if(chosen){currentPurchaseXml.mapping[index]=xmlProductKey(chosen);}const product=pendingProduct(currentPurchaseXml.mapping[index]);const field=name=>row.querySelector('[aria-label="'+name+'"]');showPurchaseCurrentGain(row,product);row.dataset.articleKey=product?articleRecordKey(product):'';
 row.dataset.productBarcode=product?.barcode||'';row.dataset.xmlProductId=product?xmlProductKey(product):'';field('Código').value=source.providerCode;field('Nombre').value=product?.name||source.name;field('Código').readOnly=true;field('Cant. x CJ').value=product?getProductUnitsPerBox(product):1;field('Existencia').value=product&&product.barcode?getPurchaseAvailableStock(product)??'':'';field('Precio actual').value=product?.price??'';if(!row.dataset.xmlInitialized||field('Precio 1').value===''){field('Precio 1').value=product?.price??'';}const cost=product?getProductCurrentCost(product,costBasis.value):null;field('Costo actual').value=cost??'';row.dataset.vatRate=String(Number(source.taxRate)/100);field('IVA (%)').value=Number(source.taxRate).toFixed(2)+'%';for(const label of ['Cant. x CJ','Existencia','Precio actual','Costo actual','Precio 1'])formatPurchaseNumber(field(label));if(chosen)applyXmlPurchasePresentation(row);else updatePurchaseSubtotal(row);return Boolean(product);
 }
 let excelZipPromise=null;
