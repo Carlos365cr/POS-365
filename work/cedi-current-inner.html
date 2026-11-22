@@ -2,7 +2,7 @@
 <html lang="es-419">
 <head>
 <meta charset="utf-8">
-<meta name="cedi-build-version" content="73">
+<meta name="cedi-build-version" content="74">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
@@ -12839,6 +12839,31 @@ const item=Array.from(root.querySelectorAll('aside button')).find(b=>b.textConte
 @media(min-width:761px) and (max-width:1099px){
  #articulos-cedi .internal-invoice-window .ii-grid.ii-document{grid-template-columns:repeat(4,minmax(0,1fr))}
  #articulos-cedi .internal-invoice-window .ii-document :is(.ii-credit,.ii-comment){grid-column:span 2}
+}
+</style>
+
+<style id="product-restrictions-compact">
+#articulos-cedi .product-restrictions-view{padding:10px 14px}
+#articulos-cedi .product-restrictions-view h2{font-size:20px;margin:0 0 8px}
+#articulos-cedi .product-restrictions-view h3{font-size:15px;margin:12px 0 6px}
+#articulos-cedi .product-restrictions-view>section>.grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px 8px;align-items:end}
+#articulos-cedi .product-restrictions-view>section>.grid>label{font-size:11px;line-height:1.15;gap:2px;min-width:0;margin:0}
+#articulos-cedi .product-restrictions-view>section>.grid>label:has(:is([data-client],[data-search],[data-manufacturer])){grid-column:span 2}
+#articulos-cedi .product-restrictions-view>section>.grid :is(input,select){height:26px;min-height:26px;width:100%;min-width:0;padding:2px 6px;box-sizing:border-box;font-size:12px;border-radius:4px}
+#articulos-cedi .product-restrictions-view button{height:26px;min-height:26px;padding:3px 8px;font-size:12px;line-height:1.2;border-radius:4px}
+#articulos-cedi .product-restrictions-view>section>p{margin:6px 0;font-size:12px;line-height:1.25}
+#articulos-cedi .product-restrictions-view :is(td,th){height:24px;box-sizing:border-box;padding:3px 6px!important;font-size:12px;line-height:1.2}
+#articulos-cedi .product-restrictions-view td input[type=checkbox]{width:14px;height:14px;min-height:0;margin:0;vertical-align:middle}
+@media(max-width:1000px){
+ #articulos-cedi .product-restrictions-view>section>.grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+ #articulos-cedi .product-restrictions-view>section>.grid>label:has([data-manufacturer]){grid-column:span 1}
+}
+@media(max-width:600px){
+ #articulos-cedi .product-restrictions-view>section>.grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #articulos-cedi .product-restrictions-view>section>.grid>label:has([data-manufacturer]){grid-column:span 1}
+}
+@media(pointer:coarse){
+ #articulos-cedi .product-restrictions-view button,#articulos-cedi .product-restrictions-view>section>.grid :is(input,select){height:36px;min-height:36px;font-size:14px}
 }
 </style>
 </body>
