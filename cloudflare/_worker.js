@@ -3088,6 +3088,57 @@ async function passwordLogin(request,env){
  return response;
 }
 
+async function restrictionTables(db){
+ await db.prepare('CREATE TABLE IF NOT EXISTS product_restriction_heads(client TEXT PRIMARY KEY,revision TEXT NOT NULL)').run();
+ await db.prepare('CREATE TABLE IF NOT EXISTS product_restrictions(client TEXT NOT NULL,product TEXT NOT NULL,blocked INTEGER NOT NULL,code TEXT NOT NULL,name TEXT NOT NULL,changed TEXT NOT NULL,author TEXT NOT NULL,PRIMARY KEY(client,product))').run();
+ await db.prepare('CREATE TABLE IF NOT EXISTS product_restriction_history(id INTEGER PRIMARY KEY AUTOINCREMENT,operation TEXT NOT NULL,client TEXT NOT NULL,product TEXT NOT NULL,code TEXT NOT NULL,name TEXT NOT NULL,blocked INTEGER NOT NULL,changed TEXT NOT NULL,author TEXT NOT NULL)').run();
+ await db.prepare('CREATE TABLE IF NOT EXISTS product_restriction_operations(id TEXT PRIMARY KEY,client TEXT NOT NULL,request TEXT NOT NULL,author TEXT NOT NULL)').run();
+}
+function restrictionCatalog(snapshot){return new Map([...(snapshot.xmlPendingArticles||[]),...(snapshot.products||[])].map(p=>[String(p.restrictionKey||p.xmlOriginId||p.id||p.barcode||p.code),p]));}
+function restrictionClient(snapshot,id){return (snapshot.contactsState?.records||[]).find(c=>String(c.id)===id&&c.active&&c.status==='saved'&&(c.fields||[]).some(f=>f[0]==='esClienteInterno'&&f[2]===true));}
+async function restrictionState(db,client,before){
+ const head=await db.prepare('SELECT revision FROM product_restriction_heads WHERE client=?').bind(client).first();
+ const rows=await db.prepare('SELECT product,blocked,code,name,changed,author FROM product_restrictions WHERE client=?').bind(client).all();
+ const history=await db.prepare('SELECT id,product,code,name,blocked,changed,author FROM product_restriction_history WHERE client=? AND id<? ORDER BY id DESC LIMIT 101').bind(client,before||Number.MAX_SAFE_INTEGER).all();
+ return {client,revision:head?.revision||'0',entries:rows.results,history:history.results.slice(0,100),next:history.results.length>100?history.results[99].id:null};
+}
+async function manageProductRestrictions(request,env,email){
+ const db=env.DB,url=new URL(request.url);await restrictionTables(db);
+ if(request.method==='GET'){
+  const client=url.searchParams.get('client');if(!client||client.length>200)return json({error:'Seleccione un cliente.'},400);
+  return json(await restrictionState(db,client,Number(url.searchParams.get('before'))));
+ }
+ if(request.method!=='POST'||request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
+ const body=await request.json().catch(()=>null);
+ if(!body||typeof body.client!=='string'||typeof body.revision!=='string'||! /^[a-f0-9-]{36}$/i.test(body.operation||'')||!Array.isArray(body.changes)||body.changes.length>15000||!body.changes.length||body.changes.some(c=>typeof c.product!=='string'||!c.product||c.product.length>200||typeof c.blocked!=='boolean')||new Set(body.changes.map(c=>c.product)).size!==body.changes.length)return json({error:'Revise el cliente y los cambios seleccionados.'},400);
+ const payload=JSON.stringify(body),old=await db.prepare('SELECT request,author FROM product_restriction_operations WHERE id=?').bind(body.operation).first();
+ if(old)return old.request===payload&&old.author===email?json(await restrictionState(db,body.client)):json({error:'Este intento corresponde a otros cambios.'},409);
+ const {snapshot,revision}=await readClosingSnapshot(db),catalog=restrictionCatalog(snapshot);
+ if(!restrictionClient(snapshot,body.client))return json({error:'Seleccione un cliente interno existente y activo.'},400);
+ if(body.changes.some(c=>!catalog.has(c.product)))return json({error:'Hay artículos que ya no existen. Actualice el catálogo.'},409);
+ const changes=JSON.stringify(body.changes.map(c=>({...c,code:String(catalog.get(c.product).barcode||catalog.get(c.product).code||''),name:String(catalog.get(c.product).name||'')}))),changed=new Date().toISOString();
+ await db.prepare("INSERT OR IGNORE INTO product_restriction_heads(client,revision) VALUES(?,'0')").bind(body.client).run();
+ const gate='EXISTS(SELECT 1 FROM product_restriction_heads WHERE client=? AND revision=?) AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)';
+ await db.batch([
+  db.prepare('INSERT INTO product_restriction_operations(id,client,request,author) SELECT ?,?,?,? WHERE '+gate).bind(body.operation,body.client,payload,email,body.client,body.revision,revision),
+  db.prepare('INSERT INTO product_restriction_history(operation,client,product,code,name,blocked,changed,author) SELECT ?,?,json_extract(j.value,\'$.product\'),json_extract(j.value,\'$.code\'),json_extract(j.value,\'$.name\'),json_extract(j.value,\'$.blocked\'),?,? FROM json_each(?) j WHERE '+gate+' AND COALESCE((SELECT blocked FROM product_restrictions WHERE client=? AND product=json_extract(j.value,\'$.product\')),0)<>json_extract(j.value,\'$.blocked\')').bind(body.operation,body.client,changed,email,changes,body.client,body.revision,revision,body.client),
+  db.prepare('INSERT INTO product_restrictions(client,product,blocked,code,name,changed,author) SELECT client,product,blocked,code,name,changed,author FROM product_restriction_history WHERE operation=? ON CONFLICT(client,product) DO UPDATE SET blocked=excluded.blocked,code=excluded.code,name=excluded.name,changed=excluded.changed,author=excluded.author').bind(body.operation),
+  db.prepare('UPDATE product_restriction_heads SET revision=? WHERE client=? AND revision=? AND EXISTS(SELECT 1 FROM product_restriction_operations WHERE id=?)').bind(body.operation,body.client,body.revision,body.operation)
+ ]);
+ const saved=await db.prepare('SELECT request FROM product_restriction_operations WHERE id=?').bind(body.operation).first();
+ return saved?.request===payload?json(await restrictionState(db,body.client)):json({error:'Otro usuario cambió las restricciones o el catálogo. Recargue y revise antes de guardar.'},409);
+}
+async function validateInternalClient(db,bill){
+ const {snapshot,revision}=await readClosingSnapshot(db),client=String(bill.header.clientId||'');
+ if(!restrictionClient(snapshot,client))return {error:'Seleccione un cliente interno existente y activo.'};
+ const catalog=new Map([...(snapshot.xmlPendingArticles||[]),...(snapshot.products||[])].map(p=>[String(p.xmlOriginId||p.id||p.barcode||p.code),p]));
+ for(const line of bill.lines){const product=catalog.get(line.productKey);const codes=product?[product.code,product.barcode,...(product.codes||[]),...(product.details?.general||[]).filter(f=>['codigo','referencia'].includes(f[0])||/^(barras|sku)\d*$/.test(f[0])||f[0].startsWith('extra')).map(f=>f[1])]:[];if(!product||!codes.includes(line.code))return {error:'Un artículo ya no coincide con el catálogo. Revise la factura.'};}
+ await restrictionTables(db);const state=await restrictionState(db,client),blocked=new Set(state.entries.filter(r=>r.blocked).map(r=>r.product));
+ const products=bill.lines.map(l=>String(catalog.get(l.productKey).restrictionKey||l.productKey));
+ const conflicts=bill.lines.flatMap((l,i)=>blocked.has(products[i])?[{item:i+1,code:l.code,name:l.name}]:[]);
+ return conflicts.length?{error:'Hay productos restringidos para este cliente. Elimine las líneas indicadas.',conflicts}:{revision,products};
+}
+
 async function voucherTable(db){await db.prepare('CREATE TABLE IF NOT EXISTS pos_vouchers (code TEXT PRIMARY KEY, return_id TEXT NOT NULL UNIQUE, cents INTEGER NOT NULL, issued INTEGER NOT NULL, expires INTEGER NOT NULL, redeemed_sale TEXT, redeemed_at INTEGER)').run();}
 function validVoucherOperation(op){return op&&['issue','redeem'].includes(op.kind)&&/^NC[0-9A-F]{24}$/.test(op.code)&&typeof op.recordId==='string'&&/^[0-9a-f-]{36}$/.test(op.recordId)&&Number.isSafeInteger(op.cents)&&op.cents>0;}
 async function readVoucher(db,code){await voucherTable(db);return db.prepare('SELECT * FROM pos_vouchers WHERE code=?').bind(code).first();}
@@ -3509,6 +3560,7 @@ export default { async fetch(request, env) {
   if(url.pathname==='/api/dynamic-notice-settings'){try{return await manageDynamicNoticeSettings(request,env,email);}catch{return json({error:'No se confirmó la configuración del aviso. Reintente.'},503);}}
   if(url.pathname==='/api/notices'){try{return await manageNotices(request,env,email,claims);}catch{return json({error:'No se confirmó la operación de Avisos. Puede reintentar.'},503);}}
   if(url.pathname==='/api/lots'){try{return await manageLots(request,env,email);}catch{return json({error:'No se pudieron consultar o guardar los lotes. Intente de nuevo.'},503);}}
+  if(url.pathname==='/api/product-restrictions'){try{return await manageProductRestrictions(request,env,email);}catch{return json({error:'No se confirmó la operación. Reintente con los mismos cambios.'},503);}}
   if(url.pathname==='/api/internal-invoice'){
     if(request.method!=='POST')return json({error:'Se requiere POST.'},405);
     if(request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
@@ -3526,8 +3578,11 @@ export default { async fetch(request, env) {
     if(!Number.isSafeInteger(paid)||paid<gross-bill.discount)return json({error:'El pago no cubre el total.'},400);
     const key=email+'/'+bill.draft,payload=JSON.stringify(bill);
     await env.DB.prepare('CREATE TABLE IF NOT EXISTS internal_invoices (number INTEGER PRIMARY KEY, draft TEXT NOT NULL UNIQUE, payload TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)').run();
+    const existing=await env.DB.prepare('SELECT payload FROM internal_invoices WHERE number=? AND draft=?').bind(Number(bill.number),key).first();
+    if(existing)return existing.payload===payload?json({number:bill.number}):json({error:'La factura ya fue procesada con otros datos.'},409);
+    const validation=await validateInternalClient(env.DB,bill);if(validation.error)return json(validation,409);
     const [,saved]=await env.DB.batch([
-      env.DB.prepare('INSERT INTO internal_invoices(number,draft,payload) SELECT number,draft,? FROM internal_invoice_numbers WHERE number=? AND draft=? ON CONFLICT(number) DO NOTHING').bind(payload,Number(bill.number),key),
+      env.DB.prepare('INSERT INTO internal_invoices(number,draft,payload) SELECT number,draft,? FROM internal_invoice_numbers WHERE number=? AND draft=? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?) AND NOT EXISTS(SELECT 1 FROM product_restrictions r JOIN json_each(?) l ON r.product=l.value WHERE r.client=? AND r.blocked=1) ON CONFLICT(number) DO NOTHING').bind(payload,Number(bill.number),key,validation.revision,JSON.stringify(validation.products),bill.header.clientId),
       env.DB.prepare('SELECT payload FROM internal_invoices WHERE number=? AND draft=?').bind(Number(bill.number),key)
     ]);
     if(saved.results[0]?.payload!==payload)return json({error:'Verifique el número reservado y los datos de la factura.'},409);

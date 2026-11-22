@@ -360,7 +360,7 @@ try{const binary=atob(content);if(binary.length>2000000){return;}const bytes=Uin
 // Data-only Excel and PDF exports from this application's sandbox.
 window.addEventListener('message',event=>{
 const frame=document.getElementById('codex-visualization');if(event.source!==frame?.contentWindow||event.data?.type!=='cedi-cash-export'){return;}
-const {filename,mime,content}=event.data;if(typeof filename!=='string'||filename!=='CEDI-compras-lineas.xlsx'&&!/^CEDI-salidas-(sistema|pago)-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.(xlsx|pdf)$/.test(filename)&&!/^POS365-(analisis-ventas|sugerido)-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.(xlsx|pdf)$/.test(filename)&&!/^POS365-distribucion-flujos-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.xlsx$/.test(filename)&&!/^POS365-venta-semanal-\d{4}-S\d{1,2}-a-S\d{1,2}\.xlsx$/.test(filename)&&!/^Encuestas-(\d{4}-\d{2}-\d{2})?-(\d{4}-\d{2}-\d{2})?\.xlsx$/.test(filename)||typeof content!=='string'||content.length>20*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(content)){return;}
+const {filename,mime,content}=event.data;if(typeof filename!=='string'||filename!=='Productos-restringidos.xlsx'&&filename!=='CEDI-compras-lineas.xlsx'&&!/^CEDI-salidas-(sistema|pago)-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.(xlsx|pdf)$/.test(filename)&&!/^POS365-(analisis-ventas|sugerido)-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.(xlsx|pdf)$/.test(filename)&&!/^POS365-distribucion-flujos-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.xlsx$/.test(filename)&&!/^POS365-venta-semanal-\d{4}-S\d{1,2}-a-S\d{1,2}\.xlsx$/.test(filename)&&!/^Encuestas-(\d{4}-\d{2}-\d{2})?-(\d{4}-\d{2}-\d{2})?\.xlsx$/.test(filename)||typeof content!=='string'||content.length>20*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(content)){return;}
 try{const decoded=atob(content);if(mime==='application/pdf'){if(!filename.endsWith('.pdf')||!decoded.startsWith('%PDF-1.4')){return;}}else if(mime==='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'){if(!filename.endsWith('.xlsx')||!decoded.startsWith('PK\x03\x04')){return;}}else{return;}
 const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:mime})),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }catch(error){}
@@ -420,6 +420,9 @@ const bytes=Uint8Array.from(decoded,c=>c.charCodeAt(0)),url=URL.createObjectURL(
 <script>
 window.addEventListener('message',async event=>{
  const frame=document.getElementById('codex-visualization'),port=event.ports[0];
+ if(frame&&event.source===frame.contentWindow&&event.data?.type==='pos365-product-restrictions'&&port){
+  try{const {client,before,body}=event.data;const response=await fetch('/api/product-restrictions?client='+encodeURIComponent(client||'')+(before?'&before='+encodeURIComponent(before):''),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});port.postMessage(await response.json());}catch{port.postMessage({error:'No se recibió confirmación. Reintente sin cambiar la selección.'});}finally{port.close();}return;
+ }
  if(frame&&event.source===frame.contentWindow&&event.data?.type==='pos365-lots'&&port){
   try{const body=event.data.body;const response=await fetch('/api/lots',body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});const result=await response.json();port.postMessage(response.ok?result:{error:result.error||'No se pudieron consultar los lotes.'});}catch{port.postMessage({error:'Revise la conexión. Puede reintentar el mismo movimiento.'});}finally{port.close();}return;
  }
