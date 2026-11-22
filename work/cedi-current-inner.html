@@ -3340,10 +3340,50 @@ if(context.focus?.isConnected){context.focus.focus({preventScroll:true});}
 viewport.scrollTop=context.scrollTop;viewport.scrollLeft=context.scrollLeft;
 });
 }
+function purchaseBoxInclusion(){return !purchaseModification&&!purchaseExclusion&&purchasesMain.querySelector('[name="compraOperacion"]').checked;}
+function checkPurchaseBoxHistory(product){
+ const keys=new Set([articleRecordKey(product),product.id,product.xmlOriginId,product.code,product.barcode].filter(Boolean).map(String));
+ if(trialCompletedSales.some(s=>(s.lines||[]).some(l=>[l.productKey,l.productId,l.barcode,l.code].some(v=>v!=null&&keys.has(String(v))))))return Promise.reject(Error('Este artículo tiene historial de ventas POS. No se permite modificarlo por este medio.'));
+ if(!sharedPurchaseStorage||window.parent===window)return Promise.reject(Error('Se requiere conexión al servidor para verificar el historial POS e interno.'));
+ return new Promise((resolve,reject)=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();reject(Error('No se pudo verificar el historial. Intente nuevamente.'));},20000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data?.ok?resolve():reject(Error(event.data?.error||'No se pudo verificar el historial.'));};window.parent.postMessage({type:'pos365-article-box-check',key:String(articleRecordKey(product)),identity:{id:product.id,xmlOriginId:product.xmlOriginId,barcode:product.barcode,code:product.code}},'*',[channel.port2]);});
+}
+async function openPurchaseBoxEditor(cell){
+ const status=purchasesMain.querySelector('[data-purchase-status]');
+ if(purchasesMain.querySelector('dialog[open]'))return;
+ if(!purchaseBoxInclusion()){status.textContent='Cant. x CJ solo se puede corregir durante la inclusión de una compra.';return;}
+ const row=cell.closest('tr'),key=row?.dataset.articleKey,product=key&&findArticleByKey(key);
+ if(!product){status.textContent='Seleccione primero un artículo válido en esta línea.';return;}
+ const dialog=document.createElement('dialog');dialog.className='purchase-box-editor';dialog.setAttribute('aria-label','Modificar cantidad por caja');dialog.style.cssText='width:min(420px,90vw);padding:16px';
+ dialog.innerHTML='<h3 style="margin:0 0 10px">Cantidad por caja</h3><label>Código<input data-code readonly></label><label>Producto<input data-name readonly></label><label>Cantidad por caja<input data-quantity type="text" inputmode="numeric" autocomplete="off"></label><p data-message role="status"></p><div class="actions"><button type="button" data-accept class="primary" disabled>Aceptar</button><button type="button" data-back>Regresar</button></div>';
+ const input=dialog.querySelector('[data-quantity]'),accept=dialog.querySelector('[data-accept]'),back=dialog.querySelector('[data-back]'),message=dialog.querySelector('[data-message]');
+ dialog.querySelector('[data-code]').value=product.code||product.barcode||'';dialog.querySelector('[data-name]').value=product.name||'';input.value=String(getProductUnitsPerBox(product));input.disabled=true;message.textContent='Verificando historial de ventas…';
+ let saving=false;const close=()=>{if(saving)return;dialog.close();dialog.remove();cell.focus();};back.onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('input',e=>e.stopPropagation());dialog.addEventListener('change',e=>e.stopPropagation());dialog.addEventListener('keydown',e=>{if(e.key==='F5'){e.preventDefault();e.stopPropagation();}});
+ input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();accept.focus();}});
+ purchasesMain.append(dialog);dialog.showModal();
+ try{await checkPurchaseBoxHistory(product);if(!dialog.isConnected)return;input.disabled=false;accept.disabled=false;message.textContent='Se guardará en Mantenimiento de artículos.';input.focus();input.select();}catch(error){if(dialog.isConnected)message.textContent=error.message;return;}
+ accept.onclick=async()=>{
+  const value=Number(input.value);if(!/^\d+$/.test(input.value.trim())||!Number.isSafeInteger(value)||value<1){message.textContent='Ingrese una cantidad entera mayor que cero.';input.focus();input.select();return;}
+  if(!purchaseBoxInclusion()||findArticleByKey(key)!==product){message.textContent='El artículo o la operación cambió. Regrese y vuelva a abrir la ventana.';return;}
+  saving=true;accept.disabled=true;back.disabled=true;input.disabled=true;message.textContent='Guardando artículo…';clearTimeout(purchaseBackupTimer);
+  const oldFormBox=form.elements.caja.value,oldDirty=trialHasEdits;
+  const previous=structuredClone(product.details||{}),before=getProductUnitsPerBox(product),oldSnapshot=savedTrialSnapshot,oldLocal=localStorage.getItem(trialStorageKey);
+  const lines=[...purchasesMain.querySelectorAll('.purchase-table tbody tr')].filter(line=>line.dataset.articleKey===key),previousLines=lines.map(line=>({line,data:{...line.dataset},inputs:[...line.querySelectorAll('input')].map(input=>({input,value:input.value,data:{...input.dataset}}))}));
+  try{
+   await checkPurchaseBoxHistory(product);
+   if(!purchaseBoxInclusion()||findArticleByKey(key)!==product)throw Error('El catálogo cambió. Regrese y revise el artículo.');
+   trialHasEdits=true;
+   if(selectedArticleRecord()===product)form.elements.caja.value=String(value);
+   product.details=structuredClone(previous);product.details.general=(product.details.general||[]).filter(f=>f[0]!=='caja');product.details.general.push(['caja',String(value),null]);
+   for(const line of lines){formatPurchaseNumber(line.querySelector('[aria-label="Cant. x CJ"]'),value);if(currentPurchaseXml&&line.dataset.xmlIndex!==undefined)applyXmlPurchasePresentation(line);else syncPurchaseQuantities(line);}
+   await persistPurchaseConfirmed(undefined,undefined,{key:String(key),before,value});
+   refreshArticleProperties();status.textContent='Cantidad por caja guardada en el artículo.';saving=false;close();
+  }catch(error){product.details=previous;form.elements.caja.value=oldFormBox;trialHasEdits=oldDirty;for(const saved of previousLines){for(const k of Object.keys(saved.line.dataset))delete saved.line.dataset[k];Object.assign(saved.line.dataset,saved.data);for(const field of saved.inputs){field.input.value=field.value;for(const k of Object.keys(field.input.dataset))delete field.input.dataset[k];Object.assign(field.input.dataset,field.data);}updatePurchaseSubtotal(saved.line);}savedTrialSnapshot=oldSnapshot;try{if(oldLocal===null)localStorage.removeItem(trialStorageKey);else localStorage.setItem(trialStorageKey,oldLocal);}catch{}refreshArticleProperties();message.textContent=error.message;saving=false;accept.disabled=false;back.disabled=false;input.disabled=false;}
+ };
+}
 purchasesMain.querySelector('[data-purchase-articles]').onclick=openArticlesFromPurchases;
 purchasesMain.addEventListener('keydown',event=>{
 if(event.key==='F5' && !purchasesMain.hidden && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey){
-event.preventDefault();event.stopPropagation();if(!event.repeat){openArticlesFromPurchases();}return;
+event.preventDefault();event.stopPropagation();if(!event.repeat){if(event.target.matches('[aria-label="Cant. x CJ"]'))openPurchaseBoxEditor(event.target);else openArticlesFromPurchases();}return;
 }
 if(!['F3','F4'].includes(event.key) || purchasesMain.hidden || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || purchasesMain.querySelector('dialog[open]')){return;}
 event.preventDefault();event.stopPropagation();if(event.repeat){return;}
@@ -10260,7 +10300,7 @@ return Array.from(target.elements).filter(input=>input.name).map(input=>[
 input.name,purchaseInputRaw(input),['checkbox','radio'].includes(input.type)?input.checked:null
 ]);
 }
-function persistTrialSnapshot(requireConfirmation=false,blockEmail,voucherOp){
+function persistTrialSnapshot(requireConfirmation=false,blockEmail,voucherOp,boxSizeOp){
 syncLatestArticleSuppliers();
 refreshContactLinks();
 savedTrialSnapshot={
@@ -10295,13 +10335,13 @@ surveyState:structuredClone(surveyState),
 companyHeader:JSON.parse(JSON.stringify(companyHeaderState))
 };
 refreshDynamics();
-refreshPurchaseProducts();refreshArticleProperties();refreshInventoryDashboard();
+if(!boxSizeOp)refreshPurchaseProducts();refreshArticleProperties();refreshInventoryDashboard();
 try{localStorage.setItem(trialStorageKey,JSON.stringify(savedTrialSnapshot));}catch(error){}
 const submitted=savedTrialSnapshot;
-persistHostTrialSnapshot(submitted,requireConfirmation,blockEmail,voucherOp).catch(()=>{if(requireConfirmation&&window.parent!==window)window.dispatchEvent(new MessageEvent('message',{source:window.parent,data:{type:'cedi-trial-state-saved',updatedAt:submitted.updatedAt,ok:false,reason:'No se pudo preparar la compra para enviarla.'}}));});
+persistHostTrialSnapshot(submitted,requireConfirmation,blockEmail,voucherOp,boxSizeOp).catch(()=>{if(requireConfirmation&&window.parent!==window)window.dispatchEvent(new MessageEvent('message',{source:window.parent,data:{type:'cedi-trial-state-saved',updatedAt:submitted.updatedAt,ok:false,reason:'No se pudo preparar la compra para enviarla.'}}));});
 return savedTrialSnapshot.updatedAt;
 }
-async function persistHostTrialSnapshot(snapshot,requireConfirmation,blockEmail,voucherOp){
+async function persistHostTrialSnapshot(snapshot,requireConfirmation,blockEmail,voucherOp,boxSizeOp){
 if(!window.openai?.setWidgetState){return;}
 // Compress the large XML archive first so ordinary edits preserve its compressed prefix.
 const serialized=JSON.stringify(sharedPurchaseStorage?{xmlInboxState:snapshot.xmlInboxState,...snapshot}:snapshot);
@@ -10314,7 +10354,7 @@ privateContent={cediTrialGzip:encoded};
 }
 if(savedTrialSnapshot!==snapshot&&!requireConfirmation){return;}
 // The hosted wrapper stores larger trial snapshots locally without expanding iframe permissions.
-if(window.parent!==window){window.parent.postMessage({type:'cedi-trial-state-save',updatedAt:snapshot.updatedAt,content:privateContent,blockEmail,voucherOp,authUsers:(snapshot.userDirectory||[]).map(({id,email,username,firstName,lastName,deleted,suspended})=>({id,email,username,firstName,lastName,deleted,suspended}))},'*');}
+if(window.parent!==window){window.parent.postMessage({type:'cedi-trial-state-save',updatedAt:snapshot.updatedAt,content:privateContent,blockEmail,voucherOp,boxSizeOp,authUsers:(snapshot.userDirectory||[]).map(({id,email,username,firstName,lastName,deleted,suspended})=>({id,email,username,firstName,lastName,deleted,suspended}))},'*');}
 if(JSON.stringify(privateContent).length>=14000){return;}
 await window.openai.setWidgetState({
 modelContent:{savedTrialArticles:snapshot.products.length+(snapshot.xmlPendingArticles?.length||0),savedContacts:snapshot.contactsState?.records?.length || 0,savedCashOutEntries:snapshot.cashOutEntries?.length || 0},
@@ -10624,8 +10664,8 @@ if(entryModule&&!entryModule.disabled)entryModule.click();
 else {homeMenu.click();requestAnimationFrame(focusArticleCode);}
 let trialHasEdits=false;
 restoreTrialState();
-root.addEventListener('input',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view,.product-restrictions-view,.internal-invoice-window,[data-list-dialog]')){trialHasEdits=true;}},true);
-root.addEventListener('change',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view,.product-restrictions-view,.internal-invoice-window,[data-list-dialog]')){trialHasEdits=true;}},true);
+root.addEventListener('input',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view,.product-restrictions-view,.internal-invoice-window,.purchase-box-editor,[data-list-dialog]')){trialHasEdits=true;}},true);
+root.addEventListener('change',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view,.product-restrictions-view,.internal-invoice-window,.purchase-box-editor,[data-list-dialog]')){trialHasEdits=true;}},true);
 let purchaseBackupTimer;
 for(const name of ['input','change']){purchasesMain.addEventListener(name,event=>{if(event?.target?.matches('[name=compraOperacion]'))return;clearTimeout(purchaseBackupTimer);if(!currentPurchaseXml&&!purchaseModification&&!purchaseExclusion)purchaseBackupTimer=setTimeout(()=>{if(!currentPurchaseXml&&!purchaseModification)persistTrialSnapshot();},400);});}
 window.addEventListener('openai:set_globals',async event=>{
@@ -11658,7 +11698,8 @@ const exact=result.raw?Number(xmlFixed(result.raw.net)+xmlFixed(result.raw.oc))/
 const subtotalCents=result.raw?xmlCents(xmlScaledText(xmlFixed(result.raw.net)+xmlFixed(result.raw.oc))):(result.netCents??result.subtotalCents-result.discountCents)+result.otherChargesCents;
 return {subtotalCents,unitCost:(exact??subtotalCents/100)/Number(quantity)};
 }
-function persistPurchaseConfirmed(blockEmail,voucherOp){
+function persistPurchaseConfirmed(blockEmail,voucherOp,boxSizeOp){
+if(boxSizeOp&&!sharedPurchaseStorage)return Promise.reject(new Error("Se requiere conexión al servidor."));
 if(voucherOp&&!sharedPurchaseStorage)return Promise.reject(new Error("La nota de crédito comercial requiere conexión al servidor."));
 if(window.parent===window){const stamp=persistTrialSnapshot();try{if(JSON.parse(localStorage.getItem(trialStorageKey))?.updatedAt===stamp)return Promise.resolve();}catch(error){}return Promise.reject(new Error('No se pudo guardar la compra. El XML sigue en revisión.'));}
 const shared=sharedPurchaseStorage===true;
@@ -11671,7 +11712,7 @@ return new Promise((resolve,reject)=>{
  };
  window.addEventListener('message',listener);
  if(!shared)timer=setTimeout(()=>finish(new Error('No se recibió confirmación del guardado. Revisá Compras registradas.')),12000);
- try{stamp=persistTrialSnapshot(true,blockEmail,voucherOp);}catch(error){finish(error);}
+ try{stamp=persistTrialSnapshot(true,blockEmail,voucherOp,boxSizeOp);}catch(error){finish(error);}
 });
 }
 function calculatePurchaseLine(quantity,cost,discount1,discount2,tax,otherCharges=0){

@@ -423,6 +423,9 @@ window.addEventListener('message',async event=>{
  if(frame&&event.source===frame.contentWindow&&event.data?.type==='pos365-product-restrictions'&&port){
   try{const {client,before,body}=event.data;const response=await fetch('/api/product-restrictions?client='+encodeURIComponent(client||'')+(before?'&before='+encodeURIComponent(before):''),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});port.postMessage(await response.json());}catch{port.postMessage({error:'No se recibió confirmación. Reintente sin cambiar la selección.'});}finally{port.close();}return;
  }
+ if(frame&&event.source===frame.contentWindow&&event.data?.type==='pos365-article-box-check'&&port){
+  try{const response=await fetch('/api/article-box-eligibility',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:event.data.key,identity:event.data.identity})});port.postMessage(await response.json());}catch{port.postMessage({error:'No se pudo verificar el historial de ventas. Revise la conexión.'});}finally{port.close();}return;
+ }
  if(frame&&event.source===frame.contentWindow&&event.data?.type==='pos365-lots'&&port){
   try{const body=event.data.body;const response=await fetch('/api/lots',body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});const result=await response.json();port.postMessage(response.ok?result:{error:result.error||'No se pudieron consultar los lotes.'});}catch{port.postMessage({error:'Revise la conexión. Puede reintentar el mismo movimiento.'});}finally{port.close();}return;
  }

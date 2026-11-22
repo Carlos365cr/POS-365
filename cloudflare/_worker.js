@@ -3147,6 +3147,35 @@ function voucherInfo(row){return row?{code:row.code,cents:row.cents,issued:row.i
 function closingDay(record){if(record.invoiceDate&&/^\d{4}-\d{2}-\d{2}$/.test(record.invoiceDate))return record.invoiceDate;const d=new Date(record.date);if(!Number.isFinite(d.getTime()))return '';return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);}
 function closingDocuments(snapshot){const docs=[];for(const [kind,list]of [['sale',snapshot.sales||[]],['return',snapshot.posReturns||[]]]){const seen=new Set();for(const r of list){if(!r.id||seen.has(r.id)||r.status==='annulled')continue;seen.add(r.id);docs.push({...r,kind,day:closingDay(r),userKey:r.user||r.cashier?.id||'_unknown',userName:r.userName||r.cashier?.name||r.user||'Sin identificar',warehouse:r.warehouse||'_unknown',box:r.box||r.cashier?.box||'_unknown'});}}return docs;}
 function closingTotals(documents){const totals={invoices:0,returns:0,subtotal:0,discount:0,vat:0,rounding:0,sales:0,refunds:0,cash:0,card:0,sinpe:0,other:0,unknown:0,voucherUsed:0,voucherIssued:0,cashRefund:0,otherRefund:0,vouchersUsedCount:0,vouchersIssuedCount:0};const cents=v=>Number.isSafeInteger(v)?v:0;for(const r of documents){if(!Number.isSafeInteger(r.totalCents))throw Error('Un documento no tiene un total válido.');if(r.kind==='sale'){totals.invoices++;totals.sales+=r.totalCents;totals.subtotal+=(r.lines||[]).reduce((n,l)=>n+cents(l.subtotalCents),0);totals.vat+=(r.lines||[]).reduce((n,l)=>n+cents(l.vatCents),0);totals.discount+=(r.lines||[]).reduce((n,l)=>n+cents(l.discountCents),0);totals.rounding+=cents(r.roundingCents);const voucher=cents(r.voucherCents);totals.voucherUsed+=voucher;if(voucher)totals.vouchersUsedCount++;const remaining=r.totalCents-voucher;if((r.method||'').startsWith('Efectivo')){totals.cash+=remaining;}else if((r.method||'').startsWith('Tarjeta'))totals.card+=remaining;else if((r.method||'').startsWith('SINPE'))totals.sinpe+=remaining;else if(remaining)totals.unknown+=remaining;}else{const amount=-r.totalCents;totals.returns++;totals.refunds+=amount;if(r.method==='Efectivo')totals.cashRefund+=amount;else if(r.method==='Nota de crédito comercial'){totals.voucherIssued+=amount;totals.vouchersIssuedCount++;}else totals.otherRefund+=amount;}}totals.netSales=totals.sales-totals.refunds;totals.cashNet=totals.cash-totals.cashRefund;totals.breakdownDifference=totals.sales-totals.subtotal-totals.vat-totals.rounding;return totals;}
+function boxArticleKey(p){return String(p.xmlOriginId||p.id||p.barcode||p.code||'');}
+function boxArticle(snapshot,key){return [...(snapshot.xmlPendingArticles||[]),...(snapshot.products||[])].filter(p=>boxArticleKey(p)===key).at(-1);}
+function boxAliases(product){return [...new Set([product.id,product.xmlOriginId,product.barcode,product.code,...(product.codes||[]).map(c=>typeof c==='string'?c:c?.code),...(product.details?.general||[]).filter(f=>['codigo','referencia'].includes(f[0])||/^(barras|sku)\d*$/.test(f[0])||f[0].startsWith('extra')).map(f=>f[1])].filter(v=>v!==undefined&&v!==null&&String(v)!=='').map(String))];}
+function boxHasSales(snapshot,aliases){const keys=new Set(aliases);return (snapshot.sales||[]).some(s=>(s.lines||[]).some(l=>[l.productKey,l.productId,l.barcode,l.code].some(v=>v!=null&&keys.has(String(v)))));}
+async function assertBoxUnsold(db,snapshot,product){
+ const aliases=boxAliases(product);if(!aliases.length)throw Error('El artículo no tiene identificación válida.');
+ if(boxHasSales(snapshot,aliases))throw Error('Este artículo tiene historial de facturación POS. No se permite cambiar Cant. x CJ desde Compras.');
+ await db.prepare('CREATE TABLE IF NOT EXISTS internal_invoices (number INTEGER PRIMARY KEY, draft TEXT NOT NULL UNIQUE, payload TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)').run();
+ const count=await db.prepare('SELECT COUNT(*) AS n FROM internal_invoices').first();
+ const marks=aliases.map(()=>'?').join(',');
+ const found=await db.prepare("SELECT 1 AS found FROM internal_invoices i,json_each(i.payload,'$.lines') l WHERE CAST(json_extract(l.value,'$.productKey') AS TEXT) IN ("+marks+") OR CAST(json_extract(l.value,'$.code') AS TEXT) IN ("+marks+") LIMIT 1").bind(...aliases,...aliases).first();
+ if(found)throw Error('Este artículo tiene historial de facturación interna. No se permite cambiar Cant. x CJ desde Compras.');
+ return count.n;
+}
+async function stagedBoxSnapshot(db,base,key,count){
+ const chunks=[];for(let start=0;start<count;start+=8){const rows=await db.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? AND part<?').bind(base,start,Math.min(count,start+8)).all();const staged=await db.prepare('SELECT part,payload FROM cedi_stage WHERE id=? AND part>=? AND part<?').bind(key,start,Math.min(count,start+8)).all();for(const r of [...rows.results,...staged.results])chunks[r.part]=r.payload;}
+ if(chunks.length!==count||Array.from({length:count},(_,i)=>!chunks[i]).some(Boolean))throw Error('El guardado del artículo está incompleto.');
+ const bytes=Uint8Array.from(atob(chunks.join('')),c=>c.charCodeAt(0));return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).json();
+}
+async function guardBoxSave(db,base,key,count,op){
+ const current=await readClosingSnapshot(db);if(current.revision!==base)throw Error('El catálogo cambió. Recargue antes de modificar el artículo.');
+ const next=await stagedBoxSnapshot(db,base,key,count),product=boxArticle(next,op.key),old=boxArticle(current.snapshot,op.key);
+ if(!product||Number(product.details?.general?.find(f=>f[0]==='caja')?.[1])!==op.value)throw Error('La cantidad del artículo no coincide con el cambio solicitado.');
+ if(old&&Number(old.details?.general?.find(f=>f[0]==='caja')?.[1]||1)!==op.before)throw Error('La cantidad por caja cambió en otra sesión.');
+ const identities={...product,codes:[...boxAliases(product),...(old?boxAliases(old):[])]};
+ await assertBoxUnsold(db,current.snapshot,identities);
+ return assertBoxUnsold(db,next,identities);
+}
+
 async function readClosingSnapshot(db){for(let attempt=0;attempt<3;attempt++){const head=await db.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();if(!head)return {revision:null,snapshot:{}};if(!head.parts)return {revision:head.revision,snapshot:{}};const rows=[];for(let i=0;i<head.parts;i+=8){const page=await db.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? ORDER BY part LIMIT 8').bind(head.revision,i).all();rows.push(...page.results);}if(rows.length!==head.parts||rows.some((r,i)=>r.part!==i))continue;const bytes=Uint8Array.from(atob(rows.map(r=>r.payload).join('')),c=>c.charCodeAt(0));const snapshot=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).json();const latest=await db.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();if(latest?.revision===head.revision)return {revision:head.revision,snapshot};}throw Error('La facturación cambió durante la consulta. Intente otra vez.');}
 async function closingTables(db){await db.prepare('CREATE TABLE IF NOT EXISTS pos_closings(id TEXT PRIMARY KEY,day TEXT NOT NULL,user_key TEXT NOT NULL,warehouse TEXT NOT NULL,box TEXT NOT NULL,author TEXT NOT NULL,created_at INTEGER NOT NULL,payload TEXT NOT NULL)').run();await db.prepare('CREATE TABLE IF NOT EXISTS pos_closing_items(kind TEXT NOT NULL,record_id TEXT NOT NULL,closing_id TEXT NOT NULL,PRIMARY KEY(kind,record_id))').run();}
 function closingFilter(documents,filter){return documents.filter(r=>r.day>=filter.from&&r.day<=filter.to&&(!filter.user||filter.user==='all'||r.userKey===filter.user)&&(!filter.warehouse||filter.warehouse==='all'||r.warehouse===filter.warehouse)&&(!filter.box||filter.box==='all'||r.box===filter.box));}
@@ -3561,6 +3590,10 @@ export default { async fetch(request, env) {
   if(url.pathname==='/api/notices'){try{return await manageNotices(request,env,email,claims);}catch{return json({error:'No se confirmó la operación de Avisos. Puede reintentar.'},503);}}
   if(url.pathname==='/api/lots'){try{return await manageLots(request,env,email);}catch{return json({error:'No se pudieron consultar o guardar los lotes. Intente de nuevo.'},503);}}
   if(url.pathname==='/api/product-restrictions'){try{return await manageProductRestrictions(request,env,email);}catch{return json({error:'No se confirmó la operación. Reintente con los mismos cambios.'},503);}}
+  if(url.pathname==='/api/article-box-eligibility'){
+   if(request.method!=='POST'||request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({},403);
+   try{const body=await request.json();if(!body||typeof body.key!=='string'||body.key.length>200)return json({},400);const {snapshot}=await readClosingSnapshot(env.DB);const product=boxArticle(snapshot,body.key)||body.identity;if(!product||boxArticleKey(product)!==body.key)return json({error:'Artículo no identificado.'},409);await assertBoxUnsold(env.DB,snapshot,product);return json({ok:true});}catch(error){return json({error:error.message||'No se pudo verificar el historial de ventas.'},409);}
+  }
   if(url.pathname==='/api/internal-invoice'){
     if(request.method!=='POST')return json({error:'Se requiere POST.'},405);
     if(request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({error:'Solicitud no permitida.'},403);
@@ -3659,7 +3692,8 @@ export default { async fetch(request, env) {
   // Upload bounded batches first. Only the final transaction publishes a revision.
   if(url.pathname==='/api/save' && request.method==='POST'){
     if(request.headers.get('Origin')!==url.origin || request.headers.get('Content-Type')!=='application/json')return json({},403);
-    const {base,id,count,changes,finish,blockEmail,authUsers,voucherOp}=await request.json();
+    const {base,id,count,changes,finish,blockEmail,authUsers,voucherOp,boxSizeOp}=await request.json();
+    if(boxSizeOp!==undefined&&(legacy||block||finish!==true||voucherOp||!boxSizeOp||typeof boxSizeOp.key!=='string'||!boxSizeOp.key||boxSizeOp.key.length>200||!Number.isSafeInteger(boxSizeOp.value)||boxSizeOp.value<1||!Number.isFinite(boxSizeOp.before)||boxSizeOp.before<1))return json({error:'Cambio de cantidad por caja inválido.'},400);
     if(voucherOp!==undefined&&(legacy||block||finish!==true||!validVoucherOperation(voucherOp)))return json({error:'Operación de nota de crédito comercial inválida.'},400);
     if(authUsers!==undefined&&(email!==masterEmail||legacy||finish!==true||block))return json({error:"Solo la cuenta máster puede sincronizar accesos."},403);
     if(blockEmail!==undefined&&(legacy||finish!==true||block||!mayBlock(env,email)))return json({error:'Se requiere permiso para bloquear usuarios.'},403);
@@ -3680,7 +3714,8 @@ export default { async fetch(request, env) {
         return json({staged:true});
       }
       if(!Number.isInteger(changes)||changes<0||changes>count)return json({},400);
-      const accessWrites=[];let voucherGuard='',voucherBindings=[];
+      const accessWrites=[];let voucherGuard='',voucherBindings=[];let boxGuard='',boxBindings=[];
+      if(boxSizeOp){try{const invoices=await guardBoxSave(db,base,key,count,boxSizeOp);boxGuard=' AND (SELECT COUNT(*) FROM internal_invoices)=?';boxBindings=[invoices];}catch(error){return json({error:error.message},409);}}
       if(voucherOp){
         await voucherTable(db);const now=Date.now(),old=await readVoucher(db,voucherOp.code);
         if(voucherOp.kind==='issue'){
@@ -3707,7 +3742,7 @@ export default { async fetch(request, env) {
       const results=await db.batch([
         db.prepare('INSERT INTO cedi_parts SELECT ?,p.part,p.payload FROM cedi_parts p WHERE p.revision=? AND p.part<? AND NOT EXISTS(SELECT 1 FROM cedi_stage s WHERE s.id=? AND s.part=p.part) AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,base,count,key,base),
         db.prepare('INSERT INTO cedi_parts SELECT ?,part,payload FROM cedi_stage WHERE id=? AND part<? AND EXISTS(SELECT 1 FROM cedi_head WHERE id=1 AND revision=?)').bind(rev,key,count,base),
-        db.prepare('UPDATE cedi_head SET revision=?,parts=?,author=? WHERE id=1 AND revision=? AND (SELECT COUNT(*) FROM cedi_parts WHERE revision=?)=? AND (SELECT COUNT(*) FROM cedi_stage WHERE id=?)=?'+voucherGuard).bind(rev,count,email,base,rev,count,key,changes,...voucherBindings),
+        db.prepare('UPDATE cedi_head SET revision=?,parts=?,author=? WHERE id=1 AND revision=? AND (SELECT COUNT(*) FROM cedi_parts WHERE revision=?)=? AND (SELECT COUNT(*) FROM cedi_stage WHERE id=?)=?'+voucherGuard+boxGuard).bind(rev,count,email,base,rev,count,key,changes,...voucherBindings,...boxBindings),
         db.prepare('DELETE FROM cedi_parts WHERE revision IN (?,?) AND revision<>(SELECT revision FROM cedi_head WHERE id=1)').bind(base,rev),
         db.prepare('DELETE FROM cedi_stage WHERE id=? OR created<unixepoch()-86400').bind(key),
         ...accessWrites
