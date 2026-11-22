@@ -2,7 +2,7 @@
 <html lang="es-419">
 <head>
 <meta charset="utf-8">
-<meta name="cedi-build-version" content="75">
+<meta name="cedi-build-version" content="76">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
@@ -9436,7 +9436,7 @@ function addPurchaseFormatButton(label, destination){
  button.onclick=async()=>{
   button.disabled=true;
   try{
-   await persistPurchaseConfirmed();
+   await Promise.resolve();if(trialHasEdits)await persistPurchaseConfirmed();
    window.parent.postMessage({type:'cedi-switch-purchase-format',destination},'*');
   }catch(error){
    button.disabled=false;
@@ -10043,7 +10043,7 @@ get widgetState(){return {privateContent:{contactos:savedContactState}};},
 async setWidgetState(value){
 let state=value.privateContent?.contactos;
 if(!state && value.privateContent?.contactosGzip){const bytes=Uint8Array.from(atob(value.privateContent.contactosGzip),c=>c.charCodeAt(0));state=JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text());}
-if(state){savedContactState=state;persistTrialSnapshot();}
+if(state){const changed=JSON.stringify(savedContactState?.records||[])!==JSON.stringify(state.records||[]);savedContactState=state;if(changed)persistTrialSnapshot();}
 }
 };
 (()=>{
@@ -10624,10 +10624,10 @@ if(entryModule&&!entryModule.disabled)entryModule.click();
 else {homeMenu.click();requestAnimationFrame(focusArticleCode);}
 let trialHasEdits=false;
 restoreTrialState();
-root.addEventListener('input',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view')){trialHasEdits=true;}},true);
-root.addEventListener('change',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view')){trialHasEdits=true;}},true);
+root.addEventListener('input',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view,.product-restrictions-view,.internal-invoice-window,[data-list-dialog]')){trialHasEdits=true;}},true);
+root.addEventListener('change',event=>{if(!event.target.closest('.price-lookup-dialog,.inventory-view,.product-restrictions-view,.internal-invoice-window,[data-list-dialog]')){trialHasEdits=true;}},true);
 let purchaseBackupTimer;
-for(const name of ['input','change']){purchasesMain.addEventListener(name,()=>{clearTimeout(purchaseBackupTimer);if(!currentPurchaseXml&&!purchaseModification&&!purchaseExclusion)purchaseBackupTimer=setTimeout(()=>{if(!currentPurchaseXml&&!purchaseModification)persistTrialSnapshot();},400);});}
+for(const name of ['input','change']){purchasesMain.addEventListener(name,event=>{if(event?.target?.matches('[name=compraOperacion]'))return;clearTimeout(purchaseBackupTimer);if(!currentPurchaseXml&&!purchaseModification&&!purchaseExclusion)purchaseBackupTimer=setTimeout(()=>{if(!currentPurchaseXml&&!purchaseModification)persistTrialSnapshot();},400);});}
 window.addEventListener('openai:set_globals',async event=>{
 const snapshot=await readHostTrialSnapshot(event.detail?.globals?.widgetState);
 if(!trialHasEdits && snapshot && (snapshot.updatedAt||0)>=(savedTrialSnapshot?.updatedAt||0)){restoreTrialSnapshot(snapshot);}
