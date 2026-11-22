@@ -88,10 +88,10 @@ function stop(message){
 let logoutTimer,accessCheck;
 function checkSessionAccess(){
   if(accessCheck)return accessCheck;
-  accessCheck=fetch('/api/session-access',{cache:'no-store'}).then(async response=>{
+  accessCheck=fetchSaveResponse('/api/session-access',{cache:'no-store'},20000).then(async ({response,payload})=>{
     if(response.status===401||response.status===403){location.replace('/login');return {};}
     if(!response.ok)throw Error('No se pudo comprobar el permiso.');
-    const access=await response.json();
+    const access=payload;
     if(access.email)frame.contentWindow?.postMessage({type:'pos365-billing-user',email:access.email,name:access.name,master:access.master,kind:access.kind,box:access.box,userId:access.userId},'*');
     if(Number.isFinite(access.remaining)){
       let warning=document.getElementById('cedi-session-warning');
@@ -155,17 +155,21 @@ window.addEventListener('message',async event=>{
   try{const result=await pendingPrices.get(path);frame.contentWindow.postMessage({type:'cedi-legacy-price-result',id,...result},'*');}
   catch{frame.contentWindow.postMessage({type:'cedi-legacy-price-result',id,error:true},'*');}
 });
+async function fetchSaveResponse(url,options={},timeout=30000){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
+ try{const response=await fetch(url,{...options,signal:controller.signal});const payload=await response.json().catch(error=>{if(controller.signal.aborted)throw error;return {};});return {response,payload};}finally{clearTimeout(timer);}
+}
 async function sendSaveStep(body){
   for(let attempt=0;;attempt++){
-    let response;
+    let response,payload;
     try{
-      response=await fetch(storePrefix+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      if(response.ok)return await response.json();
+      ({response,payload}=await fetchSaveResponse(storePrefix+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}));
+      if(response.ok)return payload;
     }catch{
       if(attempt===2)throw Error('Se perdió la conexión al guardar. Verificá el último registro guardado antes de reintentar.');
     }
     if(response && (attempt===2 || ![429,500,502,503,504].includes(response.status))){
-      const details=await response.json().catch(()=>({}));
+      const details=payload||{};
       throw Error(details.error || 'El servidor no confirmó el guardado. Verificá el último registro guardado antes de reintentar.');
     }
     await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));

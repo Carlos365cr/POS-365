@@ -3161,18 +3161,26 @@ async function assertBoxUnsold(db,snapshot,product){
  if(found)throw Error('Este artículo tiene historial de facturación interna. No se permite cambiar Cant. x CJ desde Compras.');
  return count.n;
 }
-async function stagedBoxSnapshot(db,base,key,count){
- const chunks=[];for(let start=0;start<count;start+=8){const rows=await db.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? AND part<?').bind(base,start,Math.min(count,start+8)).all();const staged=await db.prepare('SELECT part,payload FROM cedi_stage WHERE id=? AND part>=? AND part<?').bind(key,start,Math.min(count,start+8)).all();for(const r of [...rows.results,...staged.results])chunks[r.part]=r.payload;}
+async function readBoxSnapshot(db){
+ const head=await db.prepare('SELECT revision,parts FROM cedi_head WHERE id=1').first();if(!head||!head.parts)return {revision:head?.revision||null,snapshot:{}};
+ const chunks=[];for(let start=0;start<head.parts;start+=128){const rows=await db.prepare('SELECT part,payload FROM cedi_parts WHERE revision=? AND part>=? AND part<? ORDER BY part').bind(head.revision,start,Math.min(head.parts,start+128)).all();for(const row of rows.results)chunks[row.part]=row.payload;}
+ const snapshot=await decodeBoxChunks(chunks,head.parts);const latest=await db.prepare('SELECT revision FROM cedi_head WHERE id=1').first();if(latest?.revision!==head.revision)throw Error('El catálogo cambió durante la consulta. Intente nuevamente.');return {revision:head.revision,snapshot};
+}
+async function decodeBoxChunks(chunks,count){
  if(chunks.length!==count||Array.from({length:count},(_,i)=>!chunks[i]).some(Boolean))throw Error('El guardado del artículo está incompleto.');
  const bytes=Uint8Array.from(atob(chunks.join('')),c=>c.charCodeAt(0));return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).json();
 }
+async function stagedBoxSnapshot(db,base,key,count){
+ const chunks=[];for(let start=0;start<count;start+=128){const end=Math.min(count,start+128);const rows=await db.prepare('SELECT part,payload FROM cedi_stage WHERE id=? AND part>=? AND part<? UNION ALL SELECT p.part,p.payload FROM cedi_parts p WHERE p.revision=? AND p.part>=? AND p.part<? AND NOT EXISTS(SELECT 1 FROM cedi_stage s WHERE s.id=? AND s.part=p.part) ORDER BY part').bind(key,start,end,base,start,end,key).all();for(const row of rows.results)chunks[row.part]=row.payload;}
+ return decodeBoxChunks(chunks,count);
+}
 async function guardBoxSave(db,base,key,count,op){
- const current=await readClosingSnapshot(db);if(current.revision!==base)throw Error('El catálogo cambió. Recargue antes de modificar el artículo.');
+ const current=await readBoxSnapshot(db);if(current.revision!==base)throw Error('El catálogo cambió. Recargue antes de modificar el artículo.');
  const next=await stagedBoxSnapshot(db,base,key,count),product=boxArticle(next,op.key),old=boxArticle(current.snapshot,op.key);
  if(!product||Number(product.details?.general?.find(f=>f[0]==='caja')?.[1])!==op.value)throw Error('La cantidad del artículo no coincide con el cambio solicitado.');
  if(old&&Number(old.details?.general?.find(f=>f[0]==='caja')?.[1]||1)!==op.before)throw Error('La cantidad por caja cambió en otra sesión.');
  const identities={...product,codes:[...boxAliases(product),...(old?boxAliases(old):[])]};
- await assertBoxUnsold(db,current.snapshot,identities);
+ if(boxHasSales(current.snapshot,boxAliases(identities)))throw Error('Este artículo tiene historial de facturación POS. No se permite cambiar Cant. x CJ desde Compras.');
  return assertBoxUnsold(db,next,identities);
 }
 
@@ -3592,7 +3600,7 @@ export default { async fetch(request, env) {
   if(url.pathname==='/api/product-restrictions'){try{return await manageProductRestrictions(request,env,email);}catch{return json({error:'No se confirmó la operación. Reintente con los mismos cambios.'},503);}}
   if(url.pathname==='/api/article-box-eligibility'){
    if(request.method!=='POST'||request.headers.get('Origin')!==url.origin||request.headers.get('Content-Type')!=='application/json')return json({},403);
-   try{const body=await request.json();if(!body||typeof body.key!=='string'||body.key.length>200)return json({},400);const {snapshot}=await readClosingSnapshot(env.DB);const product=boxArticle(snapshot,body.key)||body.identity;if(!product||boxArticleKey(product)!==body.key)return json({error:'Artículo no identificado.'},409);await assertBoxUnsold(env.DB,snapshot,product);return json({ok:true});}catch(error){return json({error:error.message||'No se pudo verificar el historial de ventas.'},409);}
+   try{const body=await request.json();if(!body||typeof body.key!=='string'||body.key.length>200)return json({},400);const {snapshot}=await readBoxSnapshot(env.DB);const product=boxArticle(snapshot,body.key)||body.identity;if(!product||boxArticleKey(product)!==body.key)return json({error:'Artículo no identificado.'},409);await assertBoxUnsold(env.DB,snapshot,product);return json({ok:true});}catch(error){return json({error:error.message||'No se pudo verificar el historial de ventas.'},409);}
   }
   if(url.pathname==='/api/internal-invoice'){
     if(request.method!=='POST')return json({error:'Se requiere POST.'},405);

@@ -2,7 +2,7 @@
 <html lang="es-419">
 <head>
 <meta charset="utf-8">
-<meta name="cedi-build-version" content="78">
+<meta name="cedi-build-version" content="79">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src 'self' blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://persistent.oaistatic.com/plugins/visualize/ https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
@@ -3359,14 +3359,20 @@ async function openPurchaseBoxEditor(cell){
  dialog.innerHTML='<h3 style="margin:0 0 10px">Cantidad por caja</h3><label>Código<input data-code readonly></label><label>Producto<input data-name readonly></label><label>Cantidad por caja<input data-quantity type="text" inputmode="numeric" autocomplete="off"></label><p data-message role="status"></p><div class="actions"><button type="button" data-accept class="primary" disabled>Aceptar</button><button type="button" data-back>Regresar</button></div>';
  const input=dialog.querySelector('[data-quantity]'),accept=dialog.querySelector('[data-accept]'),back=dialog.querySelector('[data-back]'),message=dialog.querySelector('[data-message]');
  dialog.querySelector('[data-code]').value=product.code||product.barcode||'';dialog.querySelector('[data-name]').value=product.name||'';input.value=String(getProductUnitsPerBox(product));input.disabled=true;message.textContent='Verificando historial de ventas…';
+ let quantityTouched=false;
+ const selectQuantity=()=>{input.focus({preventScroll:true});input.select();input.setSelectionRange(0,input.value.length);};
+ input.addEventListener('input',()=>{quantityTouched=true;});
+ input.addEventListener('keydown',()=>{quantityTouched=true;});
+ input.addEventListener('pointerdown',()=>{quantityTouched=true;});
+ input.addEventListener('focus',()=>{if(!input.disabled)input.select();});
  let saving=false;const close=()=>{if(saving)return;dialog.close();dialog.remove();cell.focus();};back.onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('input',e=>e.stopPropagation());dialog.addEventListener('change',e=>e.stopPropagation());dialog.addEventListener('keydown',e=>{if(['F5','F8'].includes(e.key)){e.preventDefault();e.stopPropagation();}});
  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();accept.focus();}});
  purchasesMain.append(dialog);dialog.showModal();
- try{await checkPurchaseBoxHistory(product);if(!dialog.isConnected)return;input.disabled=false;accept.disabled=false;message.textContent='Se guardará en Mantenimiento de artículos.';input.focus();input.select();}catch(error){if(dialog.isConnected)message.textContent=error.message;return;}
+ try{await checkPurchaseBoxHistory(product);if(!dialog.isConnected)return;input.disabled=false;accept.disabled=false;message.textContent='Se guardará en Mantenimiento de artículos.';selectQuantity();requestAnimationFrame(()=>requestAnimationFrame(()=>{if(dialog.isConnected&&dialog.open&&!quantityTouched&&!input.disabled)selectQuantity();}));}catch(error){if(dialog.isConnected)message.textContent=error.message;return;}
  accept.onclick=async()=>{
   const value=Number(input.value);if(!/^\d+$/.test(input.value.trim())||!Number.isSafeInteger(value)||value<1){message.textContent='Ingrese una cantidad entera mayor que cero.';input.focus();input.select();return;}
   if(!purchaseBoxInclusion()||findArticleByKey(key)!==product){message.textContent='El artículo o la operación cambió. Regrese y vuelva a abrir la ventana.';return;}
-  saving=true;accept.disabled=true;back.disabled=true;input.disabled=true;message.textContent='Guardando artículo…';clearTimeout(purchaseBackupTimer);
+  saving=true;accept.disabled=true;back.disabled=true;input.disabled=true;message.textContent='Verificando nuevamente el historial de ventas…';clearTimeout(purchaseBackupTimer);
   const oldFormBox=form.elements.caja.value,oldDirty=trialHasEdits;
   const previous=structuredClone(product.details||{}),before=getProductUnitsPerBox(product),oldSnapshot=savedTrialSnapshot,oldLocal=localStorage.getItem(trialStorageKey);
   const lines=[...purchasesMain.querySelectorAll('.purchase-table tbody tr')].filter(line=>line.dataset.articleKey===key),previousLines=lines.map(line=>({line,data:{...line.dataset},inputs:[...line.querySelectorAll('input')].map(input=>({input,value:input.value,data:{...input.dataset}}))}));
@@ -3377,6 +3383,7 @@ async function openPurchaseBoxEditor(cell){
    if(selectedArticleRecord()===product)form.elements.caja.value=String(value);
    product.details=structuredClone(previous);product.details.general=(product.details.general||[]).filter(f=>f[0]!=='caja');product.details.general.push(['caja',String(value),null]);
    for(const line of lines){formatPurchaseNumber(line.querySelector('[aria-label="Cant. x CJ"]'),value);if(currentPurchaseXml&&line.dataset.xmlIndex!==undefined)applyXmlPurchasePresentation(line);else syncPurchaseQuantities(line);}
+   message.textContent='Enviando artículo y esperando confirmación del servidor…';
    await persistPurchaseConfirmed(undefined,undefined,{key:String(key),before,value});
    refreshArticleProperties();status.textContent='Cantidad por caja guardada en el artículo.';saving=false;close();
   }catch(error){product.details=previous;form.elements.caja.value=oldFormBox;trialHasEdits=oldDirty;for(const saved of previousLines){for(const k of Object.keys(saved.line.dataset))delete saved.line.dataset[k];Object.assign(saved.line.dataset,saved.data);for(const field of saved.inputs){field.input.value=field.value;for(const k of Object.keys(field.input.dataset))delete field.input.dataset[k];Object.assign(field.input.dataset,field.data);}updatePurchaseSubtotal(saved.line);}savedTrialSnapshot=oldSnapshot;try{if(oldLocal===null)localStorage.removeItem(trialStorageKey);else localStorage.setItem(trialStorageKey,oldLocal);}catch{}refreshArticleProperties();message.textContent=error.message;saving=false;accept.disabled=false;back.disabled=false;input.disabled=false;}
