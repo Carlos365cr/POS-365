@@ -37,8 +37,22 @@ if ($validate.configuration.location.'system.webServer'.aspNetCore.hostingModel 
     throw 'La configuracion IIS generada es invalida.'
 }
 [System.IO.File]::WriteAllText($webConfig, $xml, (New-Object System.Text.UTF8Encoding($false)))
+$settingsPath = Join-Path $Destino 'appsettings.IIS-Staging.json'
+if (-not (Test-Path $settingsPath)) {
+    $settingsTemplate = @'
+{
+  "ConnectionStrings": {
+    "Pos365": "Server=SERVER360;Database=POS365_DEV;User Id=USUARIO_SQL;Password=CONTRASENA_SQL;Encrypt=True;TrustServerCertificate=True;"
+  }
+}
+'@
+    [System.IO.File]::WriteAllText($settingsPath, $settingsTemplate, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Warning ('Plantilla privada creada en '+$settingsPath+'. Edite las credenciales antes de iniciar IIS.')
+} else {
+    Write-Host ('Configuracion privada existente conservada: '+$settingsPath)
+}
 Write-Host 'web.config generado y validado para IIS-Staging.'
 Write-Host ('Publicado en '+$Destino)
 Write-Host 'IMPORTANTE: IIS requiere Windows Authentication ACTIVADA y Anonymous Authentication DESACTIVADA.'
-Write-Host 'Configure ConnectionStrings__Pos365 en el entorno del Application Pool (no en Git).'
+Write-Host 'Configure ConnectionStrings:Pos365 en appsettings.IIS-Staging.json (archivo privado, no versionado).'
 Write-Host 'Restrinja el sitio a la LAN/VPN y pruebe /health/ready tras iniciar.'
