@@ -13,14 +13,14 @@ public static class PosAuth
     public sealed record Credentials(string Username, string Password);
     public sealed record NewUser(string Username, string DisplayName, string Password, bool IsAdmin);
 
-    public static void Configure(IServiceCollection services)
+    public static void Configure(IServiceCollection services, bool allowLocalHttp)
     {
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
             {
                 options.Cookie.Name = "__Host-POS365";
                 options.Cookie.HttpOnly = true;
-                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                options.Cookie.SecurePolicy = allowLocalHttp ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Strict;
                 options.Cookie.Path = "/";
                 options.LoginPath = "/login";
@@ -99,7 +99,7 @@ public static class PosAuth
         await cmd.ExecuteNonQueryAsync();
     }
 
-    public static void Map(WebApplication app,string cs)
+    public static void Map(WebApplication app,string cs,bool allowLocalHttp)
     {
         app.MapGet("/login",() => Results.Redirect("/login.html")).AllowAnonymous();
         app.MapGet("/api/auth/me",(ClaimsPrincipal user) => Results.Ok(new {
@@ -109,7 +109,7 @@ public static class PosAuth
 
         app.MapPost("/api/auth/login",async(HttpContext ctx,Credentials input) =>
         {
-            if(!ctx.Request.IsHttps)return Results.StatusCode(426);
+            if(!ctx.Request.IsHttps && !allowLocalHttp)return Results.StatusCode(426);
             var name=input.Username?.Trim().ToLowerInvariant()??"";
             if(!ValidUsername(name)||input.Password is null||input.Password.Length>256)
                 return Results.Unauthorized();
