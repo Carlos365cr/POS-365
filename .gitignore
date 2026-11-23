@@ -15,3 +15,6 @@ __pycache__/
 !sql/*.sql
 
 src/POS365.Local/wwwroot/pos-original.html
+
+# Configuracion privada del sitio IIS
+**/appsettings.IIS-Staging.json
