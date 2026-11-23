@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POS 365 · Iniciar sesión</title>
+<style>
+:root{font-family:system-ui,Arial,sans-serif;color:#162e29;background:#f1f5f3}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px}
+main{background:white;display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1fr);width:min(940px,100%);border-radius:20px;overflow:hidden;box-shadow:0 16px 46px #153a3629}
+aside{background:linear-gradient(140deg,#0b3026,#16523d);color:white;padding:55px 45px}
+aside h1{font-size:36px;margin:15px 0}aside p{line-height:1.65;color:#d6e9df}
+section{padding:55px 45px}h2{font-size:29px;margin:10px 0}label{display:block;font-weight:600;margin-top:18px}
+input{display:block;width:100%;padding:12px;border:1px solid #afc2b9;border-radius:7px;margin-top:7px;font:inherit}
+button{background:#135b3c;border:0;border-radius:7px;color:white;padding:13px 20px;width:100%;font:inherit;font-weight:700;cursor:pointer;margin-top:24px}
+button:disabled{opacity:.6;cursor:wait}small{color:#556b62}#status{min-height:1.4em;color:#9f2525}
+@media(max-width:700px){main{grid-template-columns:1fr}aside,section{padding:28px}}
+</style></head>
+<body><main><aside><small style="color:#e4f3e8">POS 365 · SISTEMA DE FACTURACIÓN</small><h1>Bienvenido a POS365</h1>
+<p>Acceso al supermercado mediante usuarios autorizados.</p>
+<p>Versión SQL Server · Ambiente de pruebas IIS.</p>
+</aside><section><h2>Iniciar sesión</h2><p><small>Ingrese sus credenciales de POS365.</small></p>
+<form id="f" autocomplete="on">
+<label for="username">Usuario<input id="username" name="username" required minlength="3" maxlength="64" autocomplete="username"></label>
+<label for="password">Contraseña<input id="password" name="password" type="password" required autocomplete="current-password"></label>
+<button id="submit" type="submit">Ingresar</button></form>
+<p id="status" role="alert"></p><small>Las cuentas se administran en SQL Server. No utilice contraseñas de Windows.</small></section></main>
+<script>
+const f=document.getElementById('f'),status=document.getElementById('status'),submit=document.getElementById('submit');
+f.addEventListener('submit',async event=>{
+ event.preventDefault();status.textContent='Verificando acceso…';submit.disabled=true;
+ try{
+  const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
+   credentials:'same-origin',body:JSON.stringify({username:f.username.value,password:f.password.value})});
+  if(!response.ok)throw Error(response.status===401?'Usuario o contraseña incorrectos, cuenta inactiva o temporalmente bloqueada.':
+   'No se completó el inicio de sesión. Código '+response.status);
+  f.password.value='';location.replace('/');
+ }catch(error){status.textContent=error.message;f.password.value='';}
+ finally{submit.disabled=false;}
+});
+</script></body></html>
