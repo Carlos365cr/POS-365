@@ -116,7 +116,7 @@ app.MapGet("/health/ready", async (CancellationToken ct) =>
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand("SELECT MAX(Version) FROM dbo.POS365_SchemaVersion", connection);
         var version = await command.ExecuteScalarAsync(ct);
-        return version is int n && n >= 5
+        return version is int n && n >= 6
             ? Results.Ok(new { status = "ok", database = "POS365_DEV", schemaVersion = n })
             : Results.Json(new { status = "pending", message = "Inicialice el esquema." }, statusCode: 503);
     }
