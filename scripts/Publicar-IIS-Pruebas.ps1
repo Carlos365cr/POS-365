@@ -23,7 +23,7 @@ $xml = @'
       <handlers>
         <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
       </handlers>
-      <aspNetCore processPath="dotnet" arguments=".\\POS365.Local.dll" stdoutLogEnabled="false" hostingModel="inprocess">
+      <aspNetCore processPath="dotnet" arguments=".\POS365.Local.dll" stdoutLogEnabled="false" hostingModel="inprocess">
         <environmentVariables>
           <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="IIS-Staging" />
         </environmentVariables>
