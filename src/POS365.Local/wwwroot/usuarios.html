@@ -42,7 +42,7 @@ async function request(url,method='GET',body){
 }
 function message(t){$('status').textContent=t;}
 function clear(){
- current=null;$('userForm').reset();$('isActive').checked=true;$('username').disabled=false;
+ current=null;$('userForm').reset();$('passwordLabel').firstChild.textContent='Contraseña inicial';$('isActive').checked=true;$('username').disabled=false;
  $('password').required=true;$('passwordLabel').hidden=false;$('heading').textContent='Crear usuario';
  $('save').textContent='Crear usuario';$('resetPassword').hidden=true;$('unlock').hidden=true;
  render();
@@ -50,7 +50,7 @@ function clear(){
 function select(u){
  current=u.userId;$('username').value=u.username;$('username').disabled=true;
  $('displayName').value=u.displayName;$('password').value='';$('password').required=false;
- $('passwordLabel').hidden=true;$('isAdmin').checked=u.isAdmin;$('isActive').checked=u.isActive;
+ $('passwordLabel').hidden=false;$('passwordLabel').firstChild.textContent='Nueva contraseña (opcional)';$('isAdmin').checked=u.isAdmin;$('isActive').checked=u.isActive;
  $('heading').textContent='Modificar usuario';$('save').textContent='Guardar cambios';
  $('resetPassword').hidden=false;$('unlock').hidden=false;message('Editando '+u.username);
  render();
@@ -79,16 +79,16 @@ $('userForm').onsubmit=e=>{e.preventDefault();run(async()=>{
  const data={displayName:$('displayName').value.trim(),isAdmin:$('isAdmin').checked,isActive:$('isActive').checked};
  if(current){
   await request('/api/auth/users/'+encodeURIComponent(current),'PUT',data);
-  message('Usuario actualizado correctamente.');clear();
+  clear();message('Usuario actualizado correctamente.');
  }else{
   await request('/api/auth/users','POST',{username:$('username').value.trim(),displayName:data.displayName,password:$('password').value,isAdmin:data.isAdmin});
-  message('Usuario creado correctamente.');clear();
+  clear();message('Usuario creado correctamente.');
  }
 });};
-$('resetPassword').onclick=()=>{if(!current)return;const pass=prompt('Nueva contraseña (mínimo 12 caracteres):');if(pass===null)return;
- if(pass.length<12){message('La contraseña debe tener al menos 12 caracteres.');return;}
+$('resetPassword').onclick=()=>{if(!current)return;const pass=$('password').value;
+ if(pass.length<12){message('Escriba la nueva contraseña de al menos 12 caracteres en el campo superior.');$('password').focus();return;}
  if(!confirm('¿Confirmar cambio de contraseña?'))return;
- run(async()=>{await request('/api/auth/users/'+encodeURIComponent(current)+'/password','POST',{password:pass});message('Contraseña actualizada.');});
+ run(async()=>{await request('/api/auth/users/'+encodeURIComponent(current)+'/password','POST',{password:pass});$('password').value='';message('Contraseña actualizada.');});
 };
 $('unlock').onclick=()=>{if(!current)return;run(async()=>{await request('/api/auth/users/'+encodeURIComponent(current)+'/unlock','POST',{});message('Usuario desbloqueado.');});};
 request('/api/auth/me').then(u=>{if(!u.admin)throw Error('Se requiere perfil administrador.');return refresh();}).catch(e=>message(e.message));
