@@ -3,7 +3,9 @@ param(
     [string]$Usuario = 'sa',
     [switch]$WindowsAuth,
     [switch]$Inicializar,
-    [switch]$CrearAdministrador
+    [switch]$CrearAdministrador,
+    [switch]$RestablecerAdministrador,
+    [string]$UsuarioPOS365 = "pos365"
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -33,6 +35,11 @@ try {
     if ($Inicializar) {
         & dotnet run --project $project --no-build --no-launch-profile -- --initialize-db
         if ($LASTEXITCODE -ne 0) { throw 'No se pudo inicializar POS365_DEV. Revise el error SQL mostrado arriba (version, esquema, conexion o permisos).' }
+    }
+    if ($RestablecerAdministrador) {
+        & dotnet run --project $project --no-build --no-launch-profile -- --reset-admin-password $UsuarioPOS365
+        if ($LASTEXITCODE -ne 0) { throw "No se pudo restablecer la contrasena del administrador POS365." }
+        return
     }
     if ($CrearAdministrador) {
         & dotnet run --project $project --no-build --no-launch-profile -- --setup-admin
