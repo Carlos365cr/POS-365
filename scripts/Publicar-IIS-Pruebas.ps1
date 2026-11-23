@@ -53,6 +53,6 @@ if (-not (Test-Path $settingsPath)) {
 }
 Write-Host 'web.config generado y validado para IIS-Staging.'
 Write-Host ('Publicado en '+$Destino)
-Write-Host 'IMPORTANTE: IIS requiere Windows Authentication ACTIVADA y Anonymous Authentication DESACTIVADA.'
+Write-Host 'IMPORTANTE: IIS requiere Anonymous Authentication ACTIVADA y Windows Authentication DESACTIVADA; POS365 valida usuarios con cookies y SQL Server.'
 Write-Host 'Configure ConnectionStrings:Pos365 en appsettings.IIS-Staging.json (archivo privado, no versionado).'
-Write-Host 'Restrinja el sitio a la LAN/VPN y pruebe /health/ready tras iniciar.'
+Write-Host 'Configure HTTPS con certificado valido. No use HTTP en IP publica; el sistema lo bloquea con 426. Restrinja el sitio a LAN/VPN durante pruebas.'
