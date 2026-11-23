@@ -2,7 +2,8 @@ param(
     [string]$Servidor = 'SERVER360',
     [string]$Usuario = 'sa',
     [switch]$WindowsAuth,
-    [switch]$Inicializar
+    [switch]$Inicializar,
+    [switch]$CrearAdministrador
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -32,6 +33,11 @@ try {
     if ($Inicializar) {
         & dotnet run --project $project --no-build --no-launch-profile -- --initialize-db
         if ($LASTEXITCODE -ne 0) { throw 'No se pudo inicializar POS365_DEV. Revise el error SQL mostrado arriba (version, esquema, conexion o permisos).' }
+    }
+    if ($CrearAdministrador) {
+        & dotnet run --project $project --no-build --no-launch-profile -- --setup-admin
+        if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear el administrador inicial. Revise el error mostrado.' }
+        return
     }
     Write-Host 'Abra http://127.0.0.1:5085 . Para detener: Ctrl+C.'
     & dotnet run --project $project --no-build --no-launch-profile
