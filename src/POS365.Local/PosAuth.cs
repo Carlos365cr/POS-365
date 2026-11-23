@@ -70,6 +70,46 @@ public static class PosAuth
         Console.WriteLine("Administrador SQL inicial creado. No se creó contraseña predeterminada.");
     }
 
+    // Recuperacion administrativa local: requiere acceso autorizado a SQL Server.
+    // No crea otro usuario, no cambia roles ni almacena la contrasena en scripts.
+    public static async Task ResetAdminPassword(string cs, string username)
+    {
+        username = (username ?? "").Trim().ToLowerInvariant();
+        if (!ValidUsername(username)) throw new InvalidOperationException("Usuario administrador invalido.");
+        await using var db = await Connect(cs);
+        await using (var check = new SqlCommand("SELECT COUNT(*) FROM dbo.POS365_User WHERE Username=@u AND IsAdmin=1", db))
+        {
+            check.Parameters.Add("@u",SqlDbType.NVarChar,64).Value=username;
+            if (Convert.ToInt32(await check.ExecuteScalarAsync()) != 1)
+                throw new InvalidOperationException("No existe un administrador POS365 con ese nombre en POS365_DEV.");
+        }
+        Console.Write("Restablecer la clave del administrador '" + username + "' en POS365_DEV? Escriba SI: ");
+        if (!string.Equals(Console.ReadLine()?.Trim(), "SI", StringComparison.Ordinal))
+        {
+            Console.WriteLine("Operacion cancelada.");
+            return;
+        }
+        Console.Write("Nueva contrasena POS365 (12-256 caracteres; oculta): ");
+        var password = ReadSecret(); Console.WriteLine();
+        Console.Write("Repita la nueva contrasena (oculta): ");
+        var confirmation = ReadSecret(); Console.WriteLine();
+        if (!ValidPassword(password) || !string.Equals(password, confirmation, StringComparison.Ordinal))
+            throw new InvalidOperationException("Las contrasenas no coinciden o no cumplen la longitud requerida.");
+        var salt = RandomNumberGenerator.GetBytes(32);
+        var hash = Hash(password, salt);
+        await using var command = new SqlCommand("""
+            UPDATE dbo.POS365_User
+            SET PasswordSalt=@s,PasswordHash=@h,FailedAttempts=0,LockedUntil=NULL,UpdatedUtc=SYSUTCDATETIME()
+            WHERE Username=@u AND IsAdmin=1
+            """, db);
+        command.Parameters.Add("@s",SqlDbType.VarBinary,32).Value=salt;
+        command.Parameters.Add("@h",SqlDbType.VarBinary,32).Value=hash;
+        command.Parameters.Add("@u",SqlDbType.NVarChar,64).Value=username;
+        if (await command.ExecuteNonQueryAsync() != 1)
+            throw new InvalidOperationException("No se pudo actualizar la cuenta administradora.");
+        Console.WriteLine("Contrasena del administrador POS365 restablecida y bloqueo temporal limpiado.");
+    }
+
     private static string ReadSecret()
     {
         var s=new StringBuilder();
