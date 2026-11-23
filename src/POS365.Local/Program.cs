@@ -99,6 +99,12 @@ app.Use(async (context,next) =>
     }
     await next();
 });
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Equals("/usuarios.html", StringComparison.OrdinalIgnoreCase) && !context.User.IsInRole("Admin"))
+    { context.Response.StatusCode = StatusCodes.Status403Forbidden; return; }
+    await next();
+});
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", stage = "development-foundation" }));
@@ -121,6 +127,7 @@ app.MapGet("/health/ready", async (CancellationToken ct) =>
     }
 });
 PosAuth.Map(app, cs.ConnectionString);
+PosUserManagement.Map(app, cs.ConnectionString);
 CatalogApi.Map(app, cs.ConnectionString);
 PosLookupApi.Map(app, cs.ConnectionString);
 PosDraftApi.Map(app, cs.ConnectionString);
