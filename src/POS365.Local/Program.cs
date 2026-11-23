@@ -3,14 +3,17 @@ using Microsoft.Data.SqlClient;
 
 var initialize = args.Contains("--initialize-db");
 var setupAdmin = args.Contains("--setup-admin");
-var builder = WebApplication.CreateBuilder(args.Where(a => a != "--initialize-db" && a != "--setup-admin").ToArray());
+var resetAdmin = args.Contains("--reset-admin-password");
+var resetAdminIndex = Array.IndexOf(args, "--reset-admin-password");
+var resetUsername = resetAdminIndex >= 0 && resetAdminIndex + 1 < args.Length ? args[resetAdminIndex + 1] : "";
+var builder = WebApplication.CreateBuilder(args.TakeWhile(a => a != "--reset-admin-password").Where(a => a != "--initialize-db" && a != "--setup-admin").ToArray());
 // Development remains loopback-only. IIS staging requires Windows Authentication
 // and IIS in-process hosting. This is not a production release.
 var iisStaging = builder.Environment.IsEnvironment("IIS-Staging");
 PosAuth.Configure(builder.Services, !iisStaging);
 if (!builder.Environment.IsDevelopment() && !iisStaging)
     throw new InvalidOperationException("POS365 solo admite Development o IIS-Staging por ahora.");
-if (iisStaging && !setupAdmin && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_IIS_PHYSICAL_PATH")))
+if (iisStaging && !setupAdmin && !resetAdmin && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_IIS_PHYSICAL_PATH")))
     throw new InvalidOperationException("IIS-Staging requiere hospedaje mediante IIS.");
 if (!iisStaging)
     builder.WebHost.UseUrls("http://127.0.0.1:5085");
@@ -21,6 +24,12 @@ var cs = new SqlConnectionStringBuilder(raw);
 if (!string.Equals(cs.InitialCatalog, "POS365_DEV", StringComparison.OrdinalIgnoreCase))
     throw new InvalidOperationException("Esta fase solo permite la base POS365_DEV.");
 cs.ConnectTimeout = 5;
+if (resetAdmin)
+{
+    if (!builder.Environment.IsDevelopment()) throw new InvalidOperationException("El restablecimiento requiere Development y consola local.");
+    await PosAuth.ResetAdminPassword(cs.ConnectionString, resetUsername);
+    return;
+}
 if (setupAdmin)
 {
     if (!builder.Environment.IsDevelopment()) throw new InvalidOperationException("El alta inicial requiere Development y consola local.");
