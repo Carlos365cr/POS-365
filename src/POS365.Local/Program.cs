@@ -75,27 +75,32 @@ app.UseAuthorization();
 // Gate ALL pages, static files and API endpoints, not only the visible UI.
 app.Use(async (context,next) =>
 {
-    if(iisStaging)
+    var p=context.Request.Path;
+    var publicPath=p.Equals("/login",StringComparison.OrdinalIgnoreCase) ||
+        p.Equals("/login.html",StringComparison.OrdinalIgnoreCase) ||
+        p.Equals("/api/auth/login",StringComparison.OrdinalIgnoreCase);
+    var authenticated=context.User.Identity?.IsAuthenticated==true;
+    // Login first, including when requesting the original HTML directly.
+    // Do not expose the API or static assets before authentication.
+    if(!publicPath && !authenticated)
     {
-        var p=context.Request.Path;
-        var publicPath=p.Equals("/login",StringComparison.OrdinalIgnoreCase) ||
-            p.Equals("/login.html",StringComparison.OrdinalIgnoreCase) ||
-            p.Equals("/api/auth/login",StringComparison.OrdinalIgnoreCase);
-        if(!publicPath && context.User.Identity?.IsAuthenticated!=true)
-        {
-            if(p.StartsWithSegments("/api")){context.Response.StatusCode=401;return;}
-            context.Response.Redirect("/login");return;
-        }
-        // Block cross-origin submissions. Original POS uses same-origin AJAX.
-        if(!publicPath && context.Request.Method is "POST" or "PUT" or "PATCH" or "DELETE")
-        {
-            var origin=context.Request.Headers.Origin.ToString();
-            if(string.IsNullOrWhiteSpace(origin) ||
-               !Uri.TryCreate(origin,UriKind.Absolute,out var from) ||
-               !string.Equals(from.Authority,context.Request.Host.Value,StringComparison.OrdinalIgnoreCase) ||
-               !string.Equals(from.Scheme,context.Request.Scheme,StringComparison.OrdinalIgnoreCase))
-            {context.Response.StatusCode=403;return;}
-        }
+        if(p.StartsWithSegments("/api")){context.Response.StatusCode=401;return;}
+        context.Response.Redirect("/login");return;
+    }
+    if(authenticated && (p.Equals("/login",StringComparison.OrdinalIgnoreCase) ||
+                         p.Equals("/login.html",StringComparison.OrdinalIgnoreCase)))
+    { context.Response.Redirect("/pos-original.html"); return; }
+    // In IIS, state-changing requests must come from the same origin.
+    if(iisStaging && !publicPath &&
+       (HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method) ||
+        HttpMethods.IsPatch(context.Request.Method) || HttpMethods.IsDelete(context.Request.Method)))
+    {
+        var origin=context.Request.Headers.Origin.ToString();
+        if(string.IsNullOrWhiteSpace(origin) ||
+           !Uri.TryCreate(origin,UriKind.Absolute,out var from) ||
+           !string.Equals(from.Authority,context.Request.Host.Value,StringComparison.OrdinalIgnoreCase) ||
+           !string.Equals(from.Scheme,context.Request.Scheme,StringComparison.OrdinalIgnoreCase))
+        {context.Response.StatusCode=403;return;}
     }
     await next();
 });
