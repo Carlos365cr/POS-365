@@ -1,0 +1,9 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';
+// El marco principal solo descarga archivos con nombres permitidos; cada exportación del Dashboard debe pasar.
+const page=fs.readFileSync('plantilla/index.html','utf8');const start=page.indexOf("event.data?.type!=='cedi-cash-export'");assert(start>0);
+const block=page.slice(start,page.indexOf('</script>',start));const cond=block.slice(block.indexOf('typeof filename!==\'string\'||')+"typeof filename!=='string'||".length,block.indexOf("||typeof content!=='string'"));
+const blocked=new Function('filename','return '+cond+';');
+for(const ok of ['POS365-notas-cliente.xlsx','POS365-notas-proveedor.pdf','POS365-nota-NC-C-0000000001.pdf','POS365-nota-ND-P-0000000001.pdf','Productos-restringidos.xlsx','CEDI-compras-lineas.xlsx','CEDI-salidas-pago-2026-11-01-a-2026-11-18.pdf','POS365-analisis-ventas-2026-11-01-a-2026-11-18.xlsx','POS365-analisis-ventas-2026-11-01-a-2026-11-18.pdf','POS365-sugerido-2026-11-23-a-2026-11-29.xlsx','POS365-distribucion-flujos-2026-10-31-a-2026-10-31.xlsx','POS365-venta-semanal-2026-S1-a-S47.xlsx','POS365-venta-semanal-2027-S1-a-S52.xlsx','Encuestas-2026-11-01-2026-11-18.xlsx','Encuestas--.xlsx'])assert.equal(blocked(ok),false,ok);
+for(const bad of ['otro.xlsx','POS365-venta-semanal-2026-S1-a-S47.exe','../POS365-distribucion-flujos-2026-10-31-a-2026-10-31.xlsx','POS365-analisis-ventas-x.xlsx'])assert.equal(blocked(bad),true,bad);
+const inner=fs.readFileSync('work/cedi-current-inner.html','utf8');for(const prefix of ["'POS365-analisis-ventas-'","'POS365-sugerido-'","'POS365-distribucion-flujos-'","'POS365-venta-semanal-'","'Encuestas-'"])assert(inner.includes('downloadCashOutExport('+prefix),prefix);
+console.log('PASS: el marco principal permite descargar Análisis de ventas, Sugerido, Distribución de flujos, Venta semanal y Encuestas; sigue rechazando nombres no previstos.');

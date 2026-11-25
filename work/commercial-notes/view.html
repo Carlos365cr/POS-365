@@ -1,0 +1,340 @@
+<div id="nc-proposal">
+<style>
+#nc-proposal .negative-amount{color:light-dark(#b91c1c,#ff9999)!important}
+#nc-proposal{position:relative;--nc-bg:light-dark(#fff,#17271f);--nc-fg:light-dark(#234236,#e4eee8);--nc-line:light-dark(#d4dfd8,#456052);--nc-soft:light-dark(#f2f6f2,#243a2e);--nc-active:light-dark(#215b43,#93c9aa);--nc-on:light-dark(#fff,#10261a);color:var(--nc-fg);font:14px/1.4 system-ui,sans-serif;background:var(--nc-bg);border:1px solid var(--nc-line);border-radius:10px;overflow:hidden}
+#nc-proposal *{box-sizing:border-box}#nc-proposal header{background:var(--nc-soft);padding:14px 18px;display:flex;gap:18px;align-items:center;padding-right:105px}#nc-proposal header strong{font-size:17px}#nc-proposal .crumb{font-size:12px}#nc-proposal main{padding:18px}#nc-proposal h2{font-size:22px;font-weight:500;margin:0}#nc-proposal h3{font-size:15px;font-weight:500;margin:0 0 10px}#nc-proposal .heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}#nc-proposal .badge{font-size:12px;background:var(--nc-soft);padding:4px 9px;border-radius:14px}#nc-proposal .switch{display:flex;gap:6px;margin:0 0 14px}#nc-proposal button,#nc-proposal input,#nc-proposal select,#nc-proposal textarea{font:inherit;color:inherit;border:1px solid var(--nc-line);background:var(--nc-bg);border-radius:5px;padding:6px 9px;min-width:0;max-width:100%}#nc-proposal button{cursor:pointer}#nc-proposal button.primary,#nc-proposal button[aria-pressed=true]{background:var(--nc-active);color:var(--nc-on);border-color:var(--nc-active)}#nc-proposal button:disabled{opacity:.5;cursor:default}#nc-proposal input[readonly]{background:var(--nc-soft)}#nc-proposal label{display:flex;flex-direction:column;gap:4px;font-size:12px}#nc-proposal label input,#nc-proposal label select,#nc-proposal label textarea{font-size:14px;width:100%}#nc-proposal .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}#nc-proposal .span2{grid-column:span 2}#nc-proposal .section{margin-top:16px;border-top:1px solid var(--nc-line);padding-top:14px}#nc-proposal .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}#nc-proposal .invoice{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end}#nc-proposal .bottom{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;margin-top:16px}#nc-proposal textarea{resize:vertical;min-height:100px}#nc-proposal .totals{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center}#nc-proposal output{text-align:right;font-variant-numeric:tabular-nums}#nc-proposal .total{font-size:20px;font-weight:500}#nc-proposal footer{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:20px;padding-top:14px;border-top:1px solid var(--nc-line)}#nc-proposal .status{min-height:22px;margin:12px 0 0;font-size:13px}#nc-proposal .picker{margin-top:12px;padding:14px;background:var(--nc-soft);border:1px solid var(--nc-line);border-radius:6px}#nc-proposal table{width:100%;border-collapse:collapse;font-size:13px}#nc-proposal td,#nc-proposal th{padding:8px 6px;text-align:left;border-bottom:1px solid var(--nc-line)}#nc-proposal th{font-weight:500}#nc-proposal .scroll{overflow-x:auto}#nc-proposal [hidden]{display:none!important}#nc-proposal .picker-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}#nc-proposal .note{font-size:12px;margin:6px 0 0}#nc-proposal .ops label{flex-direction:row;align-items:center}#nc-proposal .ops input{width:auto}
+@media(max-width:650px){#nc-proposal .grid{grid-template-columns:repeat(2,minmax(0,1fr))}#nc-proposal .bottom{grid-template-columns:1fr}#nc-proposal header{flex-wrap:wrap;gap:3px}#nc-proposal main{padding:12px}#nc-proposal .invoice{grid-template-columns:1fr 1fr}#nc-proposal .invoice label{grid-column:span 2}}@media(pointer:coarse){#nc-proposal button,#nc-proposal input,#nc-proposal select{min-height:44px}}
+#nc-proposal .result-layer{position:absolute;inset:0;z-index:10;background:light-dark(#173b284d,#0009);display:flex;align-items:flex-start;justify-content:center;padding:130px 16px 16px}#nc-proposal .result-window{background:var(--nc-bg);color:var(--nc-fg);border:1px solid var(--nc-line);border-radius:10px;padding:22px;width:min(100%,460px);box-shadow:0 12px 36px light-dark(#14362733,#0008)}#nc-proposal .result-window p{margin:10px 0 20px;overflow-wrap:anywhere}#nc-proposal .result-window .inline{justify-content:flex-end}
+</style>
+<style>
+#nc-proposal .workspace{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch}#nc-proposal .editor{min-width:0}#nc-proposal .editor .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#nc-proposal .reports{background:var(--nc-soft);border:1px solid var(--nc-line);border-radius:6px;padding:14px;min-width:0}#nc-proposal .report-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}#nc-proposal .reports button{margin-top:10px;width:auto}#nc-proposal .report-results td{overflow-wrap:anywhere}#nc-proposal .report-results table{min-width:800px}#nc-proposal .editor .bottom{grid-template-columns:1fr}#nc-proposal .editor .invoice{grid-template-columns:1fr 1fr}#nc-proposal .editor .invoice label{grid-column:span 2}#nc-proposal .report-results summary{font-weight:500}
+@media(max-width:760px){#nc-proposal .heading{flex-wrap:wrap}#nc-proposal .editor .grid,#nc-proposal .report-fields,#nc-proposal .totals,#nc-proposal .editor .invoice{grid-template-columns:minmax(0,1fr)}#nc-proposal .span2,#nc-proposal .editor .invoice label{grid-column:auto}#nc-proposal .reports{padding:8px}#nc-proposal .workspace{gap:8px}#nc-proposal .total{font-size:15px}#nc-proposal label,#nc-proposal button,#nc-proposal summary{overflow-wrap:anywhere}}
+</style>
+<style>
+#nc-proposal main{padding:12px}#nc-proposal .heading{margin-bottom:8px}#nc-proposal .switch{margin-bottom:8px}
+#nc-proposal .editor,#nc-proposal .reports{container-type:inline-size}#nc-proposal .reports{padding:9px}
+#nc-proposal .workspace label{gap:2px;font-size:12px}#nc-proposal .workspace input,#nc-proposal .workspace select,#nc-proposal .workspace textarea,#nc-proposal .workspace button{font-size:12px;padding:3px 5px;line-height:1.35}
+#nc-proposal .editor .grid,#nc-proposal .report-fields{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px 6px;grid-auto-flow:row dense}
+#nc-proposal .workspace .span2{grid-column:auto}#nc-proposal .workspace h3{margin-bottom:5px;font-size:14px}
+#nc-proposal .workspace .section{margin-top:8px;padding-top:7px}#nc-proposal .workspace .bottom{margin-top:8px;gap:7px}
+#nc-proposal .workspace textarea{min-height:44px}#nc-proposal .totals{gap:5px}#nc-proposal .total{font-size:16px}
+#nc-proposal .editor .invoice{grid-template-columns:minmax(0,1fr) auto auto;gap:5px}#nc-proposal .editor .invoice label{grid-column:auto}
+#nc-proposal .workspace footer{margin-top:8px;padding-top:7px;gap:6px}#nc-proposal .workspace .inline{gap:6px}
+#nc-proposal .report-actions{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}#nc-proposal .reports .report-actions button{margin:0}
+#nc-proposal .workspace td,#nc-proposal .workspace th{padding:5px}#nc-proposal .workspace .status{margin-top:5px;min-height:0}#nc-proposal .workspace .status:empty{display:none}
+@container (max-width:410px){#nc-proposal .editor .grid,#nc-proposal .report-fields{grid-template-columns:repeat(2,minmax(0,1fr))}#nc-proposal .editor .invoice{grid-template-columns:1fr 1fr}#nc-proposal .editor .invoice label{grid-column:span 2}}
+@container (max-width:230px){#nc-proposal .editor .grid,#nc-proposal .report-fields,#nc-proposal .totals,#nc-proposal .editor .invoice{grid-template-columns:minmax(0,1fr)}#nc-proposal .editor .invoice label{grid-column:auto}}
+@media(pointer:coarse){#nc-proposal .workspace input,#nc-proposal .workspace select,#nc-proposal .workspace button{min-height:44px}#nc-proposal .workspace input,#nc-proposal .workspace select,#nc-proposal .workspace textarea{font-size:16px}}
+</style>
+<header><strong>POS 365</strong><span class="crumb">Inventarios y compras / Notas Comercial Internos</span></header>
+<main>
+<div class="heading"><h2>Notas Comercial Internos</h2><span class="badge">Registro de notas</span></div>
+<div class="switch" aria-label="Destinatario"><button type="button" data-type="cliente" aria-pressed="true">Para cliente</button><button type="button" data-type="proveedor" aria-pressed="false">Para proveedor</button></div>
+<div class="inline ops" style="margin-bottom:8px"><label><input type="checkbox" data-preview-enabled>Vista previa</label><button type="button" data-design-open>Diseños · Notas tamaño carta</button><button type="button" data-preview-example>Vista previa del documento</button></div>
+<div class="workspace"><div class="editor">
+<fieldset style="border:1px solid var(--nc-line);border-radius:5px;margin:0 0 8px;padding:5px 8px"><legend>Tipo de Notas</legend><div class="inline ops"><label><input type="radio" name="nc-note-type" value="credito" checked required>N. CRÉDITO</label><label><input type="radio" name="nc-note-type" value="debito" required>N. DÉBITO</label></div></fieldset>
+<div data-record-wrap hidden class="inline"><select data-record hidden aria-label="Nota registrada"></select><button type="button" data-find-record>Buscar otra nota</button></div>
+<div class="grid">
+<label>Usuario<input data-user readonly></label><label>Consecutivo<input data-number value="NC-C-0000000001" readonly></label><label>Fecha<input data-date type="date" value="2026-11-25"></label><label>Bodega<select data-warehouse><option>Belén</option><option>Cartago</option><option>Principal</option><option>Liquidaciones</option></select></label><label>Estado<input data-state value="Borrador" readonly></label>
+<label>Código <span data-party-code hidden></span><input data-code value="CLI-001" readonly></label><label class="span2"><span data-party-label>Cliente</span><select data-party></select></label><label>Moneda<select data-currency><option value="CRC">Colón</option><option value="USD">Dólar</option></select></label>
+<label class="span2">Referencia<input data-reference placeholder="Referencia adicional o documento externo"></label><label>Tipo de cambio<input data-rate type="number" min="0.000001" step="any" value="1"></label><label>Motivo<select data-reason><option>Ajuste de precio</option><option>Descuento posterior</option><option>Devolución de mercadería</option><option>Facturas Cross Docking</option><option>Diferencias de Precios</option><option>Dinámica Comercial</option><option>Pago de Espacio</option><option>Plan Promocional</option><option>Logística</option><option>Devoluciones</option><option>Desechos</option><option>Liquidaciones</option><option>Pendientes</option><option>Corta Fechas</option><option>Descuentos No Aplicados</option><option>Otro</option></select></label>
+<label>Plazo<select data-term><option value="10">10 días</option><option value="15">15 días</option><option value="30" selected>30 días</option><option value="45">45 días</option><option value="60">60 días</option></select></label><label>Vencimiento<input data-due type="date" readonly></label></div>
+<section class="section"><h3>Factura vinculada <span class="note">· opcional</span></h3><div class="invoice"><label>Documento<input data-linked readonly placeholder="Sin factura vinculada"></label><button type="button" data-link>Buscar factura</button><button type="button" data-unlink disabled>Desvincular</button></div>
+<div class="picker" data-picker hidden><div class="picker-top"><h3 data-picker-title>Facturas del cliente</h3><button type="button" data-close>Cerrar</button></div><label>Buscar por factura o consecutivo<input type="search" data-search placeholder="Número de factura o consecutivo"></label><div class="scroll"><table><thead><tr><th>Acción</th><th>Origen</th><th>Factura</th><th>Consecutivo</th><th>Fecha</th><th>Total</th></tr></thead><tbody data-invoices></tbody></table></div></div>
+</section>
+<div class="bottom"><label>Comentario<textarea data-comment placeholder="Detalle del motivo de la nota comercial interna"></textarea></label><div class="totals"><label>Subtotal<input data-subtotal type="number" step="0.01" value="-10000"></label><label>Impuesto<input data-tax type="number" step="0.01" value="-1300"></label><label>Otros cargos<input data-other type="number" step="0.01" value="0"></label><span></span><span class="total">Total de la nota</span><output class="total" data-total>−₡11.300,00</output></div></div>
+<p class="note" data-effect>Movimiento de la nota en la cuenta.</p>
+<footer><div class="inline ops"><label><input type="radio" name="nc-demo-op" value="inclusion" checked>Inclusión</label><label><input type="radio" name="nc-demo-op" value="consulta">Consulta</label><label><input type="radio" name="nc-demo-op" value="modificacion">Modificación</label><label><input type="radio" name="nc-demo-op" value="exclusion">Exclusión</label></div><div class="inline"><button type="button" data-cancel>No procesar</button><button type="button" class="primary" data-process>Probar procesamiento</button></div></footer><p class="status" role="status" aria-live="polite" data-status></p>
+<section class="section"><h3 data-ledger-title>CXC · movimientos de notas</h3><div class="inline"><span>Efecto acumulado de notas:</span><output data-balance></output><span>Efecto después de procesar:</span><output data-projected></output></div><div class="scroll"><table><thead><tr><th>NC</th><th>Factura / referencia</th><th>Plazo</th><th>Vencimiento</th><th>Importe</th><th>Estado</th></tr></thead><tbody data-ledger></tbody></table></div></section>
+<details class="section"><summary>Historial de cambios</summary><label>Usuario<select data-history-user><option value="">Todos</option></select></label><div class="scroll"><table><thead><tr><th>NC</th><th>Operación</th><th>Importe aplicado</th><th>Fecha y hora</th><th>Usuario</th></tr></thead><tbody data-history></tbody></table></div></details>
+</div>
+<aside class="reports" aria-label="Reportes de notas comerciales internas">
+<h3>Reportes</h3>
+<form data-report-form>
+<div class="report-fields">
+<label>Tipo de Notas<select data-report-noteType><option value="">Todas</option><option value="credito">N. CRÉDITO</option><option value="debito">N. DÉBITO</option></select></label>
+<label>Usuario<select data-report-user></select></label>
+<label>Fecha desde<input type="date" data-report-from></label>
+<label>Fecha hasta<input type="date" data-report-to></label>
+<label class="span2"><span data-report-party-label>Cliente</span><select data-report-party></select></label>
+<label>Referencia<input type="search" data-report-reference placeholder="Buscar referencia"></label>
+<label>Estado<select data-report-state><option value="">Todos</option><option>Activa</option><option>Anulado</option></select></label>
+<label class="span2">Motivo<select data-report-reason></select></label>
+<label class="span2">Factura vinculada<input type="search" data-report-invoice placeholder="Número de factura"></label>
+</div>
+<div class="report-actions"><button type="submit" class="primary">Buscar</button><button type="button" data-export-excel>Exportar Excel</button><button type="button" data-export-pdf>Exportar PDF</button></div>
+<p class="note" role="status" aria-live="polite" data-report-message></p>
+</form>
+<details class="section report-results" data-report-results open>
+<summary data-report-title>Resultados del reporte · Clientes</summary>
+<div class="scroll"><table><thead><tr><th>Consecutivo</th><th>Tipo de Notas</th><th>Fecha</th><th data-report-party-heading>Cliente</th><th>Referencia</th><th>Estado</th><th>Motivo</th><th>Factura vinculada</th><th>Usuario</th><th>Monto</th></tr></thead><tbody data-report-rows></tbody></table></div>
+</details>
+</aside></div>
+</main>
+<div data-confirm class="result-layer" hidden>
+<section class="result-window" role="dialog" aria-modal="true" aria-labelledby="nc-annul-title" aria-describedby="nc-annul-description">
+<h3 id="nc-annul-title">¿Está seguro de anular esta NC?</h3>
+<p id="nc-annul-description" data-confirm-text></p>
+<div class="inline"><button type="button" data-confirm-no>Regresar</button><button type="button" class="primary" data-confirm-yes>Aceptar</button></div>
+</section></div>
+<div data-result-layer hidden class="result-layer">
+<section class="result-window" role="dialog" aria-modal="true" aria-labelledby="nc-result-title" aria-describedby="nc-result-message">
+<h3 id="nc-result-title" data-result-title></h3>
+<p id="nc-result-message" data-result-message></p>
+<div class="inline"><button type="button" class="primary" data-result-action>Aceptar</button></div>
+</section>
+</div>
+
+<style>
+#nc-proposal .search-window{width:min(100%,900px);padding:16px}#nc-proposal .search-window .grid{grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:7px}#nc-proposal .search-window input,#nc-proposal .search-window select,#nc-proposal .search-window button{font-size:12px;padding:4px 6px}#nc-proposal .search-window table{min-width:750px}#nc-proposal .search-window td{overflow-wrap:anywhere}#nc-proposal .search-window form .inline{margin-top:8px}#nc-proposal .search-window .scroll{margin-top:8px}
+</style>
+<div data-find-layer class="result-layer" hidden>
+<section class="result-window search-window" role="dialog" aria-modal="true" aria-labelledby="nc-find-title">
+<div class="picker-top"><h3 id="nc-find-title" data-find-title>Buscar nota comercial interna</h3><button type="button" data-find-close>Regresar</button></div>
+<form data-find-form><div class="grid">
+<label>Tipo de Notas<select data-find-noteType><option value="">Todas</option><option value="credito">N. CRÉDITO</option><option value="debito">N. DÉBITO</option></select></label>
+<label><span data-find-party-label>Cliente</span><select data-find-party></select></label>
+<label>Usuario<select data-find-user></select></label>
+<label>Referencia<input type="search" data-find-reference></label>
+<label>Fecha desde<input type="date" data-find-from></label>
+<label>Fecha hasta<input type="date" data-find-to></label>
+<label>Estado<select data-find-state><option value="">Todos</option><option>Activa</option><option>Anulado</option></select></label>
+<label>Consecutivo<input type="search" data-find-number placeholder="Número de NC"></label>
+<label>Motivo<select data-find-reason></select></label>
+</div><div class="inline"><button type="submit" class="primary">Buscar</button><span role="status" aria-live="polite" data-find-status></span></div></form>
+<div class="scroll"><table><thead><tr><th>Acción</th><th>Consecutivo</th><th>Tipo de Notas</th><th data-find-party-heading>Cliente</th><th>Referencia</th><th>Fecha</th><th>Estado</th><th>Motivo</th><th>Usuario</th><th>Monto</th></tr></thead><tbody data-find-rows></tbody></table></div>
+</section></div>
+<script>
+(()=>{
+const root=document.getElementById('nc-proposal'),q=s=>root.querySelector(s),all=s=>[...root.querySelectorAll(s)];
+const context=root.commercialContext, parties=context.parties, invoices=context.invoices;
+const relatedReference=r=>[r.reference?.trim(),r.invoice?(r.invoiceNumber||context.invoiceLabels[r.invoice]||''):''].filter(Boolean).join(' - ');root.commercialReference=relatedReference;
+const number=(type,n,kind='credito')=>(kind==='debito'?'ND-':'NC-')+(type==='cliente'?'C':'P')+'-'+String(n).padStart(10,'0');
+const sessionUser=context.user;
+const recordUser=r=>r.user||'Sin usuario registrado';
+function userOptions(selector){const el=q(selector),value=el.value;el.replaceChildren(new Option('Todos',''));for(const name of [...new Set([sessionUser,...records.filter(r=>r.type===type).map(recordUser)])].sort())el.add(new Option(name,name));el.value=value;}
+const seed=(type,party,invoice)=>({type,party,invoice,user:sessionUser,date:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica'}).format(new Date()),term:30,warehouse:q('[data-warehouse]').value,currency:'CRC',rate:1,reference:'',reason:'',comment:'',subtotal:0,tax:0,other:0,state:'Borrador'});
+let resultSuccess=false,resultFocus=null;
+const noteKind=r=>r.noteType||(r.subtotal+r.tax+r.other>0?'debito':'credito');const noteLabel=r=>noteKind(r)==='debito'?'N. DÉBITO':'N. CRÉDITO';
+let findMode='consulta',findFocus=null;
+function openRecordSearch(operation){
+ findMode=operation;findFocus=document.activeElement;
+ all('[name=nc-demo-op]').forEach(r=>r.checked=r.value===mode);
+ q('[data-find-title]').textContent=({consulta:'Consultar',modificacion:'Modificar',exclusion:'Excluir'})[operation]+' nota comercial interna';
+ for(const attr of ['party-label','party-heading'])q('[data-find-'+attr+']').textContent=type==='cliente'?'Cliente':'Proveedor';
+ const p=q('[data-find-party]');p.replaceChildren(new Option('Todos',''));for(const [id,name]of parties[type])p.add(new Option(name,id));
+ const reason=q('[data-find-reason]');reason.replaceChildren(new Option('Todos',''));for(const opt of q('[data-reason]').options)reason.add(new Option(opt.text,opt.value));
+ for(const key of ['reference','from','to','number'])q('[data-find-'+key+']').value='';
+ userOptions('[data-find-user]');q('[data-find-user]').value='';q('[data-find-noteType]').value='';q('[data-find-state]').value=operation==='consulta'?'':'Activa';
+ q('[data-find-layer]').hidden=false;q('main').inert=true;q('header').inert=true;renderRecordSearch();p.focus();
+}
+function closeRecordSearch(){q('[data-find-layer]').hidden=true;q('main').inert=false;q('header').inert=false;findFocus?.focus();}
+function renderRecordSearch(){
+ const f=Object.fromEntries(['party','reference','from','to','state','number','reason','noteType','user'].map(k=>[k,q('[data-find-'+k+']').value]));
+ const body=q('[data-find-rows]');body.replaceChildren();
+ if(f.from&&f.to&&f.from>f.to){q('[data-find-status]').textContent='Revise el rango de fechas.';return;}
+ const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+ const matches=records.filter(r=>r.type===type&&(!f.user||recordUser(r)===f.user)&&(!f.noteType||noteKind(r)===f.noteType)&&(!f.party||r.party===f.party)&&(!f.from||r.date>=f.from)&&(!f.to||r.date<=f.to)&&(!f.state||r.state===f.state)&&(!f.reason||r.reason===f.reason)&&norm(relatedReference(r)).includes(norm(f.reference))&&norm(r.id).includes(norm(f.number)));
+ for(const r of matches){const row=body.insertRow(),button=document.createElement('button');button.type='button';button.textContent='Seleccionar';button.disabled=findMode!=='consulta'&&r.state!=='Activa';row.insertCell().append(button);
+ for(const value of [r.id,noteLabel(r),parties[type].find(p=>p[0]===r.party)?.[1]||r.party,relatedReference(r)||'—',r.date.split('-').reverse().join('/'),r.state,r.reason,recordUser(r),money(total(r),r.currency)])row.insertCell().textContent=value;
+ button.onclick=()=>{closeRecordSearch();selected=r.id;changeMode(findMode);persist();(findMode==='modificacion'?q('[data-reference]'):q('[data-find-record]')).focus();};}
+ q('[data-find-status]').textContent=matches.length+' nota(s) encontrada(s).'+(findMode!=='consulta'?' Solo se pueden seleccionar notas activas.':'');
+ if(!matches.length){const cell=body.insertRow().insertCell();cell.colSpan=10;cell.textContent='No hay notas que coincidan con la búsqueda.';}
+}
+const reportFilters={cliente:{},proveedor:{}};
+const reportKeys=['from','to','party','reference','state','reason','invoice','noteType','user'];
+let reportRows=[];
+const exportLibraries={};
+function loadExportLibrary(url){if(!exportLibraries[url])exportLibraries[url]=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=url;script.onload=resolve;script.onerror=()=>{delete exportLibraries[url];script.remove();reject(new Error('No se pudo cargar la herramienta de exportación. Intente nuevamente.'));};document.head.append(script);});return exportLibraries[url];}
+async function exportReport(format){
+ for(const key of reportKeys)reportFilters[type][key]=q('[data-report-'+key+']').value;
+ renderReports();q('[data-report-results]').open=true;
+ if(!reportRows.length)return;
+ const tab=type,rows=reportRows.map(r=>({...r})),filters={...reportFilters[type]};
+ const heading=['Consecutivo','Tipo de Notas','Fecha',tab==='cliente'?'Cliente':'Proveedor','Referencia','Estado','Motivo','Factura vinculada','Usuario','Moneda','Monto'];
+ const data=rows.map(r=>[r.id,noteLabel(r),r.date,parties[tab].find(p=>p[0]===r.party)?.[1]||r.party,relatedReference(r),r.state,r.reason,r.invoiceNumber||context.invoiceLabels[r.invoice]||r.invoice||'Sin vincular',recordUser(r),r.currency,total(r)/100]);
+ const filename='POS365-notas-'+tab;
+ const buttons=[q('[data-export-excel]'),q('[data-export-pdf]')];buttons.forEach(b=>b.disabled=true);
+ q('[data-report-message]').textContent='Preparando '+format.toUpperCase()+'…';
+ try{
+  if(format==='excel'){
+   await loadExportLibrary('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+   const workbook=XLSX.utils.book_new(),sheet=XLSX.utils.aoa_to_sheet([heading,...data]);
+   sheet['!cols']=[24,18,13,36,28,14,28,22,24,10,18].map(wch=>({wch}));
+   for(let row=2;row<=data.length+1;row++)sheet['K'+row].z='#,##0.00;[Red]-#,##0.00';
+   sheet['!autofilter']={ref:sheet['!ref']};XLSX.utils.book_append_sheet(workbook,sheet,'Notas comerciales');
+   XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([['Registro de notas'],['Tipo',tab],...reportKeys.map(k=>[({from:'Fecha desde',to:'Fecha hasta',party:'Cliente / proveedor',reference:'Referencia',state:'Estado',reason:'Motivo',invoice:'Factura vinculada',noteType:'Tipo de Notas',user:'Usuario'})[k],k==='noteType'?(filters[k]?noteLabel({noteType:filters[k]}):'Todas'):(filters[k]||'Todos')])]),'Filtros');
+   root.commercialExport(filename+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',XLSX.write(workbook,{bookType:'xlsx',type:'base64'}));
+  }else{
+   await loadExportLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+   await loadExportLibrary('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+   const pdf=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
+   pdf.setFontSize(14);pdf.text('Notas Comercial Internos · '+(tab==='cliente'?'Clientes':'Proveedores'),10,14);
+   pdf.setFontSize(9);pdf.text('Registro de notas | Desde: '+(filters.from||'Todas')+' | Hasta: '+(filters.to||'Todas'),10,21);
+   pdf.text('Tipo de Notas: '+(filters.noteType?noteLabel({noteType:filters.noteType}):'Todas'),10,26);
+   pdf.text('Usuario: '+(filters.user||'Todos'),10,31);
+   pdf.autoTable({startY:36,head:[heading],body:data.map(r=>[...r.slice(0,-1),r.at(-1).toFixed(2)]),margin:10,styles:{fontSize:8,cellPadding:2,overflow:'linebreak'},columnStyles:{10:{halign:'right'}},didParseCell:ctx=>{if(ctx.section==='body'&&ctx.column.index===10)ctx.cell.styles.textColor=Number(ctx.cell.raw)<0?[185,28,28]:[35,66,54];},didDrawPage:()=>{pdf.setFontSize(8);pdf.text('POS 365',10,208);}});
+   root.commercialExport(filename+'.pdf','application/pdf',pdf.output('datauristring').split(',')[1]);
+  }
+  q('[data-report-message]').textContent='Archivo '+format.toUpperCase()+' preparado con '+rows.length+' nota(s) de '+(tab==='cliente'?'clientes':'proveedores')+'.';
+ }catch(error){q('[data-report-message]').textContent=error.message||'No se pudo generar el archivo.';}
+ finally{buttons.forEach(b=>b.disabled=false);}
+}
+function setupReports(){
+ userOptions('[data-report-user]');
+ q('[data-report-party-label]').textContent=type==='cliente'?'Cliente':'Proveedor';
+ q('[data-report-party-heading]').textContent=type==='cliente'?'Cliente':'Proveedor';
+ const party=q('[data-report-party]');party.replaceChildren(new Option('Todos',''));for(const [id,name]of parties[type])party.add(new Option(name,id));
+ const reason=q('[data-report-reason]');reason.replaceChildren(new Option('Todos',''));for(const opt of q('[data-reason]').options)reason.add(new Option(opt.text,opt.value));
+ for(const key of reportKeys)q('[data-report-'+key+']').value=reportFilters[type][key]||'';
+ renderReports();
+}
+function renderReports(){
+ reportRows=[];
+ const f=reportFilters[type],body=q('[data-report-rows]');body.replaceChildren();
+ q('[data-report-title]').textContent='Resultados del reporte · '+(type==='cliente'?'Clientes':'Proveedores');
+ if(f.from&&f.to&&f.from>f.to){q('[data-report-message]').textContent='La fecha desde no puede ser posterior a la fecha hasta.';return;}
+ const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+ const matches=records.filter(r=>r.type===type&&(!f.user||recordUser(r)===f.user)&&(!f.noteType||noteKind(r)===f.noteType)&&(!f.from||r.date>=f.from)&&(!f.to||r.date<=f.to)&&(!f.party||r.party===f.party)&&(!f.state||r.state===f.state)&&(!f.reason||r.reason===f.reason)&&norm(relatedReference(r)).includes(norm(f.reference))&&norm(r.invoiceNumber||context.invoiceLabels[r.invoice]||r.invoice).includes(norm(f.invoice))).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+ reportRows=matches;
+ for(const r of matches){const row=body.insertRow();for(const value of [r.id,noteLabel(r),r.date.split('-').reverse().join('/'),parties[type].find(p=>p[0]===r.party)?.[1]||r.party,relatedReference(r)||'—',r.state,r.reason||'—',r.invoiceNumber||context.invoiceLabels[r.invoice]||r.invoice||'Sin vincular',recordUser(r),money(total(r),r.currency)])row.insertCell().textContent=value;row.lastElementChild.classList.toggle('negative-amount',total(r)<0);}
+ if(!matches.length){const cell=body.insertRow().insertCell();cell.colSpan=10;cell.textContent='No hay notas comerciales internas que coincidan con los filtros.';}
+ q('[data-report-message]').textContent=matches.length+' nota(s) encontrada(s).';
+}
+let records=context.records,history=(context.history||[]).map(r=>{const d=JSON.parse(r.payload);return {id:r.note,operation:d.operation,before:0,after:d.state==='Anulado'?0:d.subtotal+d.tax+d.other,currency:d.currency,when:d.processedAt,user:d.user};}),type="cliente",mode="inclusion",selected=null,linked=null;
+const money=(c,currency=q('[data-currency]').value)=>new Intl.NumberFormat('es-CR',{style:'currency',currency}).format(c/100);
+const total=r=>r.subtotal+r.tax+r.other, cents=v=>(q('[name=nc-note-type]:checked')?.value==='debito'?1:-1)*Math.abs(Math.round(Number(v||0)*100))||0;
+let counters={};
+const selectedKind=()=>q('[name=nc-note-type]:checked')?.value||'credito';
+function next(){const kind=selectedKind(),key=type+':'+kind;return number(type,Math.max(counters[key]||0,0,...records.filter(r=>r.type===type&&noteKind(r)===kind).map(r=>Number(r.id.split('-').pop())))+1,kind);}
+function reserveNumbers(){for(const r of records){const key=r.type+':'+noteKind(r);counters[key]=Math.max(counters[key]||0,Number(r.id.split('-').pop())||0);}}
+function draftNumber(){return mode==='inclusion'||(mode==='modificacion'&&current()&&selectedKind()!==noteKind(current()))?next():selected;}
+function due(date,days){const d=new Date(date+'T12:00:00Z');if(!Number.isFinite(d.getTime()))return '';d.setUTCDate(d.getUTCDate()+Number(days));return d.toISOString().slice(0,10)}
+function current(){return records.find(r=>r.id===selected)}
+function draft(){return {user:sessionUser,createdBy:current()?.createdBy||current()?.user||sessionUser,id:draftNumber(),type,noteType:q('[name=nc-note-type]:checked')?.value,party:q('[data-party]').value,invoice:linked,date:q('[data-date]').value,term:Number(q('[data-term]').value),warehouse:q('[data-warehouse]').value,currency:q('[data-currency]').value,rate:Number(q('[data-rate]').value),reference:q('[data-reference]').value,reason:q('[data-reason]').value,comment:q('[data-comment]').value,subtotal:cents(q('[data-subtotal]').value),tax:cents(q('[data-tax]').value),other:cents(q('[data-other]').value),state:'Activa'}}
+function persist(){}
+function partyOptions(value){const select=q('[data-party]');select.replaceChildren();select.add(new Option('Seleccione '+(type==='cliente'?'un cliente':'un proveedor'),''));for(const [id,name]of parties[type])select.add(new Option(name,id));if(parties[type].some(p=>p[0]===value))select.value=value;q('[data-code]').value=select.value}
+function unlink(){linked=null;q('[data-linked]').value='';q('[data-unlink]').disabled=true}
+function load(r){q('[data-user]').value=mode==='inclusion'||mode==='modificacion'||mode==='exclusion'?sessionUser:recordUser(r);all('[name=nc-note-type]').forEach(el=>el.checked=el.value===(r.noteType||(total(r)>0?'debito':'credito')));partyOptions(r.party);for(const [key,selector]of Object.entries({date:'date',term:'term',warehouse:'warehouse',currency:'currency',rate:'rate',reference:'reference',reason:'reason',comment:'comment'}))q('[data-'+selector+']').value=r[key];for(const key of ['subtotal','tax','other'])q('[data-'+key+']').value=(r[key]/100).toFixed(2);linked=r.invoice;q('[data-linked]').value=context.invoiceLabels[linked]||linked||'';q('[data-number]').value=r.id;q('[data-state]').value=r.state;}
+function syncMode(){
+ q('[data-picker]').hidden=true;q('[data-confirm]').hidden=true;q('[data-record-wrap]').hidden=mode==='inclusion';
+ const editable=mode==='inclusion'||(mode==='modificacion'&&current()?.state==='Activa');
+ for(const selector of ['date','term','warehouse','rate','reference','reason','comment','subtotal','tax','other'])q('[data-'+selector+']').disabled=!editable;
+ all('[name=nc-note-type]').forEach(el=>el.disabled=mode!=='inclusion');q('[data-party]').disabled=mode!=='inclusion';q('[data-currency]').disabled=mode!=='inclusion';
+ q('[data-link]').disabled=!editable;q('[data-unlink]').disabled=!editable||!linked;
+ q('[data-process]').textContent={inclusion:'Procesar inclusión',consulta:'Consulta · solo lectura',modificacion:'Guardar modificación',exclusion:'Anular NC'}[mode];
+ q('[data-process]').disabled=mode==='consulta'||(mode!=='inclusion'&&(!current()||current().state!=='Activa'));
+ all('[name=nc-demo-op]').forEach(r=>r.checked=r.value===mode);
+ totals();
+}
+function changeMode(nextMode){mode=nextMode;const select=q('[data-record]');select.replaceChildren();for(const r of records.filter(r=>r.type===type))select.add(new Option(r.id+' · '+r.state,r.id));if([...select.options].some(o=>o.value===selected))select.value=selected;selected=select.value||null;
+ if(mode==='inclusion'){load({...seed(type,parties[type][0]?.[0]||'',null),id:next(),reference:'',comment:''});q('[data-state]').value='Borrador';}
+ else if(current())load(current());else {q('[data-state]').value='Sin registros';q('[data-number]').value='';unlink();}
+ q('[data-status]').textContent='';syncMode();
+}
+function changeType(nextType){type=nextType;selected=null;all('[data-type]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.type===type)));q('[data-party-label]').textContent=type==='cliente'?'Cliente':'Proveedor';changeMode(mode);setupReports();}
+function balance(party,currency,items=records){const base=0;return base+items.filter(r=>r.party===party&&r.currency===currency&&r.state==='Activa').reduce((n,r)=>n+total(r),0)}
+function totals(){const d=draft();root.commercialDocument=mode==='consulta'?current():{...d,state:mode==='inclusion'?'Borrador':'Cambios sin procesar'};q('[data-number]').value=d.id||'';q('[data-total]').textContent=money(total(d));for(const key of ['subtotal','tax','other','total'])q('[data-'+key+']').classList.toggle('negative-amount',(key==='total'?total(d):d[key])<0);q('[data-due]').value=due(d.date,d.term);renderLedger(d);renderReports()}
+function normalize(){for(const key of ['subtotal','tax','other']){const input=q('[data-'+key+']');if(input.value!==''&&Number.isFinite(Number(input.value)))input.value=(cents(input.value)/100).toFixed(2)}totals()}
+function renderLedger(d){const target=type==='cliente'?'CXC':'CXP';q('[data-ledger-title]').textContent=target+' · movimientos de notas';q('[data-effect]').textContent=target+' · '+({inclusion:'La inclusión suma el importe con su signo: negativo reduce el saldo y positivo lo aumenta.',consulta:'Consulta sin modificar saldos.',modificacion:'La modificación reemplaza el importe anterior; no duplica la NC.',exclusion:'La anulación revierte el importe y conserva la NC y su historial.'}[mode]);
+ let projected=records;if(mode==='inclusion')projected=[...records,d];else if(mode==='modificacion'&&current()?.state==='Activa')projected=records.map(r=>r.id===selected?d:r);else if(mode==='exclusion'&&current()?.state==='Activa')projected=records.map(r=>r.id===selected?{...r,state:'Anulado',user:sessionUser}:r);
+ q('[data-balance]').textContent=money(balance(d.party,d.currency));q('[data-projected]').textContent=money(balance(d.party,d.currency,projected));const body=q('[data-ledger]');body.replaceChildren();for(const r of records.filter(r=>r.type===type&&r.party===d.party&&r.currency===d.currency)){const tr=body.insertRow();for(const value of [r.id,relatedReference(r)||'Sin referencia',r.term+' días',due(r.date,r.term),money(total(r),r.currency),r.state])tr.insertCell().textContent=value;}
+ const h=q('[data-history]');h.replaceChildren();const historyUser=q('[data-history-user]').value;const historyUsers=[...new Set(history.filter(e=>e.id.includes(type==='cliente'?'-C-':'-P-')).map(e=>e.user).filter(Boolean))];q('[data-history-user]').replaceChildren(new Option('Todos',''),...historyUsers.map(u=>new Option(u,u)));q('[data-history-user]').value=historyUser;for(const e of history.slice().reverse().filter(e=>e.id.includes(type==='cliente'?'-C-':'-P-')&&(!historyUser||e.user===historyUser))){const tr=h.insertRow();for(const value of [e.id,e.operation,money(e.after,e.currency),e.when,e.user||'Sin usuario registrado'])tr.insertCell().textContent=value;}
+}
+function renderInvoices(){const body=q('[data-invoices]');body.replaceChildren();const term=q('[data-search]').value.toLowerCase();for(const inv of (invoices[q('[data-party]').value]||[]).filter(i=>i[5]===q('[data-currency]').value)){if(!inv.join(' ').toLowerCase().includes(term))continue;const tr=body.insertRow(),b=document.createElement('button');b.type='button';b.textContent='Seleccionar';tr.insertCell().append(b);for(const value of [inv[0],inv[2],inv[2],inv[3],money(inv[4]*100)])tr.insertCell().textContent=value;b.onclick=()=>{linked=inv[1];q('[data-linked]').value=context.invoiceLabels[linked]||linked;q('[data-picker]').hidden=true;syncMode();persist()}}}
+let processing=false,pendingRequest=null;
+async function commit(){if(processing)return;if(!q('[data-result-layer]').hidden)return;const old=current(),d=draft();if(mode==='consulta')return;if(mode!=='inclusion'&&old?.state!=='Activa'){showResult(false,'Seleccione una nota activa para procesar.');return;}
+ if(mode!=='exclusion'&&(!['credito','debito'].includes(d.noteType)||!d.party||!d.date||!due(d.date,d.term)||!Number.isFinite(total(d))||!(d.rate>0))){showResult(false,'Revise el cliente o proveedor, la fecha, el tipo de cambio y los importes de la nota. No se registró ningún cambio.');return;}
+ const requestData={action:mode,id:mode==='inclusion'?null:selected,version:old?.version||0,note:d};
+ const fingerprint=JSON.stringify(requestData);if(!pendingRequest||pendingRequest.fingerprint!==fingerprint)pendingRequest={fingerprint,body:{...requestData,operation:crypto.randomUUID()}};
+ processing=true;q('main').inert=true;q('header').inert=true;q('[data-status]').textContent='Guardando nota…';
+ try{const result=await root.commercialApi({},pendingRequest.body);if(result.error)throw Error(result.error);const saved=result.record;if(!saved?.id)throw Error('El servidor no confirmó la nota.');
+ records=records.filter(r=>r.id!==saved.id);records.push(saved);const before=old&&old.state==='Activa'?total(old):0,after=saved.state==='Activa'?total(saved):0;
+ history.push({id:saved.id,operation:mode,before,after,currency:saved.currency,when:saved.processedAt,user:saved.user});selected=saved.id;root.commercialDocument=saved;root.dispatchEvent(new CustomEvent('nc-processed',{detail:saved}));pendingRequest=null;root.commercialChanged();userOptions('[data-report-user]');changeMode('consulta');showResult(true,saved.id+' procesada correctamente. '+(saved.type==='cliente'?'CXC':'CXP')+' actualizado.');
+ }catch(error){showResult(false,error.message||'No se confirmó el guardado.');}finally{processing=false;if(q('[data-result-layer]').hidden){q('main').inert=false;q('header').inert=false;}}
+}
+
+function blankInclusion(){
+ selected=null;changeMode('inclusion');q('[data-party]').value='';q('[data-code]').value='';
+ for(const key of ['subtotal','tax','other','reference','comment'])q('[data-'+key+']').value='';
+ q('[data-reason]').selectedIndex=-1;unlink();q('[data-status]').textContent='Nueva nota comercial interna. Complete los datos para continuar.';totals();persist();q('[data-party]').focus();
+}
+function showResult(ok,message){resultSuccess=ok;resultFocus=document.activeElement;q('[data-result-title]').textContent=ok?'Procesado correctamente':'No se pudo procesar';q('[data-result-message]').textContent=message;q('[data-result-action]').textContent=ok?'Aceptar':'Regresar';q('[data-result-layer]').hidden=false;q('main').inert=true;q('header').inert=true;q('[data-result-action]').focus();}
+function dismissResult(){q('[data-result-layer]').hidden=true;q('main').inert=false;q('header').inert=false;if(resultSuccess)blankInclusion();else resultFocus?.focus();}
+q('[data-result-action]').onclick=dismissResult;
+q('[data-find-close]').onclick=closeRecordSearch;
+q('[data-find-record]').onclick=()=>openRecordSearch(mode==='inclusion'?'consulta':mode);
+q('[data-find-form]').onsubmit=e=>{e.preventDefault();renderRecordSearch();};
+q('[data-find-layer]').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();closeRecordSearch();}else if(e.key==='Tab'){const controls=[...q('[data-find-layer]').querySelectorAll('button:not(:disabled),input,select')],first=controls[0],last=controls.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}};
+q('[data-result-layer]').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();dismissResult();}else if(e.key==='Tab'){e.preventDefault();q('[data-result-action]').focus();}});
+all('[data-type]').forEach(b=>b.onclick=()=>{changeType(b.dataset.type);persist()});all('[name=nc-demo-op]').forEach(r=>r.onclick=()=>{if(r.value==='inclusion'){changeMode(r.value);persist()}else openRecordSearch(r.value)});q('[data-record]').onchange=()=>{selected=q('[data-record]').value;load(current());syncMode();persist()};q('[data-party]').onchange=()=>{q('[data-code]').value=q('[data-party]').value;unlink();totals()};
+q('[data-link]').onclick=()=>{q('[data-picker]').hidden=false;q('[data-picker-title]').textContent=type==='cliente'?'Facturas del cliente':'Compras del proveedor';q('[data-search]').value='';renderInvoices()};q('[data-close]').onclick=()=>q('[data-picker]').hidden=true;q('[data-search]').oninput=renderInvoices;q('[data-unlink]').onclick=()=>{unlink();totals()};
+for(const key of ['subtotal','tax','other']){q('[data-'+key+']').oninput=()=>{const el=q('[data-'+key+']');if(el.value!==''&&Number.isFinite(Number(el.value))){const signed=cents(el.value)/100;if(Number(el.value)!==signed)el.value=String(signed);}totals();};q('[data-'+key+']').onchange=normalize}for(const key of ['date','term'])q('[data-'+key+']').onchange=totals;
+q('[data-currency]').onchange=()=>{unlink();q('[data-picker]').hidden=true;totals()};q('[data-process]').onclick=()=>{if(!q('[data-result-layer]').hidden)return;normalize();if(mode==='exclusion'){q('[data-confirm-text]').textContent=current().id+' · Se revertirá el importe de '+money(total(current()))+' en '+(type==='cliente'?'CXC':'CXP')+'. La NC permanecerá registrada con estado Anulado y conservará su historial.';q('[data-confirm]').hidden=false;q('main').inert=true;q('header').inert=true;q('[data-confirm-no]').focus();}else commit()};function closeAnnul(){q('[data-confirm]').hidden=true;q('main').inert=false;q('header').inert=false;q('[data-process]').focus();}
+q('[data-confirm-no]').onclick=closeAnnul;q('[data-confirm-yes]').onclick=()=>{if(q('[data-confirm]').hidden)return;closeAnnul();commit();};
+q('[data-confirm]').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();closeAnnul();}else if(e.key==='Tab'){e.preventDefault();(document.activeElement===q('[data-confirm-no]')?q('[data-confirm-yes]'):q('[data-confirm-no]')).focus();}};
+q('[data-cancel]').onclick=()=>{changeMode(mode);q('[data-status]').textContent='Cambios sin procesar descartados. Saldos sin cambios.'};
+q('[data-report-form]').onsubmit=e=>{e.preventDefault();for(const key of reportKeys)reportFilters[type][key]=q('[data-report-'+key+']').value;renderReports();q('[data-report-results]').open=true;persist();};
+
+all('[name=nc-note-type]').forEach(el=>el.onchange=()=>{normalize();});
+q('[data-export-excel]').onclick=()=>exportReport('excel');q('[data-export-pdf]').onclick=()=>exportReport('pdf');
+q('[data-warehouse]').replaceChildren(...context.warehouses.map(w=>new Option(w,w)));changeType('cliente');totals();root.addEventListener('input',totals);root.addEventListener('change',totals);
+})();
+</script>
+<style>
+#nc-proposal .print-layer{padding:28px 12px;z-index:15}#nc-proposal .print-window{width:min(100%,970px);padding:14px}#nc-proposal .design-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:14px;margin-top:10px}#nc-proposal .design-layout.preview-only{grid-template-columns:minmax(0,1fr)}#nc-proposal .design-tools{background:var(--nc-soft);padding:10px;border-radius:5px;min-width:0}#nc-proposal .design-tools .grid{grid-template-columns:1fr 1fr;gap:7px}#nc-proposal .design-tools input,#nc-proposal .design-tools select{font-size:12px;padding:4px}#nc-proposal .design-tools label{margin-bottom:5px}#nc-proposal .paper{position:relative;width:100%;max-width:612px;aspect-ratio:612/792;margin:0 auto;container-type:inline-size;background:var(--nc-bg);color:var(--nc-fg);border:1px solid var(--nc-line);box-shadow:0 3px 12px light-dark(#183c251a,#0006)}#nc-proposal .paper-field{position:absolute;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.2;min-width:0}#nc-proposal .paper-field.editing{border:1px dashed var(--nc-line);touch-action:none;cursor:move}#nc-proposal .paper-field.chosen{outline:2px solid var(--nc-active)}#nc-proposal .paper-field button{font:inherit;text-align:inherit;color:inherit;background:transparent;border:0;padding:0;width:100%;line-height:inherit}#nc-proposal .design-catalog{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}#nc-proposal .print-status{font-size:12px;margin:6px 0}#nc-proposal .print-preview-bar{justify-content:space-between}#nc-proposal .design-tools .ops input{width:auto}
+@media(max-width:650px){#nc-proposal .design-layout{grid-template-columns:1fr}#nc-proposal .design-tools .grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+<div class="result-layer print-layer" data-print-layer hidden>
+<section class="result-window print-window" role="dialog" aria-modal="true" aria-labelledby="nc-print-title">
+<div class="picker-top"><h3 id="nc-print-title" data-print-title>Vista previa · Notas Comercial Internos</h3><button type="button" data-print-close>Cerrar</button></div>
+<div class="inline print-preview-bar"><span>Carta · 21,59 × 27,94 cm</span><div class="inline"><button type="button" data-print-edit>Editar diseño</button><button type="button" data-print-button>Imprimir</button><button type="button" data-print-pdf>Exportar PDF</button></div></div>
+<div class="design-catalog" data-design-catalog hidden><button type="button" data-template="cliente">Nota comercial · Cliente</button><button type="button" data-template="proveedor">Nota comercial · Proveedor</button></div>
+<div class="design-layout preview-only" data-design-layout>
+<aside class="design-tools" data-design-tools hidden>
+<h3>Campos y formato</h3>
+<label>Campo del documento<select data-design-field></select></label>
+<div class="inline ops"><label><input type="checkbox" data-design-visible>Mostrar campo</label><label><input type="checkbox" data-design-bold>Negrita</label><label><input type="checkbox" data-design-italic>Cursiva</label></div>
+<label>Tipografía<select data-design-font><option value="helvetica">Arial / Helvetica</option><option value="times">Times</option><option value="courier">Courier</option></select></label>
+<div class="grid"><label>Tamaño (pt)<input type="number" min="7" max="32" data-design-size></label><label>Alineación<select data-design-align><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label><label>X (mm)<input type="number" min="0" step="1" data-design-x></label><label>Y (mm)<input type="number" min="0" step="1" data-design-y></label><label>Ancho (mm)<input type="number" min="20" max="200" data-design-width></label></div>
+<div class="inline"><button type="button" data-design-save class="primary">Guardar plantilla</button><button type="button" data-design-undo>Deshacer cambios</button></div>
+<p class="note">Seleccione un campo en la hoja y arrástrelo, o ajuste X/Y. Tamaño carta fijo.</p>
+</aside>
+<div><div class="paper" data-letter-paper aria-label="Documento tamaño carta"></div></div>
+</div>
+<p class="print-status" role="status" aria-live="polite" data-print-status>Registro de notas</p>
+</section></div>
+<script>
+(()=>{
+const root=document.getElementById('nc-proposal'),q=s=>root.querySelector(s);
+const names={company:'Empresa',title:'Título',id:'Consecutivo',state:'Estado',date:'Fecha',party:'Código cliente / proveedor',partyName:'Nombre cliente / proveedor',warehouse:'Bodega',reference:'Referencia',invoice:'Factura vinculada',reason:'Motivo',term:'Plazo',due:'Vencimiento',currency:'Moneda',rate:'Tipo de cambio',comment:'Comentario',subtotal:'Subtotal',tax:'Impuesto',other:'Otros cargos',total:'Total',operation:'Operación',processedAt:'Fecha y hora de proceso',user:'Usuario',signature:'Firma',footer:'Pie de página',noteType:'Tipo de Notas'};
+function defaults(){return Object.keys(names).map((key,i)=>{let x=18,y=64+Math.floor((i-4)/2)*11,w=86,size=10;if(i>=4)x=i%2?112:18;if(i===0){x=18;y=16;w=180;size=16}if(i===1){x=18;y=29;w=180;size=14}if(i===2){x=18;y=43;w=110;size=12}if(i===3){x=143;y=43;w=55;size=12}if(key==='comment'){x=18;y=133;w=180}if(['subtotal','tax','other','total'].includes(key)){x=112;y=159+['subtotal','tax','other','total'].indexOf(key)*10;w=86;size=key==='total'?14:10}if(key==='operation'){x=18;y=159}if(key==='processedAt'){x=18;y=170}if(key==='user'){x=18;y=181}if(key==='signature'){x=18;y=224;w=180}if(key==='footer'){x=18;y=252;w=180;size=8}if(key==='noteType'){x=18;y=236;w=180;size=11}return {key,x,y,w,size,visible:true,bold:['company','title','id','total'].includes(key),italic:false,font:'helvetica',align:key==='total'?'right':'left'};});}
+const saved={cliente:defaults(),proveedor:defaults()};let layout=[],doc=null,designType='cliente',editing=false,chosen='title',lastProcessed=null,wantsPreview=false,returnFocus=null;
+const clone=v=>JSON.parse(JSON.stringify(v));
+function restoreDesigns(state){const data=state?.privateContent?.printDesigns;if(data)for(const t of ['cliente','proveedor'])if(Array.isArray(data[t])&&data[t].length===Object.keys(names).length&&data[t].every(f=>names[f.key]&&Number.isFinite(f.x)&&Number.isFinite(f.y)&&Number.isFinite(f.w)&&Number.isFinite(f.size)))saved[t]=clone(data[t]);root.ncPrintDesigns=clone(saved);}
+const designVersions={cliente:0,proveedor:0};for(const row of root.commercialContext.designs){designVersions[row.kind]=row.version;restoreDesigns({privateContent:{printDesigns:{[row.kind]:JSON.parse(row.payload)}}});}
+function sample(t){return {...(root.commercialDocument||{}),type:t,partyName:root.commercialDocument?.partyName||root.querySelector('[data-party]').selectedOptions[0]?.textContent||'',id:root.commercialDocument?.id||'Sin procesar',date:root.commercialDocument?.date||new Intl.DateTimeFormat('en-CA',{timeZone:'America/Costa_Rica'}).format(new Date()),user:root.commercialContext.user};}
+function values(){const fmt=n=>doc.currency+' '+(n/100).toLocaleString('es-CR',{minimumFractionDigits:2,maximumFractionDigits:2});const due=new Date(doc.date+'T12:00:00Z');due.setUTCDate(due.getUTCDate()+Number(doc.term));return {...doc,reference:root.commercialReference(doc),invoice:doc.invoiceNumber||root.commercialContext.invoiceLabels[doc.invoice]||doc.invoice,noteType:(doc.noteType||(doc.subtotal+doc.tax+doc.other>0?'debito':'credito'))==='debito'?'N. DÉBITO':'N. CRÉDITO',company:root.commercialContext.company,title:'NOTA COMERCIAL INTERNA · '+(doc.type==='cliente'?'CLIENTE':'PROVEEDOR'),due:due.toISOString().slice(0,10),term:doc.term+' días',subtotal:fmt(doc.subtotal),tax:fmt(doc.tax),other:fmt(doc.other),total:fmt(doc.subtotal+doc.tax+doc.other),operation:({inclusion:'Inclusión',modificacion:'Modificación',exclusion:'Anulación'})[doc.operation]||'Consulta',signature:'_______________________________\nFirma autorizada',footer:'POS 365 · Documento interno · Página 1 de 1'};}
+function content(f){const v=values()[f.key]??'—';return ['company','title','signature','footer'].includes(f.key)?String(v):names[f.key]+': '+(v||'—');}
+function open(d,edit=false){returnFocus=document.activeElement;doc=clone(d);designType=doc.type;layout=clone(saved[designType]);editing=edit;chosen='title';q('[data-print-layer]').hidden=false;q('main').inert=true;q('header').inert=true;render();q('[data-print-close]').focus();}
+function controls(){const f=layout.find(f=>f.key===chosen);q('[data-design-field]').value=chosen;for(const k of ['visible','bold','italic'])q('[data-design-'+k+']').checked=f[k];for(const k of ['font','size','align','x','y'])q('[data-design-'+k+']').value=f[k];q('[data-design-width]').value=f.w;}
+function render(){q('[data-print-title]').textContent=(editing?'Diseños':'Vista previa')+' · Notas Comercial Internos · '+(designType==='cliente'?'Cliente':'Proveedor');q('[data-design-tools]').hidden=!editing;q('[data-design-catalog]').hidden=!editing;q('[data-design-layout]').classList.toggle('preview-only',!editing);q('[data-print-edit]').hidden=editing;root.querySelectorAll('[data-template]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.template===designType)));const select=q('[data-design-field]');select.replaceChildren();for(const f of layout)select.add(new Option(names[f.key]+(f.visible?'':' · oculto'),f.key));controls();const paper=q('[data-letter-paper]');paper.replaceChildren();for(const f of layout.filter(f=>f.visible)){const el=document.createElement('div');el.className='paper-field'+(editing?' editing':'')+(editing&&f.key===chosen?' chosen':'');el.dataset.field=f.key;el.classList.toggle('negative-amount',['subtotal','tax','other','total'].includes(f.key)&&(f.key==='total'?doc.subtotal+doc.tax+doc.other:doc[f.key])<0);Object.assign(el.style,{left:f.x/215.9*100+'%',top:f.y/279.4*100+'%',width:f.w/215.9*100+'%',fontSize:(f.size/612*100)+'cqw',fontFamily:f.font==='times'?'Times New Roman,serif':f.font==='courier'?'Courier New,monospace':'Arial,sans-serif',fontWeight:f.bold?'700':'400',fontStyle:f.italic?'italic':'normal',textAlign:f.align});if(editing){const b=document.createElement('button');b.type='button';b.textContent=content(f);b.onclick=()=>{chosen=f.key;controls();paper.querySelectorAll('.chosen').forEach(n=>n.classList.remove('chosen'));el.classList.add('chosen');};el.append(b);el.onpointerdown=e=>{chosen=f.key;controls();const box=paper.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ox=f.x,oy=f.y;el.setPointerCapture?.(e.pointerId);el.onpointermove=event=>{f.x=Math.round(Math.max(10,Math.min(205.9-f.w,ox+(event.clientX-sx)/box.width*215.9)));f.y=Math.round(Math.max(10,Math.min(255,oy+(event.clientY-sy)/box.height*279.4)));el.style.left=f.x/215.9*100+'%';el.style.top=f.y/279.4*100+'%';controls();};el.onpointerup=()=>{el.onpointermove=null;render();};};}else el.textContent=content(f);paper.append(el);}}
+function close(){q('[data-print-layer]').hidden=true;q('main').inert=false;q('header').inert=false;returnFocus?.focus();}
+q('[data-print-close]').onclick=close;q('[data-design-open]').onclick=()=>open(sample(root.querySelector('[data-type][aria-pressed=true]').dataset.type),true);q('[data-preview-example]').onclick=()=>open(sample(root.querySelector('[data-type][aria-pressed=true]').dataset.type));q('[data-print-edit]').onclick=()=>{editing=true;render();};
+root.querySelectorAll('[data-template]').forEach(b=>b.onclick=()=>{designType=b.dataset.template;doc=sample(designType);layout=clone(saved[designType]);render();});
+q('[data-design-field]').onchange=()=>{chosen=q('[data-design-field]').value;render();};
+for(const key of ['visible','bold','italic','font','size','align','x','y','width'])q('[data-design-'+key+']').onchange=()=>{const f=layout.find(f=>f.key===chosen),el=q('[data-design-'+key+']');if(['visible','bold','italic'].includes(key))f[key]=el.checked;else if(['font','align'].includes(key))f[key]=el.value;else{const value=Number(el.value);if(!Number.isFinite(value))return;f[key==='width'?'w':key]=key==='size'?Math.max(7,Math.min(32,value)):key==='width'?Math.max(20,Math.min(195,value)):Math.max(10,Math.min(key==='x'?185:255,value));}f.x=Math.min(f.x,205.9-f.w);render();};
+q('[data-design-save]').onclick=async()=>{const button=q('[data-design-save]');button.disabled=true;try{const result=await root.commercialApi({},{action:'design',operation:crypto.randomUUID(),kind:designType,version:designVersions[designType],fields:layout});if(result.error)throw Error(result.error);designVersions[designType]=result.version;saved[designType]=clone(layout);root.ncPrintDesigns=clone(saved);q('[data-print-status]').textContent='Diseño guardado.';}catch(e){q('[data-print-status]').textContent=e.message;}finally{button.disabled=false;}};q('[data-design-undo]').onclick=()=>{layout=clone(saved[designType]);render();};
+root.addEventListener('nc-processed',e=>{lastProcessed=clone(e.detail);wantsPreview=q('[data-preview-enabled]').checked;});q('[data-result-action]').addEventListener('click',()=>{if(wantsPreview&&lastProcessed){wantsPreview=false;open(lastProcessed);}});
+let pdfReady;function loadPDF(){return pdfReady||=new Promise((resolve,reject)=>{if(window.jspdf)return resolve();const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=resolve;s.onerror=()=>{pdfReady=null;reject(new Error('No se pudo cargar PDF. Intente nuevamente.'));};document.head.append(s);});}
+function printDocument(){
+ const page=document.createElement('div');page.style.cssText='position:relative;width:215.9mm;height:279.4mm;overflow:hidden';
+ for(const f of layout.filter(f=>f.visible)){const node=document.createElement('div');Object.assign(node.style,{position:'absolute',left:f.x+'mm',top:f.y+'mm',width:f.w+'mm',fontSize:f.size+'pt',fontFamily:f.font==='times'?'Times New Roman':f.font==='courier'?'Courier New':'Arial',fontWeight:f.bold?'bold':'normal',fontStyle:f.italic?'italic':'normal',textAlign:f.align,whiteSpace:'pre-wrap',overflowWrap:'anywhere',color:['subtotal','tax','other','total'].includes(f.key)&&(f.key==='total'?doc.subtotal+doc.tax+doc.other:doc[f.key])<0?'#b91c1c':'#234236'});node.textContent=content(f);page.append(node);}
+ window.parent.postMessage({type:'cedi-price-print',requestId:crypto.randomUUID(),html:'<html><head><style>@page{size:letter;margin:0}body{margin:0}</style></head><body>'+page.outerHTML+'</body></html>'},'*');q('[data-print-status]').textContent='Abriendo impresión tamaño carta…';
+}
+async function output(print){if(print){printDocument();return;}try{await loadPDF();const pdf=new window.jspdf.jsPDF({unit:'mm',format:'letter'});for(const f of layout.filter(f=>f.visible)){pdf.setFont(f.font,f.bold?(f.italic?'bolditalic':'bold'):(f.italic?'italic':'normal'));pdf.setFontSize(f.size);pdf.setTextColor(...(['subtotal','tax','other','total'].includes(f.key)&&(f.key==='total'?doc.subtotal+doc.tax+doc.other:doc[f.key])<0?[185,28,28]:[35,66,54]));const lines=pdf.splitTextToSize(content(f),f.w);if(f.y+lines.length*f.size*0.45>279.4)throw Error('El campo '+names[f.key]+' no cabe en carta. Ajuste su posición o tamaño en Diseños.');pdf.text(lines,f.x+(f.align==='right'?f.w:f.align==='center'?f.w/2:0),f.y,{baseline:'top',align:f.align});}root.commercialExport('POS365-nota-'+doc.id+'.pdf','application/pdf',pdf.output('datauristring').split(',')[1]);}catch(e){q('[data-print-status]').textContent=e.message;}}
+q('[data-print-pdf]').onclick=()=>output(false);q('[data-print-button]').onclick=()=>output(true);
+q('[data-print-layer]').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();close();}if(e.key==='Tab'){const list=[...q('[data-print-layer]').querySelectorAll('button,input,select')].filter(el=>!el.disabled&&!el.closest('[hidden]'));if(e.shiftKey&&document.activeElement===list[0]){e.preventDefault();list.at(-1).focus();}else if(!e.shiftKey&&document.activeElement===list.at(-1)){e.preventDefault();list[0].focus();}}};
+})();
+</script>
+</div>
