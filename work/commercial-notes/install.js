@@ -12,7 +12,7 @@ function appendCommercialLedger(view,account){
 }
 function installCommercialNotes(){
  const item=document.createElement('button');item.type='button';item.className='menu-item cursor-interaction';item.textContent='Notas Comercial Internos';menu.append(item);
- const view=document.createElement('main');view.hidden=true;view.className='commercial-notes-view';view.style.cssText='min-width:0;overflow:auto;flex:1';root.append(view);
+ const view=document.createElement('main');view.hidden=true;view.className='commercial-notes-view';view.style.cssText='min-width:0;min-height:0;width:100%;max-width:100%;overflow-y:auto;overflow-x:hidden;flex:1';root.append(view);
  const activate=()=>{for(const m of root.querySelectorAll(':scope > main'))m.hidden=m!==view;for(const b of menu.querySelectorAll('.menu-item')){b.classList.toggle('selected',b===item);b.removeAttribute('aria-current');}item.setAttribute('aria-current','page');};
  item.onclick=async()=>{activate();view.textContent='Cargando notas comerciales…';try{
   const [catalog,designs]=await Promise.all([commercialRequest({catalog:'1'}),commercialRequest({designs:'1'})]);if(catalog.error||designs.error)throw Error(catalog.error||designs.error);

@@ -7,7 +7,7 @@
 #nc-proposal .result-layer{position:absolute;inset:0;z-index:10;background:light-dark(#173b284d,#0009);display:flex;align-items:flex-start;justify-content:center;padding:130px 16px 16px}#nc-proposal .result-window{background:var(--nc-bg);color:var(--nc-fg);border:1px solid var(--nc-line);border-radius:10px;padding:22px;width:min(100%,460px);box-shadow:0 12px 36px light-dark(#14362733,#0008)}#nc-proposal .result-window p{margin:10px 0 20px;overflow-wrap:anywhere}#nc-proposal .result-window .inline{justify-content:flex-end}
 </style>
 <style>
-#nc-proposal .workspace{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch}#nc-proposal .editor{min-width:0}#nc-proposal .editor .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#nc-proposal .reports{background:var(--nc-soft);border:1px solid var(--nc-line);border-radius:6px;padding:14px;min-width:0}#nc-proposal .report-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}#nc-proposal .reports button{margin-top:10px;width:auto}#nc-proposal .report-results td{overflow-wrap:anywhere}#nc-proposal .report-results table{min-width:800px}#nc-proposal .editor .bottom{grid-template-columns:1fr}#nc-proposal .editor .invoice{grid-template-columns:1fr 1fr}#nc-proposal .editor .invoice label{grid-column:span 2}#nc-proposal .report-results summary{font-weight:500}
+#nc-proposal .workspace{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch}#nc-proposal .editor{min-width:0}#nc-proposal .editor .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#nc-proposal .reports{color:var(--nc-fg);background:var(--nc-soft);border:1px solid var(--nc-line);border-radius:6px;padding:14px;min-width:0}#nc-proposal .report-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}#nc-proposal .reports button{margin-top:10px;width:auto}#nc-proposal .report-results td{overflow-wrap:anywhere}#nc-proposal .report-results table{min-width:800px}#nc-proposal .editor .bottom{grid-template-columns:1fr}#nc-proposal .editor .invoice{grid-template-columns:1fr 1fr}#nc-proposal .editor .invoice label{grid-column:span 2}#nc-proposal .report-results summary{font-weight:500}
 @media(max-width:760px){#nc-proposal .heading{flex-wrap:wrap}#nc-proposal .editor .grid,#nc-proposal .report-fields,#nc-proposal .totals,#nc-proposal .editor .invoice{grid-template-columns:minmax(0,1fr)}#nc-proposal .span2,#nc-proposal .editor .invoice label{grid-column:auto}#nc-proposal .reports{padding:8px}#nc-proposal .workspace{gap:8px}#nc-proposal .total{font-size:15px}#nc-proposal label,#nc-proposal button,#nc-proposal summary{overflow-wrap:anywhere}}
 </style>
 <style>
@@ -48,7 +48,7 @@
 <section class="section"><h3 data-ledger-title>CXC · movimientos de notas</h3><div class="inline"><span>Efecto acumulado de notas:</span><output data-balance></output><span>Efecto después de procesar:</span><output data-projected></output></div><div class="scroll"><table><thead><tr><th>NC</th><th>Factura / referencia</th><th>Plazo</th><th>Vencimiento</th><th>Importe</th><th>Estado</th></tr></thead><tbody data-ledger></tbody></table></div></section>
 <details class="section"><summary>Historial de cambios</summary><label>Usuario<select data-history-user><option value="">Todos</option></select></label><div class="scroll"><table><thead><tr><th>NC</th><th>Operación</th><th>Importe aplicado</th><th>Fecha y hora</th><th>Usuario</th></tr></thead><tbody data-history></tbody></table></div></details>
 </div>
-<aside class="reports" aria-label="Reportes de notas comerciales internas">
+<section class="reports" aria-label="Reportes de notas comerciales internas">
 <h3>Reportes</h3>
 <form data-report-form>
 <div class="report-fields">
@@ -69,7 +69,7 @@
 <summary data-report-title>Resultados del reporte · Clientes</summary>
 <div class="scroll"><table><thead><tr><th>Consecutivo</th><th>Tipo de Notas</th><th>Fecha</th><th data-report-party-heading>Cliente</th><th>Referencia</th><th>Estado</th><th>Motivo</th><th>Factura vinculada</th><th>Usuario</th><th>Monto</th></tr></thead><tbody data-report-rows></tbody></table></div>
 </details>
-</aside></div>
+</section></div>
 </main>
 <div data-confirm class="result-layer" hidden>
 <section class="result-window" role="dialog" aria-modal="true" aria-labelledby="nc-annul-title" aria-describedby="nc-annul-description">
@@ -108,6 +108,8 @@
 (()=>{
 const root=document.getElementById('nc-proposal'),q=s=>root.querySelector(s),all=s=>[...root.querySelectorAll(s)];
 const context=root.commercialContext, parties=context.parties, invoices=context.invoices;
+function labelResponsiveCells(){for(const table of root.querySelectorAll('.scroll table')){const headers=[...table.querySelectorAll('thead th')].map(th=>th.textContent);for(const row of table.querySelectorAll('tbody tr'))for(const [i,cell]of [...row.cells].entries())if(cell.colSpan===1&&headers[i])cell.dataset.label=headers[i];}}
+const tableLabels=new MutationObserver(labelResponsiveCells);for(const body of root.querySelectorAll('.scroll tbody'))tableLabels.observe(body,{childList:true,subtree:true});labelResponsiveCells();
 const relatedReference=r=>[r.reference?.trim(),r.invoice?(r.invoiceNumber||context.invoiceLabels[r.invoice]||''):''].filter(Boolean).join(' - ');root.commercialReference=relatedReference;
 const number=(type,n,kind='credito')=>(kind==='debito'?'ND-':'NC-')+(type==='cliente'?'C':'P')+'-'+String(n).padStart(10,'0');
 const sessionUser=context.user;
@@ -284,6 +286,59 @@ q('[data-warehouse]').replaceChildren(...context.warehouses.map(w=>new Option(w,
 <style>
 #nc-proposal .print-layer{padding:28px 12px;z-index:15}#nc-proposal .print-window{width:min(100%,970px);padding:14px}#nc-proposal .design-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:14px;margin-top:10px}#nc-proposal .design-layout.preview-only{grid-template-columns:minmax(0,1fr)}#nc-proposal .design-tools{background:var(--nc-soft);padding:10px;border-radius:5px;min-width:0}#nc-proposal .design-tools .grid{grid-template-columns:1fr 1fr;gap:7px}#nc-proposal .design-tools input,#nc-proposal .design-tools select{font-size:12px;padding:4px}#nc-proposal .design-tools label{margin-bottom:5px}#nc-proposal .paper{position:relative;width:100%;max-width:612px;aspect-ratio:612/792;margin:0 auto;container-type:inline-size;background:var(--nc-bg);color:var(--nc-fg);border:1px solid var(--nc-line);box-shadow:0 3px 12px light-dark(#183c251a,#0006)}#nc-proposal .paper-field{position:absolute;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.2;min-width:0}#nc-proposal .paper-field.editing{border:1px dashed var(--nc-line);touch-action:none;cursor:move}#nc-proposal .paper-field.chosen{outline:2px solid var(--nc-active)}#nc-proposal .paper-field button{font:inherit;text-align:inherit;color:inherit;background:transparent;border:0;padding:0;width:100%;line-height:inherit}#nc-proposal .design-catalog{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}#nc-proposal .print-status{font-size:12px;margin:6px 0}#nc-proposal .print-preview-bar{justify-content:space-between}#nc-proposal .design-tools .ops input{width:auto}
 @media(max-width:650px){#nc-proposal .design-layout{grid-template-columns:1fr}#nc-proposal .design-tools .grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* Fit the application's available width; keep the approved two equal panels. */
+#nc-proposal{width:100%;max-width:100%;min-width:0}
+#nc-proposal>header{padding:6px 10px;gap:10px;flex-wrap:wrap}
+#nc-proposal>header strong{font-size:14px}
+#nc-proposal>main{min-width:0;padding:8px}
+#nc-proposal h2{font-size:18px;overflow-wrap:anywhere}
+#nc-proposal .heading{gap:6px;margin-bottom:6px}
+#nc-proposal .workspace{gap:8px;align-items:start}
+#nc-proposal .workspace>*{min-width:0;max-width:100%}
+#nc-proposal .inline>*{min-width:0;max-width:100%}
+#nc-proposal .switch{flex-wrap:wrap}
+#nc-proposal button,#nc-proposal summary,#nc-proposal th,#nc-proposal td{overflow-wrap:anywhere;white-space:normal}
+#nc-proposal .reports{align-self:stretch}
+#nc-proposal .report-results table{min-width:0;table-layout:fixed}
+#nc-proposal .report-results th,#nc-proposal .report-results td{font-size:12px;padding:4px}
+#nc-proposal .result-layer{position:fixed;inset:0;padding:12px;overflow:auto;overscroll-behavior:contain;align-items:flex-start}
+#nc-proposal .result-window{margin:auto;max-width:100%;max-height:calc(100dvh - 24px);overflow:auto;padding:12px;min-width:0}
+#nc-proposal .picker-top{gap:8px;flex-wrap:wrap}
+#nc-proposal .design-layout>*{min-width:0}
+@container (min-width:560px){
+ #nc-proposal .editor .grid,#nc-proposal .report-fields{grid-template-columns:repeat(4,minmax(0,1fr))}
+ #nc-proposal .editor .totals{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@container (max-width:600px){
+ #nc-proposal .reports table,#nc-proposal .reports tbody{display:block;width:100%;min-width:0}
+ #nc-proposal .reports thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ #nc-proposal .reports tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 8px;border-bottom:1px solid var(--nc-line);padding:6px 0}
+ #nc-proposal .reports tbody td{display:block;min-width:0;border:0;padding:2px;overflow-wrap:anywhere}
+ #nc-proposal .reports tbody td[data-label]::before{content:attr(data-label);display:block;color:var(--nc-fg);font-weight:500;font-size:11px}
+ #nc-proposal .reports td[colspan]{grid-column:1/-1}
+}
+@container (max-width:280px){
+ #nc-proposal .reports tbody tr{grid-template-columns:minmax(0,1fr)}
+ #nc-proposal .workspace .inline,#nc-proposal .report-actions{align-items:stretch}
+ #nc-proposal .workspace footer>div{width:100%}
+ #nc-proposal .workspace footer button,#nc-proposal .report-actions button{width:100%}
+}
+@media(max-width:650px){
+ #nc-proposal>header .crumb{display:none}
+ #nc-proposal .badge{display:none}
+ #nc-proposal>main{padding:6px}
+ #nc-proposal .workspace{gap:6px}
+ #nc-proposal .reports{padding:5px}
+ #nc-proposal .result-layer{padding:6px}
+ #nc-proposal .result-window{max-height:calc(100dvh - 12px);padding:8px}
+ #nc-proposal .result-window .grid,#nc-proposal .design-tools .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #nc-proposal .result-window .scroll table{table-layout:fixed;width:100%;min-width:0}
+ #nc-proposal .result-window .scroll thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ #nc-proposal .result-window .scroll tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;border-bottom:1px solid var(--nc-line)}
+ #nc-proposal .result-window .scroll tbody td{display:block;min-width:0;border:0;padding:4px;overflow-wrap:anywhere}
+ #nc-proposal .result-window .scroll td[data-label]::before{content:attr(data-label);display:block;font-size:11px;font-weight:500;color:var(--nc-fg)}
+ #nc-proposal .result-window .scroll td[colspan]{grid-column:1/-1}
+}
 </style>
 <div class="result-layer print-layer" data-print-layer hidden>
 <section class="result-window print-window" role="dialog" aria-modal="true" aria-labelledby="nc-print-title">
