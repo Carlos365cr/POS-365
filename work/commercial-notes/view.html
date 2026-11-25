@@ -52,13 +52,13 @@
 <h3>Reportes</h3>
 <form data-report-form>
 <div class="report-fields">
-<label>Tipo de Notas<select data-report-noteType><option value="">Todas</option><option value="credito">N. CRÉDITO</option><option value="debito">N. DÉBITO</option></select></label>
-<label>Usuario<select data-report-user></select></label>
 <label>Fecha desde<input type="date" data-report-from></label>
 <label>Fecha hasta<input type="date" data-report-to></label>
-<label class="span2"><span data-report-party-label>Cliente</span><select data-report-party></select></label>
-<label>Referencia<input type="search" data-report-reference placeholder="Buscar referencia"></label>
 <label>Estado<select data-report-state><option value="">Todos</option><option>Activa</option><option>Anulado</option></select></label>
+<label class="span2"><span data-report-party-label>Cliente</span><select data-report-party></select></label>
+<label>Tipo de Notas<select data-report-noteType><option value="">Todas</option><option value="credito">N. CRÉDITO</option><option value="debito">N. DÉBITO</option></select></label>
+<label>Usuario<select data-report-user></select></label>
+<label>Referencia<input type="search" data-report-reference placeholder="Buscar referencia"></label>
 <label class="span2">Motivo<select data-report-reason></select></label>
 <label class="span2">Factura vinculada<input type="search" data-report-invoice placeholder="Número de factura"></label>
 </div>
@@ -309,10 +309,10 @@ q('[data-warehouse]').replaceChildren(...context.warehouses.map(w=>new Option(w,
  #nc-proposal .editor .grid,#nc-proposal .report-fields{grid-template-columns:repeat(4,minmax(0,1fr))}
  #nc-proposal .editor .totals{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
-@container (max-width:600px){
+@container (max-width:900px){
  #nc-proposal .reports table,#nc-proposal .reports tbody{display:block;width:100%;min-width:0}
  #nc-proposal .reports thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
- #nc-proposal .reports tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 8px;border-bottom:1px solid var(--nc-line);padding:6px 0}
+ #nc-proposal .reports tbody tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;border:1px solid var(--nc-line);border-radius:6px;padding:12px;margin-bottom:8px;background:var(--nc-bg)}
  #nc-proposal .reports tbody td{display:block;min-width:0;border:0;padding:2px;overflow-wrap:anywhere}
  #nc-proposal .reports tbody td[data-label]::before{content:attr(data-label);display:block;color:var(--nc-fg);font-weight:500;font-size:11px}
  #nc-proposal .reports td[colspan]{grid-column:1/-1}
@@ -339,6 +339,36 @@ q('[data-warehouse]').replaceChildren(...context.warehouses.map(w=>new Option(w,
  #nc-proposal .result-window .scroll td[data-label]::before{content:attr(data-label);display:block;font-size:11px;font-weight:500;color:var(--nc-fg)}
  #nc-proposal .result-window .scroll td[colspan]{grid-column:1/-1}
 }
+
+/* Isolate the report form from the application's two-column form layout. */
+#nc-proposal .reports{padding:14px;background:var(--nc-soft)}
+#nc-proposal .reports>h3{font-size:16px;font-weight:600;margin:0 0 12px}
+#nc-proposal .reports form[data-report-form]{display:block;width:100%;max-width:100%;margin:0;padding:0;border:0;background:transparent}
+#nc-proposal .reports .report-fields{display:grid;width:100%;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px;grid-auto-flow:row}
+#nc-proposal .reports .report-fields>label{min-width:0;grid-column:auto;font-size:12px;font-weight:500;gap:4px;overflow-wrap:normal}
+#nc-proposal .reports .report-fields input,#nc-proposal .reports .report-fields select{width:100%;height:34px;font-size:13px;padding:5px 8px;background:var(--nc-bg)}
+#nc-proposal .reports .report-actions{display:flex;width:100%;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 0;padding:10px 0;border-top:1px solid var(--nc-line)}
+#nc-proposal .reports .report-actions button{min-height:32px;padding:5px 12px;white-space:nowrap;font-size:12px;margin:0}
+#nc-proposal .reports [data-report-message]{margin:0;padding:2px 0 6px;font-size:12px}
+#nc-proposal .reports .report-results{margin-top:6px;padding-top:10px}
+#nc-proposal .reports .report-results summary{font-size:13px;font-weight:600;padding-bottom:12px}
+#nc-proposal .reports .report-results th{overflow-wrap:normal;word-break:normal}
+#nc-proposal .reports .report-results td{line-height:1.5}
+#nc-proposal .reports .report-results td[colspan]{padding:24px 12px;text-align:center;line-height:1.6}
+#nc-proposal .reports input:focus-visible,#nc-proposal .reports select:focus-visible,#nc-proposal .reports button:focus-visible{outline:2px solid var(--nc-active);outline-offset:2px}
+@container(min-width:901px){
+ #nc-proposal .reports .report-results table{table-layout:auto}
+ #nc-proposal .reports .report-results th{white-space:nowrap;font-size:11px}
+}
+@container(max-width:520px){
+ #nc-proposal .reports .report-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #nc-proposal .reports tbody tr{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@container(max-width:300px){
+ #nc-proposal .reports .report-fields,#nc-proposal .reports tbody tr{grid-template-columns:minmax(0,1fr)}
+ #nc-proposal .reports .report-actions button{width:100%}
+}
+@media(pointer:coarse){#nc-proposal .reports .report-fields input,#nc-proposal .reports .report-fields select,#nc-proposal .reports .report-actions button{height:auto;min-height:44px;font-size:16px}}
 </style>
 <div class="result-layer print-layer" data-print-layer hidden>
 <section class="result-window print-window" role="dialog" aria-modal="true" aria-labelledby="nc-print-title">
