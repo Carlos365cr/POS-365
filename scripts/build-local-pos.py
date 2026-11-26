@@ -175,7 +175,44 @@ s=s[:original_search_start]+'''function searchArticleForOperation(){
 }
 '''+s[original_search_end:]
 
-# Temporary SQL inbox is opened from the existing menu; legacy cloud handlers remain disabled.
+# Preserve the original XML module layout while replacing its cloud behavior.
+a=s.index('function installXmlInboxModule(){')
+b=s.index('root.append(style,main);',a)+len('root.append(style,main);')
+c=s.index('\nfunction emptyCompanyHeader()',b)
+s=s[:b]+r'''
+const status=main.querySelector('[data-inbox-status]'),from=main.querySelector('[data-inbox-from]'),to=main.querySelector('[data-inbox-to]'),mail=main.querySelector('[data-inbox-mail]');
+for(const x of main.querySelectorAll('fieldset button,fieldset input,fieldset select,[data-inbox-files]'))x.disabled=true;
+main.querySelector('fieldset').append('Correo configurado en el servidor; sincronización automática pendiente.');
+from.value=cashOutToday().slice(0,8)+'01';to.value=cashOutToday();
+let rows=[],page=0,busy=false;
+const head=main.querySelector('.xml-inbox-table thead'),body=main.querySelector('.xml-inbox-table tbody');
+const prev=main.querySelector('[data-inbox-prev]'),next=main.querySelector('[data-inbox-next]');
+const hr=window.document.createElement('tr');for(const label of ['Detalle','Estado SQL','Tipo','Emisión','Cédula emisor','Emisor','Clave electrónica','Moneda','Total']){const th=window.document.createElement('th');th.textContent=label;hr.append(th);}head.append(hr);
+function renderSql(){
+ body.replaceChildren();
+ page=Math.max(0,Math.min(page,Math.max(0,Math.ceil(rows.length/15)-1)));
+ for(const d of rows.slice(page*15,page*15+15)){
+ const tr=window.document.createElement('tr'),td=window.document.createElement('td');
+ for(const label of ['Ver artículos','Ingresar compras']){const b=window.document.createElement('button');b.type='button';b.textContent=label;b.disabled=true;td.append(b);}tr.append(td);
+ for(const v of [d.status,d.type,d.date,d.supplierId,d.supplier,d.key,d.currency,d.total]){const cell=window.document.createElement('td');cell.textContent=v??'';tr.append(cell);}body.append(tr);
+ }
+ main.querySelector('[data-inbox-summary]').textContent=rows.length+' comprobantes SQL (máximo 500)';
+ main.querySelector('[data-inbox-page]').textContent=(page+1)+' / '+Math.max(1,Math.ceil(rows.length/15));prev.disabled=page===0;next.disabled=(page+1)*15>=rows.length;
+}
+prev.onclick=()=>{page--;renderSql();};next.onclick=()=>{page++;renderSql();};
+async function api(url,opt){const r=await fetch(url,{cache:'no-store',...opt});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||d.detail||('HTTP '+r.status));return d;}
+async function refreshSql(){try{rows=await api('/api/purchases/inbox/');page=0;renderSql();}catch(e){status.textContent=e.message;}}
+mail.onclick=async()=>{if(busy)return;busy=true;mail.disabled=true;status.textContent='Consultando correo…';try{
+ let offset=0,inserted=0,duplicate=0,ignored=0,errors=0;
+ for(let batch=0;batch<100;batch++){const d=await api('/api/purchases/inbox/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:from.value,to:to.value,offset})});inserted+=d.inserted;duplicate+=d.duplicate;ignored+=d.ignored;errors+=d.errors;if(!d.remaining)break;if(d.nextOffset<=offset||batch===99)throw Error('Consulta parcial; reduzca el rango.');offset=d.nextOffset;}
+ status.textContent='Nuevos: '+inserted+' | Duplicados: '+duplicate+' | Ignorados: '+ignored+' | Errores: '+errors;
+ }catch(e){status.textContent=e.message;}finally{await refreshSql();busy=false;mail.disabled=false;}};
+refreshXmlInbox=()=>{if(!main.hidden)refreshSql();};
+for(const other of menu.querySelectorAll('.menu-item')){if(other===item)continue;const previous=other.onclick;other.onclick=function(...args){main.hidden=true;item.classList.remove('selected');item.removeAttribute('aria-current');return previous?.apply(this,args);};}
+item.onclick=()=>{showConfiguration(false);for(const view of Array.from(root.children).filter(view=>view.tagName==='MAIN'))view.hidden=view!==main;menu.querySelectorAll('.menu-item').forEach(b=>{b.classList.remove('selected');b.removeAttribute('aria-current');});main.hidden=false;item.classList.add('selected');item.setAttribute('aria-current','page');refreshSql();};
+}
+'''+s[c:]
+
 body_end=s.lower().rfind('</body>')
 if body_end<0: raise RuntimeError('No se encontro el cierre real del documento POS.')
 s=s[:body_end]+'''<script>
@@ -199,7 +236,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  if(logout){logout.disabled=false;logout.addEventListener('click',async e=>{e.preventDefault();e.stopImmediatePropagation();try{const r=await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});if(!r.ok)throw Error('No se pudo cerrar la sesión');location.replace('/login');}catch(err){alert(err.message);}},true);}
  fetch('/api/auth/me',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Sesión no disponible');return r.json();}).then(u=>{shell.dataset.businessName='POS365_DEV';shell.dataset.signedInUser=u.username||'';if(users)users.disabled=!u.admin;}).catch(()=>{if(users)users.disabled=true;});
  const btn=[...menu.querySelectorAll('button')].find(b=>name(b)==='Cargas XML');
- if(btn){btn.disabled=false;btn.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();location.href='/compras-sql.html';},true);}
+ if(btn){btn.disabled=true;fetch('/api/auth/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(u=>{btn.disabled=!u?.admin;}).catch(()=>{btn.disabled=true;});}
 });
 </script>'''+s[body_end:]
 out=root/'src/POS365.Local/wwwroot/pos-original.html';out.write_text(s,encoding='utf-8')
