@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using System.Net;
 using Microsoft.Data.SqlClient;
 
@@ -11,6 +12,17 @@ var builder = WebApplication.CreateBuilder(args.TakeWhile(a => a != "--reset-adm
 // and IIS in-process hosting. This is not a production release.
 var iisStaging = builder.Environment.IsEnvironment("IIS-Staging");
 var allowHttp = !iisStaging || builder.Configuration.GetValue<bool>("IisTesting:AllowHttp");
+// Keep Gmail credential protection keys outside the web root and publication folder.
+var keyPath = builder.Configuration["DataProtection:KeyPath"];
+if (!string.IsNullOrWhiteSpace(keyPath))
+{
+    var keys = new DirectoryInfo(Path.GetFullPath(keyPath));
+    Directory.CreateDirectory(keys.FullName);
+    var protection = builder.Services.AddDataProtection()
+        .SetApplicationName("POS365.Local")
+        .PersistKeysToFileSystem(keys);
+    if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi(protectToLocalMachine: true);
+}
 PosAuth.Configure(builder.Services, allowHttp);
 if (!builder.Environment.IsDevelopment() && !iisStaging)
     throw new InvalidOperationException("POS365 solo admite Development o IIS-Staging por ahora.");
@@ -48,7 +60,7 @@ if (initialize)
     }
     await using var db = new SqlConnection(cs.ConnectionString);
     await db.OpenAsync();
-    foreach (var resource in new[] { "POS365.Schema.sql", "POS365.Catalog.sql", "POS365.Sales.sql", "POS365.Tax.sql", "POS365.ArticleExtended.sql", "POS365.Auth.sql", "POS365.PurchaseInbox.sql" })
+    foreach (var resource in new[] { "POS365.Schema.sql", "POS365.Catalog.sql", "POS365.Sales.sql", "POS365.Tax.sql", "POS365.ArticleExtended.sql", "POS365.Auth.sql", "POS365.PurchaseInbox.sql", "POS365.MailAccounts.sql" })
     {
         using var stream = typeof(Program).Assembly.GetManifestResourceStream(resource)!;
         using var reader = new StreamReader(stream);
@@ -134,7 +146,7 @@ app.MapGet("/health/ready", async (CancellationToken ct) =>
         await connection.OpenAsync(ct);
         await using var command = new SqlCommand("SELECT MAX(Version) FROM dbo.POS365_SchemaVersion", connection);
         var version = await command.ExecuteScalarAsync(ct);
-        return version is int n && n >= 6
+        return version is int n && n >= 8
             ? Results.Ok(new { status = "ok", database = "POS365_DEV", schemaVersion = n })
             : Results.Json(new { status = "pending", message = "Inicialice el esquema." }, statusCode: 503);
     }
