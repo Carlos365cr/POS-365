@@ -36,8 +36,7 @@ public static class CatalogApi
             await using var cmd=Cmd(db,null,"""
                 SELECT p.ProductId,p.Code,p.Barcode,p.Name,p.Cabys,p.IncludesVAT,p.Version,
                     e.GeneralJson,e.CostsJson,e.PricesJson,
-                    JSON_VALUE(e.OtherJson,'$.photoSuspended'),
-                    CASE WHEN JSON_QUERY(e.OtherJson,'$.photo') IS NOT NULL OR JSON_VALUE(e.OtherJson,'$.photo') IS NOT NULL THEN 1 ELSE 0 END,
+                    e.OtherJson,
                     r.Amount,r.Currency,t.TaxRate
                 FROM dbo.POS365_Product p
                 LEFT JOIN dbo.POS365_ProductExtended e ON e.ProductId=p.ProductId
@@ -48,10 +47,13 @@ public static class CatalogApi
             await using var rd=await cmd.ExecuteReaderAsync();var items=new List<object>();
             while(await rd.ReadAsync()){
                 JsonElement Fields(int i)=>JsonSerializer.Deserialize<JsonElement>(rd.IsDBNull(i)?"[]":rd.GetString(i));
+                var other=JsonSerializer.Deserialize<JsonElement>(rd.IsDBNull(10)?"{}":rd.GetString(10));
+                bool hasPhoto=other.ValueKind==JsonValueKind.Object && other.TryGetProperty("photo",out var photo) && photo.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined) && (photo.ValueKind!=JsonValueKind.String || !string.IsNullOrEmpty(photo.GetString()));
+                bool photoSuspended=other.ValueKind==JsonValueKind.Object && other.TryGetProperty("photoSuspended",out var suspended) && suspended.ValueKind==JsonValueKind.True;
                 items.Add(new {id=rd.GetGuid(0),code=rd.GetString(1),barcode=rd.GetString(2),name=rd.GetString(3),cabys=rd.GetString(4),includesVAT=rd.GetBoolean(5),
                     version=Convert.ToBase64String((byte[])rd[6]),general=Fields(7),costs=Fields(8),prices=Fields(9),
-                    photoSuspended=!rd.IsDBNull(10)&&rd.GetString(10)=="true",hasPhoto=rd.GetInt32(11)==1,
-                    price=rd.IsDBNull(12)?(decimal?)null:rd.GetDecimal(12),currency=rd.IsDBNull(13)?"":rd.GetString(13),tax=rd.IsDBNull(14)?(decimal?)null:rd.GetDecimal(14)});
+                    photoSuspended,hasPhoto,
+                    price=rd.IsDBNull(11)?(decimal?)null:rd.GetDecimal(11),currency=rd.IsDBNull(12)?"":rd.GetString(12),tax=rd.IsDBNull(13)?(decimal?)null:rd.GetDecimal(13)});
             }
             return Results.Ok(new {items=items.Take(100),hasMore=items.Count>100});
         })).RequireAuthorization(p=>p.RequireRole("Admin"));
@@ -82,8 +84,12 @@ public static class CatalogApi
                         """,("@json",array.ToJsonString()),("@id",item.Id),("@value",input.Value),("@field",input.Field),("@index",index));
                     await update.ExecuteNonQueryAsync();
                 }else{
-                    var expression=input.Field=="deletePhoto"?"JSON_MODIFY(JSON_MODIFY(OtherJson,'$.photo',NULL),'$.photoSuspended',NULL)":"JSON_MODIFY(OtherJson,'$.photoSuspended',CAST(@s AS bit))";
-                    await using var update=Cmd(db,tx,"UPDATE dbo.POS365_ProductExtended SET OtherJson="+expression+",UpdatedAt=SYSUTCDATETIME() WHERE ProductId=@id",("@s",input.Field=="suspendPhoto"),("@id",item.Id));
+                    string raw;
+                    await using(var read=Cmd(db,tx,"SELECT OtherJson FROM dbo.POS365_ProductExtended WHERE ProductId=@id",("@id",item.Id)))raw=(string)(await read.ExecuteScalarAsync())!;
+                    var other=System.Text.Json.Nodes.JsonNode.Parse(raw)!.AsObject();
+                    if(input.Field=="deletePhoto"){other.Remove("photo");other.Remove("photoSuspended");}
+                    else other["photoSuspended"]=System.Text.Json.Nodes.JsonValue.Create(input.Field=="suspendPhoto");
+                    await using var update=Cmd(db,tx,"UPDATE dbo.POS365_ProductExtended SET OtherJson=@json,UpdatedAt=SYSUTCDATETIME() WHERE ProductId=@id",("@json",other.ToJsonString()),("@id",item.Id));
                     await update.ExecuteNonQueryAsync();
                 }
             }
