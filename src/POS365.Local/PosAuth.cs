@@ -18,7 +18,7 @@ public static class PosAuth
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
             {
-                options.Cookie.Name = "__Host-POS365";
+                options.Cookie.Name = allowLocalHttp ? "POS365-TestSession" : "__Host-POS365";
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SecurePolicy = allowLocalHttp ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Strict;
