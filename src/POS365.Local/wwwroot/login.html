@@ -1,38 +1,33 @@
-<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>POS 365 · Iniciar sesión</title>
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="apple-mobile-web-app-title" content="POS 365">
+
+
+
+<title>Ingresar a POS 365</title>
 <style>
-:root{font-family:system-ui,Arial,sans-serif;color:#162e29;background:#f1f5f3}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px}
-main{background:white;display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1fr);width:min(940px,100%);border-radius:20px;overflow:hidden;box-shadow:0 16px 46px #153a3629}
-aside{background:linear-gradient(140deg,#0b3026,#16523d);color:white;padding:55px 45px}
-aside h1{font-size:36px;margin:15px 0}aside p{line-height:1.65;color:#d6e9df}
-section{padding:55px 45px}h2{font-size:29px;margin:10px 0}label{display:block;font-weight:600;margin-top:18px}
-input{display:block;width:100%;padding:12px;border:1px solid #afc2b9;border-radius:7px;margin-top:7px;font:inherit}
-button{background:#135b3c;border:0;border-radius:7px;color:white;padding:13px 20px;width:100%;font:inherit;font-weight:700;cursor:pointer;margin-top:24px}
-button:disabled{opacity:.6;cursor:wait}small{color:#556b62}#status{min-height:1.4em;color:#9f2525}
-@media(max-width:700px){main{grid-template-columns:1fr}aside,section{padding:28px}}
-</style></head>
-<body><main><aside><small style="color:#e4f3e8">POS 365 · SISTEMA DE FACTURACIÓN</small><h1>Bienvenido a POS365</h1>
-<p>Acceso al supermercado mediante usuarios autorizados.</p>
-<p>Versión SQL Server · Ambiente de pruebas IIS.</p>
-</aside><section><h2>Iniciar sesión</h2><p><small>Ingrese sus credenciales de POS365.</small></p>
-<form id="f" autocomplete="on">
-<label for="username">Usuario<input id="username" name="username" required minlength="3" maxlength="64" autocomplete="username"></label>
-<label for="password">Contraseña<input id="password" name="password" type="password" required autocomplete="current-password"></label>
-<button id="submit" type="submit">Ingresar</button></form>
-<p id="status" role="alert"></p><small>Las cuentas se administran en SQL Server. No utilice contraseñas de Windows.</small></section></main>
+*{box-sizing:border-box}body{margin:0;min-height:100svh;display:grid;place-items:center;padding:32px;background:#edf2ed;color:#142e28;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{width:min(100%,990px);display:grid;grid-template-columns:1.1fr 1fr;border-radius:24px;overflow:hidden;background:#fff;box-shadow:0 24px 80px #17362a20}
+.brand{position:relative;isolation:isolate;overflow:hidden;min-height:520px;padding:48px;display:flex;flex-direction:column;justify-content:space-between;color:#fff;background:linear-gradient(140deg,#123930,#075845)}
+.brand:before{content:"";position:absolute;inset:-5% -60% -40% 20%;z-index:-1;background:repeating-radial-gradient(ellipse at 90% 42%,transparent 0 26px,#c9edb326 27px 28px,transparent 29px 45px);transform:rotate(-20deg)}
+.wordmark{font-size:26px;font-weight:800;letter-spacing:-1.8px;display:flex;align-items:center;gap:10px}.mark{width:25px;height:25px;display:inline-block;border:6px solid #c7ee88;border-right-color:transparent;border-radius:8px;transform:rotate(-12deg)}
+.art{position:relative;align-self:center;width:160px;height:172px;margin:24px;transform:rotate(9deg);filter:drop-shadow(0 11px 9px #092c2770)}
+.paper{height:100%;background:#edf7d5;padding:24px 20px;color:#275541;clip-path:polygon(0 0,100% 0,100% 100%,90% 95%,80% 100%,70% 95%,60% 100%,50% 95%,40% 100%,30% 95%,20% 100%,10% 95%,0 100%)}
+.paper b{font-size:18px;letter-spacing:-1px}.lines{height:42px;margin:12px 0;border-block:2px dashed #88a68a;background:repeating-linear-gradient(0deg,transparent 0 7px,#88a68a 7px 9px,transparent 9px 14px);background-size:65% 100%;background-repeat:no-repeat}.bars{height:24px;background:repeating-linear-gradient(90deg,#275541 0 2px,transparent 2px 5px,#275541 5px 9px,transparent 9px 11px)}
+.brand h1{margin:0;font-size:clamp(34px,5vw,56px);line-height:1;letter-spacing:-.055em}.brand p{margin:12px 0 0;color:#cfdfd5;line-height:1.5}
+.entry{padding:clamp(28px,5vw,64px);align-self:center;min-width:0}.entry h2{margin:0;font-size:clamp(32px,4vw,44px);letter-spacing:-.05em}.entry p{line-height:1.55;color:#51665f}.entry form{display:grid;gap:16px;margin-top:24px}.entry label{display:grid;gap:6px}.entry input,.entry select,.entry button{font:inherit;padding:12px;width:100%;border:1px solid #afc3b7;border-radius:6px}.entry select{background:#fff;color:#142e28}.entry button{background:#195e45;color:white;cursor:pointer}.entry #google{min-height:44px;margin-top:32px}.entry #status{color:#8a331d;font-size:14px}.entry #status:empty{display:none}
+.login-picker{position:relative;min-width:0}.login-picker>label{margin-bottom:6px}.login-picker-field{position:relative}.entry .login-picker-field input{padding-right:54px}.entry #login-choices-toggle{position:absolute;right:1px;top:1px;bottom:1px;width:46px;padding:0;border:0;border-left:1px solid #afc3b7;border-radius:0 5px 5px 0;font-size:20px}.login-choices{position:absolute;top:100%;left:0;right:0;z-index:10;max-height:230px;overflow:auto;background:#fff;border:1px solid #afc3b7;border-radius:6px;box-shadow:0 8px 22px #17362a30;padding:4px}.login-choices[hidden]{display:none}.entry .login-choices button{display:block;background:#fff;color:#142e28;border:0;text-align:left;padding:10px;font-size:14px;overflow-wrap:anywhere}.entry .login-choices button:hover,.entry .login-choices button:focus{background:#e4efe8;outline:2px solid #195e45;outline-offset:-2px}.entry .login-choices p{margin:8px;font-size:14px}
+@media(max-width:680px){body{padding:16px}main{grid-template-columns:1fr}.brand{min-height:202px;padding:26px}.art{position:absolute;right:4px;top:8px;transform:rotate(9deg) scale(.66);transform-origin:top right;margin:12px}.brand h1{font-size:32px}.brand p{font-size:14px}.entry{padding:32px 26px 40px}}
+</style>
+<main><section class="brand"><div class="wordmark"><span class="mark" aria-hidden="true"></span><span>POS 365</span></div>
+<div class="art" aria-hidden="true"><div class="paper"><b>POS 365</b><div class="lines"></div><div class="bars"></div></div></div>
+<div><h1>POS 365</h1><p>Ventas, compras e inventario</p></div></section>
+<section class="entry" aria-labelledby="welcome"><h2 id="welcome">Bienvenido</h2><form id="password-login"><label for="login-company">Compañía<select id="login-company" name="company"><option value="default" selected>POS365_DEV</option></select></label><label for="login-identifier">Usuario<input id="login-identifier" name="identifier" autocomplete="username" placeholder="Digite su usuario" required minlength="3" maxlength="64"></label><label>Clave<input name="password" type="password" autocomplete="current-password" required maxlength="256"></label><button type="submit">Ingresar</button></form><p id="status" role="status"></p><noscript>Active JavaScript para iniciar sesión.</noscript></section></main>
 <script>
-const f=document.getElementById('f'),status=document.getElementById('status'),submit=document.getElementById('submit');
-f.addEventListener('submit',async event=>{
- event.preventDefault();status.textContent='Verificando acceso…';submit.disabled=true;
- try{
-  const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
-   credentials:'same-origin',body:JSON.stringify({username:f.username.value,password:f.password.value})});
-  if(!response.ok)throw Error(response.status===401?'Usuario o contraseña incorrectos, cuenta inactiva o temporalmente bloqueada.':
-   'No se completó el inicio de sesión. Código '+response.status);
-  f.password.value='';location.replace('/');
- }catch(error){status.textContent=error.message;f.password.value='';}
- finally{submit.disabled=false;}
-});
-</script></body></html>
+document.getElementById('password-login').onsubmit=async e=>{
+ e.preventDefault();const f=e.target,b=f.querySelector('button[type=submit]'),status=document.getElementById('status');
+ b.disabled=true;status.textContent='Ingresando…';
+ try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({username:f.elements.identifier.value,password:f.elements.password.value})});
+ if(!r.ok)throw Error(r.status===401?'Usuario o contraseña incorrectos, cuenta inactiva o bloqueada.':'No se pudo ingresar. Código '+r.status);
+ location.replace('/');
+ }catch(error){status.textContent=error.message;}finally{b.disabled=false;f.elements.password.value='';}
+};
+</script></html>
