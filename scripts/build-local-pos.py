@@ -47,7 +47,7 @@ s=s[:start]+'''async function searchPosProducts(){
 replace('function openPaymentMethod(){',"function openPaymentMethod(){paymentPanel.querySelector('[data-pos-balance]').textContent='Cobro pendiente de migración. No se guardó ninguna venta.';return;\n")
 replace('async function completeTrialPayment(method){',"async function completeTrialPayment(method){throw Error('Ventas SQL pendientes de migración.');\n")
 replace('function persistTrialSnapshot(requireConfirmation=false,blockEmail,voucherOp){',"function persistTrialSnapshot(requireConfirmation=false,blockEmail,voucherOp){if(requireConfirmation)throw Error('Operación no migrada a SQL Server.');return;\n")
-replace("const entryModule=[...menu.querySelectorAll('button.menu-item')]", "for(const b of menu.querySelectorAll('button')){const name=b.textContent.trim();if(!['Inicio','Facturación POS','Artículos'].includes(name))b.disabled=true;}\nconst entryModule=[...menu.querySelectorAll('button.menu-item')]")
+replace("const entryModule=[...menu.querySelectorAll('button.menu-item')]", "for(const b of menu.querySelectorAll('button')){const name=b.textContent.trim();const group=b.getAttribute('aria-controls')==='article-menu-options';if(!group&&!['Inicio','Facturación POS','Artículos','Cargas XML','Cerrar sesión','Usuarios y permisos'].includes(name)){b.disabled=true;b.title='Pendiente de migración a SQL Server';}}\nconst entryModule=[...menu.querySelectorAll('button.menu-item')]")
 replace('const saleDate=posMain.querySelector', '''const sqlNotice=document.createElement('p');sqlNotice.style.cssText='padding:12px;background:#fff1d0;color:#493400';sqlNotice.textContent='DESARROLLO SQL · Pantalla original · Lista 0 · Detalle temporal. Sin guardar ventas, pagos ni inventario. Costos y promociones aún no migrados.';posMain.prepend(sqlNotice);
 const saleDate=posMain.querySelector''')
 replace('async function restoreTrialState(){', 'async function restoreTrialState(){return;\n')
@@ -180,7 +180,25 @@ body_end=s.lower().rfind('</body>')
 if body_end<0: raise RuntimeError('No se encontro el cierre real del documento POS.')
 s=s[:body_end]+'''<script>
 document.addEventListener('DOMContentLoaded',()=>{
- const btn=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Cargas XML');
+ const shell=document.getElementById('articulos-cedi');
+ const menu=shell?.querySelector(':scope>aside');
+ if(!menu)return;
+ const name=b=>b.getAttribute('aria-label')||b.textContent.trim();
+ const allowed=new Set(['Inicio','Facturación POS','Artículos','Cargas XML','Cerrar sesión','Usuarios y permisos']);
+ const group=b=>b.getAttribute('aria-controls')==='article-menu-options';
+ for(const b of menu.querySelectorAll('button')){
+   if(group(b)){b.disabled=false;continue;}
+   if(!allowed.has(name(b))){b.disabled=true;b.title='Pendiente de migración a SQL Server';}
+ }
+ for(const b of shell.querySelectorAll('[data-home-target]')){
+   if(!allowed.has(b.dataset.homeTarget)){b.disabled=true;b.title='Pendiente de migración a SQL Server';}
+ }
+ const users=[...menu.querySelectorAll('button')].find(b=>name(b)==='Usuarios y permisos');
+ const logout=[...menu.querySelectorAll('button')].find(b=>name(b)==='Cerrar sesión');
+ if(users){users.disabled=true;users.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();location.href='/usuarios.html';},true);}
+ if(logout){logout.disabled=false;logout.addEventListener('click',async e=>{e.preventDefault();e.stopImmediatePropagation();try{const r=await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});if(!r.ok)throw Error('No se pudo cerrar la sesión');location.replace('/login');}catch(err){alert(err.message);}},true);}
+ fetch('/api/auth/me',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Sesión no disponible');return r.json();}).then(u=>{shell.dataset.businessName='POS365_DEV';shell.dataset.signedInUser=u.username||'';if(users)users.disabled=!u.admin;}).catch(()=>{if(users)users.disabled=true;});
+ const btn=[...menu.querySelectorAll('button')].find(b=>name(b)==='Cargas XML');
  if(btn){btn.disabled=false;btn.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();location.href='/compras-sql.html';},true);}
 });
 </script>'''+s[body_end:]
