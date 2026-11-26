@@ -2,7 +2,15 @@
 from pathlib import Path
 import re
 root=Path(__file__).resolve().parent.parent
-s=(root/'work/cedi-current-inner.html').read_text(encoding='utf-8')
+import argparse
+import subprocess
+parser=argparse.ArgumentParser()
+parser.add_argument('--verify-main',action='store_true',help='Validate SQL integration against current origin/main without replacing the deployed UI')
+args=parser.parse_args()
+if args.verify_main:
+ s=subprocess.check_output(['git','show','origin/main:work/cedi-current-inner.html'],cwd=root).decode('utf-8-sig')
+else:
+ s=(root/'work/cedi-current-inner.html').read_text(encoding='utf-8')
 def replace(old,new):
  global s
  if s.count(old)!=1: raise RuntimeError('Original POS changed; review integration anchor: '+old[:90])
@@ -239,5 +247,9 @@ document.addEventListener('DOMContentLoaded',()=>{
  if(btn){btn.disabled=true;fetch('/api/auth/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(u=>{btn.disabled=!u?.admin;}).catch(()=>{btn.disabled=true;});}
 });
 </script>'''+s[body_end:]
-out=root/'src/POS365.Local/wwwroot/pos-original.html';out.write_text(s,encoding='utf-8')
+if args.verify_main:
+ out=root/'src/POS365.Local/wwwroot/pos-original.html'
+ print('Validacion de anclajes SQL contra origin/main completada; no se modifico',out)
+else:
+ out=root/'src/POS365.Local/wwwroot/pos-original.html';out.write_text(s,encoding='utf-8')
 print('POS original conectado a consulta SQL:',out)
