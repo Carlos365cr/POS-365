@@ -190,9 +190,47 @@ c=s.index('\nfunction emptyCompanyHeader()',b)
 s=s[:b]+r'''
 const status=main.querySelector('[data-inbox-status]'),from=main.querySelector('[data-inbox-from]'),to=main.querySelector('[data-inbox-to]'),mail=main.querySelector('[data-inbox-mail]');
 for(const x of main.querySelectorAll('fieldset button,fieldset input,fieldset select,[data-inbox-files]'))x.disabled=true;
-main.querySelector('fieldset').append('Correo configurado en el servidor; sincronización automática pendiente.');
+const accountBox=main.querySelector('[data-inbox-accounts]');
+const addAccount=main.querySelector('[data-inbox-add]'),saveAccount=main.querySelector('[data-inbox-save]');
+const secure=location.protocol==='https:';
+let savedAccounts=[];
+const picker=window.document.createElement('select');picker.setAttribute('aria-label','Cuenta para cargar XML');
+accountBox.before(picker);
+const note=window.document.createElement('p');note.textContent=secure?'Seleccione una cuenta o agregue una nueva. Sincronización automática pendiente.':'Para agregar o quitar cuentas, utilice HTTPS. Sincronización automática pendiente.';
+accountBox.after(note);
+addAccount.disabled=!secure;saveAccount.disabled=true;
+function accountButton(label,fn){const b=window.document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;return b;}
+function accountInput(row,label,type,value=''){const l=window.document.createElement('label');l.textContent=label;const i=window.document.createElement('input');i.type=type;i.value=value;i.autocomplete=type==='password'?'new-password':'off';l.append(i);row.append(l);return i;}
+async function loadAccounts(){
+ const selected=picker.value;
+ savedAccounts=await api('/api/purchases/inbox/accounts');
+ picker.replaceChildren();const empty=window.document.createElement('option');empty.value='';empty.textContent='Seleccione cuenta Gmail';picker.append(empty);
+ accountBox.replaceChildren();saveAccount.disabled=true;
+ for(const a of savedAccounts){
+ const o=window.document.createElement('option');o.value=a.id;o.textContent=a.email;picker.append(o);
+ const row=window.document.createElement('div');row.className='xml-account-row';
+ const title=window.document.createElement('span');title.textContent=a.email+' | Receptor: '+a.receiverId;row.append(title);
+ const remove=accountButton('Quitar',async()=>{if(!secure||!confirm('¿Quitar esta cuenta de correo?'))return;try{await api('/api/purchases/inbox/accounts/'+encodeURIComponent(a.id),{method:'DELETE'});await loadAccounts();}catch(e){status.textContent=e.message;}});remove.disabled=!secure;row.append(remove);accountBox.append(row);
+ }
+ if(savedAccounts.some(a=>a.id===selected))picker.value=selected;else if(savedAccounts.length===1)picker.value=savedAccounts[0].id;
+ mail.disabled=busy||!picker.value;
+}
+picker.onchange=()=>{mail.disabled=busy||!picker.value;};
+addAccount.onclick=()=>{
+ if(!secure||accountBox.querySelector('[data-new-mail-account]'))return;
+ const row=window.document.createElement('div');row.dataset.newMailAccount='1';row.className='xml-account-row';
+ const email=accountInput(row,'Gmail','email'),password=accountInput(row,'Contraseña de aplicación','password'),receiver=accountInput(row,'Cédula receptora','text');
+ const payload=()=>({email:email.value.trim(),password:password.value,receiverId:receiver.value.trim()});
+ async function sendAccount(test){
+ if(!secure)return;row.inert=true;saveAccount.disabled=true;
+ try{await api('/api/purchases/inbox/accounts'+(test?'/test':''),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});status.textContent=test?'Conexión correcta.':'Cuenta guardada.';if(!test){password.value='';await loadAccounts();}}
+ catch(e){status.textContent=e.message;}finally{row.inert=false;saveAccount.disabled=!accountBox.querySelector('[data-new-mail-account]');}
+ }
+ row.append(accountButton('Probar conexión',()=>sendAccount(true)),accountButton('Cancelar',()=>{password.value='';row.remove();saveAccount.disabled=true;}));
+ accountBox.append(row);saveAccount.disabled=false;saveAccount.onclick=()=>sendAccount(false);email.focus();
+};
 from.value=cashOutToday().slice(0,8)+'01';to.value=cashOutToday();
-let rows=[],page=0,busy=false;
+let rows=[],page=0,busy=false;mail.disabled=true;
 const head=main.querySelector('.xml-inbox-table thead'),body=main.querySelector('.xml-inbox-table tbody');
 const prev=main.querySelector('[data-inbox-prev]'),next=main.querySelector('[data-inbox-next]');
 const hr=window.document.createElement('tr');for(const label of ['Detalle','Estado SQL','Tipo','Emisión','Cédula emisor','Emisor','Clave electrónica','Moneda','Total']){const th=window.document.createElement('th');th.textContent=label;hr.append(th);}head.append(hr);
@@ -210,14 +248,14 @@ function renderSql(){
 prev.onclick=()=>{page--;renderSql();};next.onclick=()=>{page++;renderSql();};
 async function api(url,opt){const r=await fetch(url,{cache:'no-store',...opt});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||d.detail||('HTTP '+r.status));return d;}
 async function refreshSql(){try{rows=await api('/api/purchases/inbox/');page=0;renderSql();}catch(e){status.textContent=e.message;}}
-mail.onclick=async()=>{if(busy)return;busy=true;mail.disabled=true;status.textContent='Consultando correo…';try{
+mail.onclick=async()=>{if(busy||!picker.value)return;const accountId=picker.value;busy=true;picker.disabled=true;mail.disabled=true;status.textContent='Consultando correo…';try{
  let offset=0,inserted=0,duplicate=0,ignored=0,errors=0;
- for(let batch=0;batch<100;batch++){const d=await api('/api/purchases/inbox/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:from.value,to:to.value,offset})});inserted+=d.inserted;duplicate+=d.duplicate;ignored+=d.ignored;errors+=d.errors;if(!d.remaining)break;if(d.nextOffset<=offset||batch===99)throw Error('Consulta parcial; reduzca el rango.');offset=d.nextOffset;}
+ for(let batch=0;batch<100;batch++){const d=await api('/api/purchases/inbox/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:from.value,to:to.value,offset,accountId})});inserted+=d.inserted;duplicate+=d.duplicate;ignored+=d.ignored;errors+=d.errors;if(!d.remaining)break;if(d.nextOffset<=offset||batch===99)throw Error('Consulta parcial; reduzca el rango.');offset=d.nextOffset;}
  status.textContent='Nuevos: '+inserted+' | Duplicados: '+duplicate+' | Ignorados: '+ignored+' | Errores: '+errors;
- }catch(e){status.textContent=e.message;}finally{await refreshSql();busy=false;mail.disabled=false;}};
+ }catch(e){status.textContent=e.message;}finally{await refreshSql();busy=false;picker.disabled=false;mail.disabled=!picker.value;}};
 refreshXmlInbox=()=>{if(!main.hidden)refreshSql();};
 for(const other of menu.querySelectorAll('.menu-item')){if(other===item)continue;const previous=other.onclick;other.onclick=function(...args){main.hidden=true;item.classList.remove('selected');item.removeAttribute('aria-current');return previous?.apply(this,args);};}
-item.onclick=()=>{showConfiguration(false);for(const view of Array.from(root.children).filter(view=>view.tagName==='MAIN'))view.hidden=view!==main;menu.querySelectorAll('.menu-item').forEach(b=>{b.classList.remove('selected');b.removeAttribute('aria-current');});main.hidden=false;item.classList.add('selected');item.setAttribute('aria-current','page');refreshSql();};
+item.onclick=()=>{showConfiguration(false);for(const view of Array.from(root.children).filter(view=>view.tagName==='MAIN'))view.hidden=view!==main;menu.querySelectorAll('.menu-item').forEach(b=>{b.classList.remove('selected');b.removeAttribute('aria-current');});main.hidden=false;item.classList.add('selected');item.setAttribute('aria-current','page');refreshSql();loadAccounts().catch(e=>{status.textContent=e.message;mail.disabled=true;});};
 }
 '''+s[c:]
 
