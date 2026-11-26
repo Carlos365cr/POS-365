@@ -7,10 +7,11 @@ var resetAdmin = args.Contains("--reset-admin-password");
 var resetAdminIndex = Array.IndexOf(args, "--reset-admin-password");
 var resetUsername = resetAdminIndex >= 0 && resetAdminIndex + 1 < args.Length ? args[resetAdminIndex + 1] : "";
 var builder = WebApplication.CreateBuilder(args.TakeWhile(a => a != "--reset-admin-password").Where(a => a != "--initialize-db" && a != "--setup-admin").ToArray());
-// Development remains loopback-only. IIS staging requires Windows Authentication
+// Development remains loopback-only. IIS staging uses POS365 cookie authentication
 // and IIS in-process hosting. This is not a production release.
 var iisStaging = builder.Environment.IsEnvironment("IIS-Staging");
-PosAuth.Configure(builder.Services, !iisStaging);
+var allowHttp = !iisStaging || builder.Configuration.GetValue<bool>("IisTesting:AllowHttp");
+PosAuth.Configure(builder.Services, allowHttp);
 if (!builder.Environment.IsDevelopment() && !iisStaging)
     throw new InvalidOperationException("POS365 solo admite Development o IIS-Staging por ahora.");
 if (iisStaging && !setupAdmin && !resetAdmin && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_IIS_PHYSICAL_PATH")))
@@ -63,9 +64,10 @@ app.Use(async (context, next) =>
     if (iisStaging)
     {
         // Authentication and passwords must never traverse public HTTP.
-        if (!context.Request.IsHttps)
+        if (!context.Request.IsHttps && !allowHttp)
         { context.Response.StatusCode = 426; return; }
-        context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000";
+        if (context.Request.IsHttps)
+            context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000";
     }
     else
     {
@@ -140,7 +142,7 @@ app.MapGet("/health/ready", async (CancellationToken ct) =>
         return Results.Json(new { status = "error", sqlError = ex.Number, message = "Verifique servidor, credenciales, permisos y esquema. No comparta contrasenas." }, statusCode: 503);
     }
 });
-PosAuth.Map(app, cs.ConnectionString, !iisStaging);
+PosAuth.Map(app, cs.ConnectionString, allowHttp);
 PosUserManagement.Map(app, cs.ConnectionString);
 CatalogApi.Map(app, cs.ConnectionString);
 PosLookupApi.Map(app, cs.ConnectionString);
