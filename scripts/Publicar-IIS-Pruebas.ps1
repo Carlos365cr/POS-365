@@ -11,6 +11,11 @@ if (-not (Get-Command py -ErrorAction SilentlyContinue)) { throw 'Instale Python
 if ($LASTEXITCODE -ne 0) { throw 'Error generando la pantalla original.' }
 & dotnet publish $project -c Release -o $Destino --self-contained false
 if ($LASTEXITCODE -ne 0) { throw 'Error publicando POS365.' }
+$logo = Join-Path $root 'plantilla\assets\pos-365-logo.png'
+if (-not (Test-Path $logo)) { throw 'No se encontro el logotipo original.' }
+$assets = Join-Path $Destino 'wwwroot\assets'
+New-Item -ItemType Directory -Path $assets -Force | Out-Null
+Copy-Item $logo (Join-Path $assets 'pos-365-logo.png') -Force
 # Some publish environments generate a web.config without an aspNetCore node.
 # Write the IIS configuration deterministically instead of editing missing XML nodes.
 $dll = Join-Path $Destino 'POS365.Local.dll'
