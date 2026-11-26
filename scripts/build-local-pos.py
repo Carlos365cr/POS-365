@@ -11,6 +11,20 @@ if args.verify_main:
  s=subprocess.check_output(['git','show','origin/main:work/cedi-current-inner.html'],cwd=root).decode('utf-8-sig')
 else:
  s=(root/'work/cedi-current-inner.html').read_text(encoding='utf-8')
+# UUID compatibility for non-secret UI identifiers on HTTP test origins.
+compat = """<script>
+if(typeof crypto.randomUUID!=='function'){
+ crypto.randomUUID=function(){
+ const b=crypto.getRandomValues(new Uint8Array(16));
+ b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;
+ const h=Array.from(b,x=>x.toString(16).padStart(2,'0')).join('');
+ return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+ };
+}
+</script>"""
+if '<head>' not in s: raise RuntimeError('No se encontro head')
+s=s.replace('<head>','<head>'+compat,1)
+s=s.replace('__CODEX_VISUALIZATION_WIDGET_STATE__','{}')
 def replace(old,new):
  global s
  if s.count(old)!=1: raise RuntimeError('Original POS changed; review integration anchor: '+old[:90])
@@ -54,7 +68,10 @@ s=s[:start]+'''async function searchPosProducts(){
 '''+s[end:]
 replace('function openPaymentMethod(){',"function openPaymentMethod(){paymentPanel.querySelector('[data-pos-balance]').textContent='Cobro pendiente de migración. No se guardó ninguna venta.';return;\n")
 replace('async function completeTrialPayment(method){',"async function completeTrialPayment(method){throw Error('Ventas SQL pendientes de migración.');\n")
-replace('function persistTrialSnapshot(requireConfirmation=false,blockEmail,voucherOp){',"function persistTrialSnapshot(requireConfirmation=false,blockEmail,voucherOp){if(requireConfirmation)throw Error('Operación no migrada a SQL Server.');return;\n")
+snapshot_anchor=re.search(r'function persistTrialSnapshot\(requireConfirmation=false,blockEmail,voucherOp(?:,boxSizeOp)?\)\{',s)
+if not snapshot_anchor: raise RuntimeError('No se encontro persistTrialSnapshot')
+snapshot_signature=snapshot_anchor.group(0)
+replace(snapshot_signature,snapshot_signature+"if(requireConfirmation)throw Error('Operación no migrada a SQL Server.');return;\n")
 replace("const entryModule=[...menu.querySelectorAll('button.menu-item')]", "for(const b of menu.querySelectorAll('button')){const name=b.textContent.trim();const group=b.getAttribute('aria-controls')==='article-menu-options';if(!group&&!['Inicio','Facturación POS','Artículos','Cargas XML','Cerrar sesión','Usuarios y permisos'].includes(name)){b.disabled=true;b.title='Pendiente de migración a SQL Server';}}\nconst entryModule=[...menu.querySelectorAll('button.menu-item')]")
 replace('const saleDate=posMain.querySelector', '''const sqlNotice=document.createElement('p');sqlNotice.style.cssText='padding:12px;background:#fff1d0;color:#493400';sqlNotice.textContent='DESARROLLO SQL · Pantalla original · Lista 0 · Detalle temporal. Sin guardar ventas, pagos ni inventario. Costos y promociones aún no migrados.';posMain.prepend(sqlNotice);
 const saleDate=posMain.querySelector''')
