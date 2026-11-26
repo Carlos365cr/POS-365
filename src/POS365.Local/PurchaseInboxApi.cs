@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using System.Data;
 using System.Globalization;
 using System.IO.Compression;
@@ -14,7 +15,7 @@ using Microsoft.Data.SqlClient;
 
 public static class PurchaseInboxApi
 {
-    public sealed record SearchInput(DateOnly From, DateOnly To, int Offset = 0);
+    public sealed record SearchInput(DateOnly From, DateOnly To, int Offset = 0, Guid? AccountId = null);
     static readonly SemaphoreSlim Gate = new(1,1);
     static XElement? Child(XElement? node,string name) =>
         node?.Elements().FirstOrDefault(e=>e.Name.LocalName==name);
@@ -88,9 +89,64 @@ public static class PurchaseInboxApi
             }
         }
     }
+    public sealed record MailAccountInput(string Email,string Password,string ReceiverId);
+    static bool ValidAccount(MailAccountInput a) =>
+        a.Email is {Length: > 0 and <= 254} && Regex.IsMatch(a.Email,@"^[^\s@]+@[^\s@]+\.[^\s@]+$") &&
+        a.Password is {Length: > 0 and <= 128} &&
+        Regex.IsMatch(a.Password.Replace(" ",""),@"^[a-zA-Z0-9]{16}$") &&
+        a.ReceiverId is {Length: > 0 and <= 50} && Regex.IsMatch(a.ReceiverId,@"^[0-9]+$");
+    static async Task CheckMail(MailAccountInput a,CancellationToken ct)
+    {
+        using var client=new ImapClient();client.Timeout=15000;
+        await client.ConnectAsync("imap.gmail.com",993,SecureSocketOptions.SslOnConnect,ct);
+        await client.AuthenticateAsync(a.Email.Trim(),a.Password.Replace(" ",""),ct);
+        await client.Inbox.OpenAsync(FolderAccess.ReadOnly,ct);
+        await client.DisconnectAsync(true,ct);
+    }
+    static void MapAccounts(RouteGroupBuilder group,WebApplication app,string cs)
+    {
+        var protector=app.Services.GetRequiredService<IDataProtectionProvider>().CreateProtector("POS365.PurchaseMail.v1");
+        group.MapGet("/accounts",async(CancellationToken ct)=>{
+            await using var db=new SqlConnection(cs);await db.OpenAsync(ct);
+            await using var cmd=new SqlCommand("SELECT AccountId,Email,ReceiverId FROM dbo.POS365_MailAccount ORDER BY Email",db);
+            await using var rd=await cmd.ExecuteReaderAsync(ct);var rows=new List<object>();
+            while(await rd.ReadAsync(ct))rows.Add(new {id=rd.GetGuid(0),email=rd.GetString(1),receiverId=rd.GetString(2)});
+            return Results.Ok(rows);
+        });
+        group.MapPost("/accounts/test",async(HttpContext ctx,MailAccountInput input,CancellationToken ct)=>{
+            if(!ctx.Request.IsHttps)return Results.StatusCode(426);
+            if(!ValidAccount(input))return Results.BadRequest(new{error="Revise correo, contraseña de aplicación de 16 caracteres y cédula."});
+            try{await CheckMail(input,ct);return Results.Ok(new{ok=true});}
+            catch(Exception e) when(e is not OperationCanceledException){return Results.BadRequest(new{error="No se pudo autenticar en Gmail o abrir el buzón."});}
+        });
+        group.MapPost("/accounts",async(HttpContext ctx,MailAccountInput input,CancellationToken ct)=>{
+            if(!ctx.Request.IsHttps)return Results.StatusCode(426);
+            if(!ValidAccount(input))return Results.BadRequest(new{error="Datos de correo inválidos."});
+            try{await CheckMail(input,ct);}
+            catch(Exception e) when(e is not OperationCanceledException){return Results.BadRequest(new{error="No se guardó: Gmail no aceptó la conexión."});}
+            await using var db=new SqlConnection(cs);await db.OpenAsync(ct);
+            await using var cmd=new SqlCommand("""
+                INSERT dbo.POS365_MailAccount(AccountId,Email,ProtectedPassword,ReceiverId)
+                VALUES(NEWID(),@e,@p,@r)
+                """,db);
+            cmd.Parameters.Add("@e",SqlDbType.NVarChar,254).Value=input.Email.Trim().ToLowerInvariant();
+            cmd.Parameters.Add("@p",SqlDbType.NVarChar,-1).Value=protector.Protect(input.Password.Replace(" ",""));
+            cmd.Parameters.Add("@r",SqlDbType.NVarChar,50).Value=input.ReceiverId;
+            try{await cmd.ExecuteNonQueryAsync(ct);return Results.Ok(new{ok=true});}
+            catch(SqlException e) when(e.Number is 2601 or 2627){return Results.Conflict(new{error="La cuenta ya existe. Quite la anterior para cambiar la clave."});}
+        });
+        group.MapDelete("/accounts/{id:guid}",async(HttpContext ctx,Guid id,CancellationToken ct)=>{
+            if(!ctx.Request.IsHttps)return Results.StatusCode(426);
+            await using var db=new SqlConnection(cs);await db.OpenAsync(ct);
+            await using var cmd=new SqlCommand("DELETE dbo.POS365_MailAccount WHERE AccountId=@id",db);
+            cmd.Parameters.Add("@id",SqlDbType.UniqueIdentifier).Value=id;
+            return await cmd.ExecuteNonQueryAsync(ct)==1?Results.Ok(new{ok=true}):Results.NotFound();
+        });
+    }
     public static void Map(WebApplication app,string cs)
     {
         var group=app.MapGroup("/api/purchases/inbox").RequireAuthorization(p=>p.RequireRole("Admin"));
+        MapAccounts(group,app,cs);
         group.MapGet("/",async(CancellationToken ct)=>{
             await using var db=new SqlConnection(cs);await db.OpenAsync(ct);
             await using var cmd=new SqlCommand("SELECT TOP(500) DocumentKey,DocumentType,SupplierId,SupplierName,IssuedAt,Currency,Total,Status FROM dbo.POS365_PurchaseInbox ORDER BY ReceivedAt DESC",db);
@@ -103,6 +159,17 @@ public static class PurchaseInboxApi
                 return Results.BadRequest(new {error="Rango maximo de 32 dias y offset no negativo."});
             var cfg=app.Configuration.GetSection("PurchaseMail");
             var host=cfg["Host"];var user=cfg["Username"];var secret=cfg["Password"];var receiver=cfg["ReceiverId"];
+            if(input.AccountId is Guid accountId)
+            {
+                await using var db=new SqlConnection(cs);await db.OpenAsync(ct);
+                await using var cmd=new SqlCommand("SELECT Email,ProtectedPassword,ReceiverId FROM dbo.POS365_MailAccount WHERE AccountId=@id",db);
+                cmd.Parameters.Add("@id",SqlDbType.UniqueIdentifier).Value=accountId;
+                await using var rd=await cmd.ExecuteReaderAsync(ct);
+                if(!await rd.ReadAsync(ct))return Results.NotFound(new{error="Cuenta no encontrada."});
+                host="imap.gmail.com";user=rd.GetString(0);receiver=rd.GetString(2);
+                try{secret=app.Services.GetRequiredService<IDataProtectionProvider>().CreateProtector("POS365.PurchaseMail.v1").Unprotect(rd.GetString(1));}
+                catch(CryptographicException){return Results.Problem("No se pudo descifrar la cuenta. Revise las claves de protección del servidor.",statusCode:503);}
+            }
             if(new[]{host,user,secret,receiver}.Any(string.IsNullOrWhiteSpace))
                 return Results.BadRequest(new {error="Configure PurchaseMail en el archivo privado del servidor."});
             if(!await Gate.WaitAsync(0,ct)) return Results.Conflict(new {error="Ya hay una consulta en proceso."});
