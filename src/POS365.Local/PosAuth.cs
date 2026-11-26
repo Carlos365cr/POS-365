@@ -10,6 +10,7 @@ using Microsoft.Data.SqlClient;
 public static class PosAuth
 {
     private const int Iterations = 210_000;
+    private static readonly string BootSession = Guid.NewGuid().ToString("N");
     public sealed record Credentials(string Username, string Password);
     public sealed record NewUser(string Username, string DisplayName, string Password, bool IsAdmin);
 
@@ -26,6 +27,14 @@ public static class PosAuth
                 options.LoginPath = "/login";
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.SlidingExpiration = true;
+                options.Events.OnValidatePrincipal = async context =>
+                {
+                    if (context.Principal?.FindFirst("POS365BootSession")?.Value != BootSession)
+                    {
+                        context.RejectPrincipal();
+                        await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                    }
+                };
                 options.Events.OnRedirectToLogin = context =>
                 {
                     if (context.Request.Path.StartsWithSegments("/api"))
@@ -185,7 +194,7 @@ public static class PosAuth
                 """,db))
             { reset.Parameters.Add("@id",SqlDbType.UniqueIdentifier).Value=userId;await reset.ExecuteNonQueryAsync(); }
             var claims=new List<Claim>{new(ClaimTypes.NameIdentifier,userId.ToString()),new(ClaimTypes.Name,name),
-                new("DisplayName",display)};
+                new("DisplayName",display),new("POS365BootSession",BootSession)};
             if(admin)claims.Add(new Claim(ClaimTypes.Role,"Admin"));
             await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
                 new ClaimsPrincipal(new ClaimsIdentity(claims,CookieAuthenticationDefaults.AuthenticationScheme)));
