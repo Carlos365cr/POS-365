@@ -293,7 +293,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  const menu=shell?.querySelector(':scope>aside');
  if(!menu)return;
  const name=b=>b.getAttribute('aria-label')||b.textContent.trim();
- const allowed=new Set(['Inicio','Facturación POS','Artículos','Cargas XML','Cerrar sesión','Usuarios y permisos']);
+ const allowed=new Set(['Inicio','Facturación POS','Artículos','Propiedad artículo','Propiedad de artículo','Cargas XML','Cerrar sesión','Usuarios y permisos']);
  const group=b=>b.getAttribute('aria-controls')==='article-menu-options';
  for(const b of menu.querySelectorAll('button')){
    if(group(b)){b.disabled=false;continue;}
@@ -307,6 +307,8 @@ document.addEventListener('DOMContentLoaded',()=>{
  if(users){users.disabled=true;users.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();location.href='/usuarios.html';},true);}
  if(logout){logout.disabled=false;logout.addEventListener('click',async e=>{e.preventDefault();e.stopImmediatePropagation();try{const r=await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});if(!r.ok)throw Error('No se pudo cerrar la sesión');location.replace('/login');}catch(err){alert(err.message);}},true);}
  fetch('/api/auth/me',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Sesión no disponible');return r.json();}).then(u=>{shell.dataset.businessName='POS365_DEV';shell.dataset.signedInUser=u.username||'';if(users)users.disabled=!u.admin;}).catch(()=>{if(users)users.disabled=true;});
+ const props=[...menu.querySelectorAll('button')].filter(b=>['Propiedad artículo','Propiedad de artículo'].includes(name(b))||['Propiedad artículo','Propiedad de artículo'].includes(b.textContent.trim()));
+ for(const b of props){b.disabled=true;fetch('/api/auth/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(u=>{b.disabled=!u?.admin;if(u?.admin)b.removeAttribute('title');}).catch(()=>{b.disabled=true;});}
  const btn=[...menu.querySelectorAll('button')].find(b=>name(b)==='Cargas XML');
  if(btn){btn.disabled=true;fetch('/api/auth/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(u=>{btn.disabled=!u?.admin;}).catch(()=>{btn.disabled=true;});}
 });
