@@ -144,6 +144,7 @@ PosAuth.Map(app, cs.ConnectionString, !iisStaging);
 PosUserManagement.Map(app, cs.ConnectionString);
 CatalogApi.Map(app, cs.ConnectionString);
 PosLookupApi.Map(app, cs.ConnectionString);
+HandheldSqlApi.Map(app, cs.ConnectionString);
 PosDraftApi.Map(app, cs.ConnectionString);
 ProductTaxApi.Map(app, cs.ConnectionString);
 app.MapFallback("/api/{**path}", () => Results.Json(new { error = "Funcion del POS pendiente de migracion; no se ha guardado ninguna operacion." }, statusCode: 501));
