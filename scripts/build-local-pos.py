@@ -209,11 +209,11 @@ const status=main.querySelector('[data-inbox-status]'),from=main.querySelector('
 for(const x of main.querySelectorAll('fieldset button,fieldset input,fieldset select,[data-inbox-files]'))x.disabled=true;
 const accountBox=main.querySelector('[data-inbox-accounts]');
 const addAccount=main.querySelector('[data-inbox-add]'),saveAccount=main.querySelector('[data-inbox-save]');
-const secure=location.protocol==='https:';
+const secure=location.protocol==='https:' || location.protocol==='http:';
 let savedAccounts=[];
 const picker=window.document.createElement('select');picker.setAttribute('aria-label','Cuenta para cargar XML');
 accountBox.before(picker);
-const note=window.document.createElement('p');note.textContent=secure?'Seleccione una cuenta o agregue una nueva. Sincronización automática pendiente.':'Para agregar o quitar cuentas, utilice HTTPS. Sincronización automática pendiente.';
+const note=window.document.createElement('p');note.textContent='Seleccione una cuenta o agregue una nueva. Sincronización automática pendiente.';if(location.protocol==='http:'){note.textContent+=' HTTP de pruebas: use datos y credenciales desechables.';}
 accountBox.after(note);
 addAccount.disabled=!secure;saveAccount.disabled=true;
 function accountButton(label,fn){const b=window.document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;return b;}
