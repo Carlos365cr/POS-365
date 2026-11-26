@@ -72,7 +72,7 @@ snapshot_anchor=re.search(r'function persistTrialSnapshot\(requireConfirmation=f
 if not snapshot_anchor: raise RuntimeError('No se encontro persistTrialSnapshot')
 snapshot_signature=snapshot_anchor.group(0)
 replace(snapshot_signature,snapshot_signature+"if(requireConfirmation)throw Error('Operación no migrada a SQL Server.');return;\n")
-replace("const entryModule=[...menu.querySelectorAll('button.menu-item')]", "for(const b of menu.querySelectorAll('button')){const name=b.textContent.trim();const group=b.getAttribute('aria-controls')==='article-menu-options';if(!group&&!['Inicio','Facturación POS','Artículos','Cargas XML','Cerrar sesión','Usuarios y permisos'].includes(name)){b.disabled=true;b.title='Pendiente de migración a SQL Server';}}\nconst entryModule=[...menu.querySelectorAll('button.menu-item')]")
+replace("const entryModule=[...menu.querySelectorAll('button.menu-item')]", "for(const b of menu.querySelectorAll('button')){const name=b.textContent.trim();const group=b.getAttribute('aria-controls')==='article-menu-options';if(!group&&!['Inicio','Facturación POS','Artículos','Propiedad artículo','Propiedad de artículo','Cargas XML','Cerrar sesión','Usuarios y permisos'].includes(name)){b.disabled=true;b.title='Pendiente de migración a SQL Server';}}\nconst entryModule=[...menu.querySelectorAll('button.menu-item')]")
 replace('const saleDate=posMain.querySelector', '''const sqlNotice=document.createElement('p');sqlNotice.style.cssText='padding:12px;background:#fff1d0;color:#493400';sqlNotice.textContent='DESARROLLO SQL · Pantalla original · Lista 0 · Detalle temporal. Sin guardar ventas, pagos ni inventario. Costos y promociones aún no migrados.';posMain.prepend(sqlNotice);
 const saleDate=posMain.querySelector''')
 replace('async function restoreTrialState(){', 'async function restoreTrialState(){return;\n')
@@ -199,6 +199,15 @@ s=s[:original_search_start]+'''function searchArticleForOperation(){
  return searchSqlArticle();
 }
 '''+s[original_search_end:]
+
+# Keep the original article properties markup and styles; replace only storage handlers.
+a=s.index('function installArticleProperties(){')
+b=s.index('root.append(style,main);',a)+len('root.append(style,main);')
+c=s.index('refreshArticleProperties=()=>',b)
+d=s.index('item.onclick=',c)
+e=s.index('\n}',d)+2
+properties=(root/'scripts/native-article-properties.js').read_text(encoding='utf-8')
+s=s[:b]+'\n'+properties+'\n}'+s[e:]
 
 # Preserve the original XML module layout while replacing its cloud behavior.
 a=s.index('function installXmlInboxModule(){')
