@@ -89,7 +89,9 @@ app.Use(async (context,next) =>
     var p=context.Request.Path;
     var publicPath=p.Equals("/login",StringComparison.OrdinalIgnoreCase) ||
         p.Equals("/login.html",StringComparison.OrdinalIgnoreCase) ||
-        p.Equals("/api/auth/login",StringComparison.OrdinalIgnoreCase);
+        p.Equals("/api/auth/login",StringComparison.OrdinalIgnoreCase) ||
+        ((HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method)) &&
+         p.Equals("/assets/pos-365-logo.png",StringComparison.OrdinalIgnoreCase));
     var authenticated=context.User.Identity?.IsAuthenticated==true;
     // Login first, including when requesting the original HTML directly.
     // Do not expose the API or static assets before authentication.
