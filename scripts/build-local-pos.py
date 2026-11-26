@@ -72,7 +72,7 @@ snapshot_anchor=re.search(r'function persistTrialSnapshot\(requireConfirmation=f
 if not snapshot_anchor: raise RuntimeError('No se encontro persistTrialSnapshot')
 snapshot_signature=snapshot_anchor.group(0)
 replace(snapshot_signature,snapshot_signature+"if(requireConfirmation)throw Error('Operación no migrada a SQL Server.');return;\n")
-replace("const entryModule=[...menu.querySelectorAll('button.menu-item')]", "for(const b of menu.querySelectorAll('button')){const name=b.textContent.trim();const group=b.getAttribute('aria-controls')==='article-menu-options';if(!group&&!['Inicio','Facturación POS','Artículos','Propiedad artículo','Propiedad de artículo','Cargas XML','Cerrar sesión','Usuarios y permisos'].includes(name)){b.disabled=true;b.title='Pendiente de migración a SQL Server';}}\nconst entryModule=[...menu.querySelectorAll('button.menu-item')]")
+replace("const entryModule=[...menu.querySelectorAll('button.menu-item')]", "for(const b of menu.querySelectorAll('button')){const name=b.textContent.trim();const group=b.getAttribute('aria-controls')==='article-menu-options';if(!group&&!['Inicio','Handheld','Facturación POS','Artículos','Propiedad artículo','Propiedad de artículo','Cargas XML','Cerrar sesión','Usuarios y permisos'].includes(name)){b.disabled=true;b.title='Pendiente de migración a SQL Server';}}\nconst entryModule=[...menu.querySelectorAll('button.menu-item')]")
 replace('const saleDate=posMain.querySelector', '''const sqlNotice=document.createElement('p');sqlNotice.style.cssText='padding:12px;background:#fff1d0;color:#493400';sqlNotice.textContent='DESARROLLO SQL · Pantalla original · Lista 0 · Detalle temporal. Sin guardar ventas, pagos ni inventario. Costos y promociones aún no migrados.';posMain.prepend(sqlNotice);
 const saleDate=posMain.querySelector''')
 replace('async function restoreTrialState(){', 'async function restoreTrialState(){return;\n')
@@ -200,6 +200,89 @@ s=s[:original_search_start]+'''function searchArticleForOperation(){
 }
 '''+s[original_search_end:]
 
+# SQL-backed original Handheld and F12 lookup; preserve original layout and keyboard handlers.
+lookup_start=s.index('function installPriceLookup(){')
+lookup_end=s.index('\nfunction renderReceipts(',lookup_start)
+lookup=s[lookup_start:lookup_end]
+def lookup_replace(old,new):
+ global lookup
+ if lookup.count(old)!=1: raise RuntimeError('Anclaje Handheld cambiado: '+old[:80])
+ lookup=lookup.replace(old,new)
+def lookup_span(start,end,new):
+ global lookup
+ a=lookup.index(start);b=lookup.index(end,a)
+ lookup=lookup[:a]+new+'\n '+lookup[b:]
+lookup_span('function priceMatches(value){','photo.addEventListener',r'''let lookupSequence=0;
+ async function handheldApi(url){
+  const r=await fetch(url,{cache:'no-store'});const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d;
+ }
+ async function priceMatches(value){
+  const rows=[];for(let p=1;p<=50;p++){
+   const d=await handheldApi('/api/handheld/search?'+new URLSearchParams({q:value,page:p}));
+   rows.push(...d.items.map(x=>({...x,currency:x.currency||'Colón',details:{general:x.general||[]}})));
+   if(!d.hasMore)break;if(p===50)throw Error('Más de 1000 coincidencias; refine la búsqueda.');
+  }return rows;
+ }
+ async function lookupSearch(value,direct=false){
+  const seq=++lookupSequence;status.textContent='Consultando SQL…';matches=[];
+  try{
+   const rows=await priceMatches(value);if(seq!==lookupSequence||!dialog.open)return;
+   matches=rows;page=0;
+   if(direct&&rows.length===1){await showProduct(rows[0]);return;}
+   matchesPanel.hidden=false;renderMatches();status.textContent=rows.length?'Seleccione un artículo.':'No se encontraron artículos.';
+  }catch(e){if(seq===lookupSequence){matchesPanel.hidden=false;renderMatches();status.textContent=e.message;}}
+ }
+ function openPricePicker(){
+  pickerQuery.value=dialog.classList.contains('handheld-lookup')?query.value.trim():'';
+  matchesPanel.hidden=false;pickerQuery.focus();lookupSearch(pickerQuery.value);
+ }
+''')
+lookup_span('function showProduct(selected){','function renderMatches(){',r'''async function showProduct(selected){
+  const seq=++lookupSequence;
+  try{
+   const d=await handheldApi('/api/catalog/native/'+selected.id);
+   const tax=await handheldApi('/api/catalog/products/'+selected.id+'/tax');
+   if(seq!==lookupSequence||!dialog.open)return;
+   const p=d.product,primary=p.prices.find(x=>x.listNumber===0);
+   const product={...p,price:primary?.amount??null,currency:primary?.currency||'Colón',
+     details:{general:d.general||[],costs:d.costs||[],prices:d.prices||[],promotions:d.other?.promotions||{}},photo:d.other?.photo,photoSuspended:d.other?.photoSuspended};
+   resultPanel.classList.remove('awaiting-product');matchesPanel.hidden=true;resultPanel.hidden=false;status.textContent='';
+   query.value=p.barcode||p.code;
+   dialog.querySelector('[data-price-code]').textContent='Código '+p.code+' · Barras '+p.barcode;
+   dialog.querySelector('[data-price-name]').textContent=p.name;
+   dialog.querySelector('[data-price-value]').textContent=product.price==null?'Sin precio':money(product.price,product.currency);
+   dialog.querySelector('[data-price-tax]').textContent=(tax.rate==null?'IVA sin configurar':'IVA '+tax.rate+' %')+' · '+(p.includesVAT?'Con IVA':'Sin IVA');
+   photo.removeAttribute('src');photo.hidden=true;placeholder.hidden=false;placeholder.textContent=product.photoSuspended?'Imagen suspendida':'Sin imagen';
+   if(product.photo&&!product.photoSuspended){try{validateArticlePhoto(product.photo);photo.src=product.photo.dataUrl;photo.hidden=false;placeholder.hidden=true;}catch{}}
+   const facts=dialog.querySelector('[data-price-facts]');facts.replaceChildren();
+   const cost=getProductCurrentCost(product,costBasis.value);
+   for(const [label,value] of [['Cantidad por paquete',general(product,'paquete')],['Cantidad por caja',general(product,'caja')],['Ubicación',general(product,'ubicacion')],['Proveedor',purchaseSupplierLabel(product)],['Costo CRC',cost==null?'Sin registro':money(cost,'Colón')]]){
+    if(dialog.classList.contains('handheld-lookup')&&label==='Cantidad por paquete')continue;
+    const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value||'Sin registro';facts.append(dt,dd);
+   }
+   dialog.querySelector('[data-price-stock]').replaceChildren();
+   dialog.querySelector('[data-price-total-stock]').textContent='Existencias pendientes de migración.';
+   dialog.querySelector('[data-price-promotion]').textContent='Promociones e impresión pendientes de migración SQL.';
+   focusPriceQuery();
+  }catch(e){if(seq===lookupSequence)status.textContent=e.message;}
+ }
+''')
+lookup_span('function search(){',"dialog.querySelector('[data-price-clear-list]').onclick",r'''function search(){
+  const value=query.value.trim();clearResult();if(!value){openPricePicker();return;}
+  pickerQuery.value=value;lookupSearch(value,true);
+ }
+ let pickerTimer;
+ pickerQuery.oninput=()=>{clearTimeout(pickerTimer);lookupSequence++;pickerTimer=setTimeout(()=>lookupSearch(pickerQuery.value.trim()),180);};
+ pickerQuery.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();clearTimeout(pickerTimer);lookupSearch(pickerQuery.value.trim());}});
+''')
+lookup_span('function listTypedMatches(){',"query.addEventListener('keydown'",r'''function listTypedMatches(){pickerQuery.value=query.value.trim();lookupSearch(pickerQuery.value);}
+ function finishScan(){cancelScan();search();}
+''')
+lookup_replace("cancelScan();clearResult();matchesPanel.hidden=true;","lookupSequence++;cancelScan();clearResult();matchesPanel.hidden=true;")
+lookup_replace("renderPrintList();dialog.showModal();focusPriceQuery();","renderPrintList();dialog.querySelector('[data-price-print-style]').disabled=true;dialog.querySelector('#price-print-pending').textContent='Impresión de etiquetas pendiente de migración SQL.';dialog.showModal();focusPriceQuery();")
+s=s[:lookup_start]+lookup+s[lookup_end:]
+
 # Keep the original article properties markup and styles; replace only storage handlers.
 a=s.index('function installArticleProperties(){')
 b=s.index('root.append(style,main);',a)+len('root.append(style,main);')
@@ -293,7 +376,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  const menu=shell?.querySelector(':scope>aside');
  if(!menu)return;
  const name=b=>b.getAttribute('aria-label')||b.textContent.trim();
- const allowed=new Set(['Inicio','Facturación POS','Artículos','Propiedad artículo','Propiedad de artículo','Cargas XML','Cerrar sesión','Usuarios y permisos']);
+ const allowed=new Set(['Inicio','Handheld','Facturación POS','Artículos','Propiedad artículo','Propiedad de artículo','Cargas XML','Cerrar sesión','Usuarios y permisos']);
  const group=b=>b.getAttribute('aria-controls')==='article-menu-options';
  for(const b of menu.querySelectorAll('button')){
    if(group(b)){b.disabled=false;continue;}
