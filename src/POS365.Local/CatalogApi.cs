@@ -23,11 +23,73 @@ public static class CatalogApi
         { return Results.Conflict(new {error="Codigo ya registrado o conflicto simultaneo. Recargue antes de reintentar. No se guardo esta transaccion."}); }
         catch(SqlException e) { return Results.Json(new {error="No se completo la operacion SQL. Verifique conexion y ejecute -Inicializar.",sqlError=e.Number},statusCode:503); }
     }
+    public sealed record PropertyVersion(Guid Id,string Version);
+    public sealed record PropertyBatch(string Field,string? Value,PropertyVersion[] Items);
     public sealed record NativeArticle(CatalogProduct Product, JsonElement General, JsonElement Costs,
         JsonElement Prices, JsonElement Other, decimal? TaxRate);
 
     public static void Map(WebApplication app,string connectionString)
     {
+        app.MapGet("/api/catalog/properties", (int? page)=>Guard(async()=>{
+            int n=page??1;if(n<1||n>100000)throw new ArgumentException("Página inválida.");
+            await using var db=new SqlConnection(connectionString);await db.OpenAsync();
+            await using var cmd=Cmd(db,null,"""
+                SELECT p.ProductId,p.Code,p.Barcode,p.Name,p.Cabys,p.IncludesVAT,p.Version,
+                    e.GeneralJson,e.CostsJson,e.PricesJson,
+                    JSON_VALUE(e.OtherJson,'$.photoSuspended'),
+                    CASE WHEN JSON_QUERY(e.OtherJson,'$.photo') IS NOT NULL OR JSON_VALUE(e.OtherJson,'$.photo') IS NOT NULL THEN 1 ELSE 0 END,
+                    r.Amount,r.Currency,t.TaxRate
+                FROM dbo.POS365_Product p
+                LEFT JOIN dbo.POS365_ProductExtended e ON e.ProductId=p.ProductId
+                LEFT JOIN dbo.POS365_ProductPrice r ON r.ProductId=p.ProductId AND r.ListNumber=0
+                LEFT JOIN dbo.POS365_ProductTax t ON t.ProductId=p.ProductId
+                ORDER BY p.Code,p.ProductId OFFSET @offset ROWS FETCH NEXT 101 ROWS ONLY
+                """,("@offset",(n-1)*100));
+            await using var rd=await cmd.ExecuteReaderAsync();var items=new List<object>();
+            while(await rd.ReadAsync()){
+                JsonElement Fields(int i)=>JsonSerializer.Deserialize<JsonElement>(rd.IsDBNull(i)?"[]":rd.GetString(i));
+                items.Add(new {id=rd.GetGuid(0),code=rd.GetString(1),barcode=rd.GetString(2),name=rd.GetString(3),cabys=rd.GetString(4),includesVAT=rd.GetBoolean(5),
+                    version=Convert.ToBase64String((byte[])rd[6]),general=Fields(7),costs=Fields(8),prices=Fields(9),
+                    photoSuspended=!rd.IsDBNull(10)&&rd.GetString(10)=="true",hasPhoto=rd.GetInt32(11)==1,
+                    price=rd.IsDBNull(12)?(decimal?)null:rd.GetDecimal(12),currency=rd.IsDBNull(13)?"":rd.GetString(13),tax=rd.IsDBNull(14)?(decimal?)null:rd.GetDecimal(14)});
+            }
+            return Results.Ok(new {items=items.Take(100),hasMore=items.Count>100});
+        })).RequireAuthorization(p=>p.RequireRole("Admin"));
+        app.MapPost("/api/catalog/properties/batch",(PropertyBatch input)=>Guard(async()=>{
+            if(input.Items is null || input.Items.Length is <1 or >5000 || input.Items.Select(x=>x.Id).Distinct().Count()!=input.Items.Length)
+                throw new ArgumentException("Seleccione entre 1 y 5000 artículos distintos.");
+            bool category=input.Field is "categoria1" or "categoria2" or "categoria3" or "categoria4";
+            if(!category && input.Field is not ("deletePhoto" or "suspendPhoto" or "reactivatePhoto"))throw new ArgumentException("Operación inválida.");
+            if(category && (string.IsNullOrWhiteSpace(input.Value)||input.Value.Length>250))throw new ArgumentException("Clasificación inválida.");
+            await using var db=new SqlConnection(connectionString);await db.OpenAsync();
+            await using var tx=(SqlTransaction)await db.BeginTransactionAsync();
+            foreach(var item in input.Items.OrderBy(x=>x.Id)){
+                var version=Convert.FromBase64String(item.Version);
+                await using(var lockCmd=Cmd(db,tx,"UPDATE dbo.POS365_Product SET UpdatedAt=SYSUTCDATETIME() WHERE ProductId=@id AND Version=@v",("@id",item.Id),("@v",version)))
+                    if(await lockCmd.ExecuteNonQueryAsync()!=1)throw new CatalogConflict("Un artículo cambió. Recargue; no se aplicó el lote.");
+                await using(var init=Cmd(db,tx,"IF NOT EXISTS(SELECT 1 FROM dbo.POS365_ProductExtended WHERE ProductId=@id) INSERT dbo.POS365_ProductExtended(ProductId,GeneralJson,CostsJson,PricesJson,OtherJson) VALUES(@id,N'[]',N'[]',N'[]',N'{}')",("@id",item.Id)))await init.ExecuteNonQueryAsync();
+                if(category){
+                    string raw;
+                    await using(var read=Cmd(db,tx,"SELECT GeneralJson FROM dbo.POS365_ProductExtended WHERE ProductId=@id",("@id",item.Id)))raw=(string)(await read.ExecuteScalarAsync())!;
+                    var array=System.Text.Json.Nodes.JsonNode.Parse(raw)!.AsArray();
+                    var index=-1;for(int i=0;i<array.Count;i++)if(array[i] is System.Text.Json.Nodes.JsonArray a && a.Count>=3 && a[0]?.GetValue<string>()==input.Field){index=i;break;}
+                    if(index<0){index=array.Count;array.Add(new System.Text.Json.Nodes.JsonArray(System.Text.Json.Nodes.JsonValue.Create(input.Field),System.Text.Json.Nodes.JsonValue.Create(input.Value),null));}
+                    else array[index]!.AsArray()[1]=System.Text.Json.Nodes.JsonValue.Create(input.Value);
+                    await using var update=Cmd(db,tx,"""
+                        UPDATE dbo.POS365_ProductExtended SET GeneralJson=@json,UpdatedAt=SYSUTCDATETIME() WHERE ProductId=@id;
+                        UPDATE dbo.POS365_ProductField SET FieldValue=@value,FieldName=@field,IsChecked=NULL WHERE ProductId=@id AND Section=N'General' AND FieldIndex=@index;
+                        IF @@ROWCOUNT=0 INSERT dbo.POS365_ProductField(ProductId,Section,FieldIndex,FieldName,FieldValue,IsChecked) VALUES(@id,N'General',@index,@field,@value,NULL);
+                        """,("@json",array.ToJsonString()),("@id",item.Id),("@value",input.Value),("@field",input.Field),("@index",index));
+                    await update.ExecuteNonQueryAsync();
+                }else{
+                    var expression=input.Field=="deletePhoto"?"JSON_MODIFY(JSON_MODIFY(OtherJson,'$.photo',NULL),'$.photoSuspended',NULL)":"JSON_MODIFY(OtherJson,'$.photoSuspended',CAST(@s AS bit))";
+                    await using var update=Cmd(db,tx,"UPDATE dbo.POS365_ProductExtended SET OtherJson="+expression+",UpdatedAt=SYSUTCDATETIME() WHERE ProductId=@id",("@s",input.Field=="suspendPhoto"),("@id",item.Id));
+                    await update.ExecuteNonQueryAsync();
+                }
+            }
+            await tx.CommitAsync();return Results.Ok(new {updated=input.Items.Length});
+        })).RequireAuthorization(p=>p.RequireRole("Admin"));
+
         app.MapGet("/api/catalog/native/{id:guid}",(Guid id)=>Guard(async()=>
         {
             await using var db=new SqlConnection(connectionString);
