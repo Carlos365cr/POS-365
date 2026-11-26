@@ -103,6 +103,11 @@ public static class PurchaseInboxApi
         await client.Inbox.OpenAsync(FolderAccess.ReadOnly,ct);
         await client.DisconnectAsync(true,ct);
     }
+    // Reuse the explicit IIS development HTTP switch. Production remains encrypted.
+    static bool MailTransportAllowed(WebApplication app,HttpContext ctx) =>
+        ctx.Request.IsHttps ||
+        (app.Environment.IsEnvironment("IIS-Staging") && app.Configuration.GetValue<bool>("IisTesting:AllowHttp")) ||
+        (app.Environment.IsDevelopment() && ctx.Connection.RemoteIpAddress is { } ip && System.Net.IPAddress.IsLoopback(ip));
     static void MapAccounts(RouteGroupBuilder group,WebApplication app,string cs)
     {
         var protector=app.Services.GetRequiredService<IDataProtectionProvider>().CreateProtector("POS365.PurchaseMail.v1");
@@ -114,13 +119,13 @@ public static class PurchaseInboxApi
             return Results.Ok(rows);
         });
         group.MapPost("/accounts/test",async(HttpContext ctx,MailAccountInput input,CancellationToken ct)=>{
-            if(!ctx.Request.IsHttps)return Results.StatusCode(426);
+            if(!MailTransportAllowed(app,ctx))return Results.StatusCode(426);
             if(!ValidAccount(input))return Results.BadRequest(new{error="Revise correo, contraseña de aplicación de 16 caracteres y cédula."});
             try{await CheckMail(input,ct);return Results.Ok(new{ok=true});}
             catch(Exception e) when(e is not OperationCanceledException){return Results.BadRequest(new{error="No se pudo autenticar en Gmail o abrir el buzón."});}
         });
         group.MapPost("/accounts",async(HttpContext ctx,MailAccountInput input,CancellationToken ct)=>{
-            if(!ctx.Request.IsHttps)return Results.StatusCode(426);
+            if(!MailTransportAllowed(app,ctx))return Results.StatusCode(426);
             if(!ValidAccount(input))return Results.BadRequest(new{error="Datos de correo inválidos."});
             if(string.IsNullOrWhiteSpace(app.Configuration["DataProtection:KeyPath"]))return Results.Problem("Configure la carpeta permanente de claves antes de guardar cuentas.",statusCode:503);
             try{await CheckMail(input,ct);}
@@ -137,7 +142,7 @@ public static class PurchaseInboxApi
             catch(SqlException e) when(e.Number is 2601 or 2627){return Results.Conflict(new{error="La cuenta ya existe. Quite la anterior para cambiar la clave."});}
         });
         group.MapDelete("/accounts/{id:guid}",async(HttpContext ctx,Guid id,CancellationToken ct)=>{
-            if(!ctx.Request.IsHttps)return Results.StatusCode(426);
+            if(!MailTransportAllowed(app,ctx))return Results.StatusCode(426);
             await using var db=new SqlConnection(cs);await db.OpenAsync(ct);
             await using var cmd=new SqlCommand("DELETE dbo.POS365_MailAccount WHERE AccountId=@id",db);
             cmd.Parameters.Add("@id",SqlDbType.UniqueIdentifier).Value=id;
@@ -148,8 +153,8 @@ public static class PurchaseInboxApi
     {
         var group=app.MapGroup("/api/purchases/inbox").RequireAuthorization(p=>p.RequireRole("Admin"));
         group.AddEndpointFilter(async (context,next)=>{
-            if(!context.HttpContext.Request.IsHttps)
-                return Results.Json(new {error="Utilice HTTPS para administrar cuentas y consultar comprobantes de compras."},statusCode:426);
+            if(!MailTransportAllowed(app,context.HttpContext))
+                return Results.Json(new {error="El acceso HTTP de pruebas no está habilitado."},statusCode:426);
             return await next(context);
         });
         MapAccounts(group,app,cs);
