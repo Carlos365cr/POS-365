@@ -122,6 +122,7 @@ public static class PurchaseInboxApi
         group.MapPost("/accounts",async(HttpContext ctx,MailAccountInput input,CancellationToken ct)=>{
             if(!ctx.Request.IsHttps)return Results.StatusCode(426);
             if(!ValidAccount(input))return Results.BadRequest(new{error="Datos de correo inválidos."});
+            if(string.IsNullOrWhiteSpace(app.Configuration["DataProtection:KeyPath"]))return Results.Problem("Configure la carpeta permanente de claves antes de guardar cuentas.",statusCode:503);
             try{await CheckMail(input,ct);}
             catch(Exception e) when(e is not OperationCanceledException){return Results.BadRequest(new{error="No se guardó: Gmail no aceptó la conexión."});}
             await using var db=new SqlConnection(cs);await db.OpenAsync(ct);
@@ -146,6 +147,11 @@ public static class PurchaseInboxApi
     public static void Map(WebApplication app,string cs)
     {
         var group=app.MapGroup("/api/purchases/inbox").RequireAuthorization(p=>p.RequireRole("Admin"));
+        group.AddEndpointFilter(async (context,next)=>{
+            if(!context.HttpContext.Request.IsHttps)
+                return Results.Json(new {error="Utilice HTTPS para administrar cuentas y consultar comprobantes de compras."},statusCode:426);
+            return await next(context);
+        });
         MapAccounts(group,app,cs);
         group.MapGet("/",async(CancellationToken ct)=>{
             await using var db=new SqlConnection(cs);await db.OpenAsync(ct);
