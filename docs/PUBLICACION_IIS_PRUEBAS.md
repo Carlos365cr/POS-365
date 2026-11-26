@@ -31,3 +31,6 @@ La publicación **no ejecuta migraciones SQL** ni habilita operaciones de factur
 
 ## Desarrollo local
 `scripts/Iniciar-Local.ps1` continúa funcionando exactamente igual en `http://127.0.0.1:5085`. No modificar rama `main`.
+
+## HTTP temporal de pruebas
+Para pruebas controladas con datos y cuentas desechables, publicar con `-AllowHttpTests`. El script configura `IisTesting__AllowHttp=true` en web.config; sin el switch, HTTPS sigue siendo obligatorio. Configure un binding HTTP en el puerto 5085 y limite el firewall a las IP de prueba. No use datos reales ni contraseñas reutilizadas. El acceso anónimo a módulos y API sigue bloqueado. Para volver a HTTPS, publique sin el switch. La base sigue limitada a POS365_DEV.
