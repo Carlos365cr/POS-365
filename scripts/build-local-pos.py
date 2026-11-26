@@ -175,5 +175,12 @@ s=s[:original_search_start]+'''function searchArticleForOperation(){
 }
 '''+s[original_search_end:]
 
+# Temporary SQL inbox is opened from the existing menu; legacy cloud handlers remain disabled.
+s=s.replace('</body>', '''<script>
+document.addEventListener('DOMContentLoaded',()=>{
+ const btn=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Cargas XML');
+ if(btn){btn.disabled=false;btn.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();location.href='/compras-sql.html';},true);}
+});
+</script></body>''',1)
 out=root/'src/POS365.Local/wwwroot/pos-original.html';out.write_text(s,encoding='utf-8')
 print('POS original conectado a consulta SQL:',out)
