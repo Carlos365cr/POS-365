@@ -1,5 +1,6 @@
 param(
-    [string]$Destino = 'C:\inetpub\POS365-Pruebas'
+    [string]$Destino = 'C:\inetpub\POS365-Pruebas',
+    [switch]$AllowHttpTests
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -32,6 +33,10 @@ $xml = @'
   </location>
 </configuration>
 '@
+if ($AllowHttpTests) {
+    $xml = $xml.Replace('</environmentVariables>', '<environmentVariable name="IisTesting__AllowHttp" value="true" /></environmentVariables>')
+    Write-Warning 'HTTP sin cifrado: solo datos y credenciales desechables de pruebas; restrinja IP de origen.'
+}
 [xml]$validate = $xml
 if ($validate.configuration.location.'system.webServer'.aspNetCore.hostingModel -ne 'inprocess') {
     throw 'La configuracion IIS generada es invalida.'
@@ -55,4 +60,4 @@ Write-Host 'web.config generado y validado para IIS-Staging.'
 Write-Host ('Publicado en '+$Destino)
 Write-Host 'IMPORTANTE: IIS requiere Anonymous Authentication ACTIVADA y Windows Authentication DESACTIVADA; POS365 valida usuarios con cookies y SQL Server.'
 Write-Host 'Configure ConnectionStrings:Pos365 en appsettings.IIS-Staging.json (archivo privado, no versionado).'
-Write-Host 'Configure HTTPS con certificado valido. No use HTTP en IP publica; el sistema lo bloquea con 426. Restrinja el sitio a LAN/VPN durante pruebas.'
+if ($AllowHttpTests) { Write-Warning 'HTTP de pruebas habilitado. No utilice credenciales ni datos reales.' } else { Write-Host 'HTTPS obligatorio (HTTP devuelve 426).' }
