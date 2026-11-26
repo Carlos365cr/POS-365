@@ -48,7 +48,7 @@ if (initialize)
     }
     await using var db = new SqlConnection(cs.ConnectionString);
     await db.OpenAsync();
-    foreach (var resource in new[] { "POS365.Schema.sql", "POS365.Catalog.sql", "POS365.Sales.sql", "POS365.Tax.sql", "POS365.ArticleExtended.sql", "POS365.Auth.sql" })
+    foreach (var resource in new[] { "POS365.Schema.sql", "POS365.Catalog.sql", "POS365.Sales.sql", "POS365.Tax.sql", "POS365.ArticleExtended.sql", "POS365.Auth.sql", "POS365.PurchaseInbox.sql" })
     {
         using var stream = typeof(Program).Assembly.GetManifestResourceStream(resource)!;
         using var reader = new StreamReader(stream);
@@ -149,5 +149,6 @@ PosLookupApi.Map(app, cs.ConnectionString);
 HandheldSqlApi.Map(app, cs.ConnectionString);
 PosDraftApi.Map(app, cs.ConnectionString);
 ProductTaxApi.Map(app, cs.ConnectionString);
+PurchaseInboxApi.Map(app, cs.ConnectionString);
 app.MapFallback("/api/{**path}", () => Results.Json(new { error = "Funcion del POS pendiente de migracion; no se ha guardado ninguna operacion." }, statusCode: 501));
 app.Run();
